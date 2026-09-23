@@ -5,7 +5,20 @@
   function esc(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   function formatText(s) {
-    return esc(s.replace(/\\`/g, '`')).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    return esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
+
+  // Backslash pairs: \\ is a literal backslash and \` a literal backtick. Reading them
+  // two characters at a time keeps parity, so `C:\\Users\\` still closes on its last tick.
+  function isEscape(s, i) { return s[i] === '\\' && (s[i + 1] === '`' || s[i + 1] === '\\'); }
+
+  function unescapeTicks(s) {
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      if (isEscape(s, i)) { out += s[i + 1] === '`' ? '`' : '\\\\'; i++; continue; }
+      out += s[i];
+    }
+    return out;
   }
 
   // Length of the backtick run starting at i.
@@ -23,7 +36,7 @@
   function findClose(s, start, ticks) {
     let i = start;
     while (i < s.length) {
-      if (ticks === 1 && s[i] === '\\' && s[i + 1] === '`') { i += 2; continue; }
+      if (ticks === 1 && isEscape(s, i)) { i += 2; continue; }
       if (s[i] === '`') {
         const run = tickRun(s, i);
         if (run === ticks) return i;
@@ -36,7 +49,7 @@
   }
 
   function codeSpan(content, ticks) {
-    let code = ticks === 1 ? content.replace(/\\`/g, '`') : content;
+    let code = ticks === 1 ? unescapeTicks(content) : content;
     // CommonMark: `` `x` `` strips one space each side so a span can hold backticks at its edges.
     if (code.length > 2 && code[0] === ' ' && code[code.length - 1] === ' ' && code.trim()) code = code.slice(1, -1);
     return '<code>' + esc(code) + '</code>';
@@ -45,7 +58,7 @@
   function inline(s) {
     let html = '', text = '', i = 0;
     while (i < s.length) {
-      if (s[i] === '\\' && s[i + 1] === '`') { text += '\\`'; i += 2; continue; }
+      if (isEscape(s, i)) { text += s[i + 1] === '`' ? '`' : '\\\\'; i += 2; continue; }
       if (s[i] !== '`') { text += s[i]; i++; continue; }
       const ticks = tickRun(s, i);
       const close = findClose(s, i + ticks, ticks);

@@ -35,3 +35,11 @@ test('panel opacity is saved and clamped to the readable range', () => {
   assert.equal(store.setSettings({ panelOpacity: 'junk' }).panelOpacity, 0.9);
   assert.equal(store.setSettings({ panelOpacity: '0.456' }).panelOpacity, 0.46);
 });
+
+test('blur is full at the default and above, and fades to none at the floor', () => {
+  const { blurFor, MIN, DEFAULT, MAX } = require('../renderer/panel-opacity');
+  assert.equal(blurFor(DEFAULT), 24);
+  assert.equal(blurFor(MAX), 24);
+  assert.equal(blurFor(MIN), 0);
+  assert.ok(blurFor(0.6) > 0 && blurFor(0.6) < 24);
+});

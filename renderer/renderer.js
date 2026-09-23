@@ -42,8 +42,6 @@
 
   const messages = $('#messages');
 
-  function esc(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-
   const { renderMarkdown } = window.CueMarkdown;
 
   function fillModelFields() {
@@ -53,15 +51,12 @@
     $('#model-coding').value = m.coding || '';
   }
 
-  // The panel's see-through level. Blur fades out with the tint, otherwise a
-  // light tint still smears the page behind it and nothing there is readable.
   // At low tint a soft shadow keeps white text legible over a white page.
   function applyPanelOpacity(value) {
-    const alpha = Number(value) || 0.9;
-    const blur = Math.round(24 * Math.min(1, Math.max(0, (alpha - 0.3) / 0.6)));
+    const alpha = window.PanelOpacity.normalize(value);
     const root = document.documentElement.style;
     root.setProperty('--panel-alpha', String(alpha));
-    root.setProperty('--panel-blur', blur + 'px');
+    root.setProperty('--panel-blur', window.PanelOpacity.blurFor(alpha) + 'px');
     root.setProperty('--panel-text-shadow', alpha < 0.75 ? '0 1px 3px rgba(0,0,0,0.85)' : 'none');
     const out = document.getElementById('panel-opacity-value');
     if (out) out.textContent = Math.round(alpha * 100) + '%';
@@ -107,14 +102,21 @@
     aiEl = null; caretEl = null;
   }
 
+  // Failsafe: main's stream watchdog (25s between tokens, 45s for coding solves) always
+  // sends llm:done/llm:error, but if a terminal event is ever lost the whole UI stays
+  // frozen. Rearmed on every token, like main's watchdog, so a long answer that is still
+  // streaming never unlocks the UI while main is still busy and would drop the next question.
+  const BUSY_FAILSAFE_MS = 60000;
   let busyFailsafe = null;
+  function armBusyFailsafe() {
+    clearTimeout(busyFailsafe);
+    busyFailsafe = setTimeout(() => { busy = false; $('#send-btn').classList.toggle('busy', false); }, BUSY_FAILSAFE_MS);
+  }
   function setBusy(v) {
     busy = v;
     $('#send-btn').classList.toggle('busy', v);
     clearTimeout(busyFailsafe);
-    // Failsafe: main has a 25s stream watchdog that always sends llm:done/llm:error, but if a
-    // terminal event is ever lost the whole UI stays frozen — self-clear after a generous window.
-    if (v) busyFailsafe = setTimeout(() => { busy = false; $('#send-btn').classList.toggle('busy', false); }, 40000);
+    if (v) armBusyFailsafe();
   }
 
   // Without headphones the mic also hears the interviewer; that is not the user talking.
@@ -467,7 +469,7 @@
       if (settings && settings.autoAnswer !== false && untouched) {
         // Still streaming the previous answer: wait for it instead of dropping this question.
         // New interviewer words or the user answering clear this timer; setBusy's
-        // 40s failsafe bounds it if an answer never finishes.
+        // failsafe bounds it if an answer never finishes.
         if (busy) { questionFinalizeTimer = setTimeout(finalizeQuestion, 700); return; }
         if (inputFromSTT) send();
         return;
@@ -1236,7 +1238,7 @@
     });
     setBusy(true);
   });
-  cue.on('llm:token', ({ text }) => appendToken(text));
+  cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
   cue.on('llm:done', () => { finalizeAi(); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
     if (!aiEl) startAi(true);
@@ -1317,7 +1319,10 @@
   const aiRulesEl = document.getElementById('ai-rules');
   if (aiRulesEl) aiRulesEl.addEventListener('input', updateAiRulesCounter);
   // Live while dragging so the right level can be judged against the real screen.
-  $('#panel-opacity').addEventListener('input', (e) => applyPanelOpacity(e.target.value));
+  const panelOpacityInput = $('#panel-opacity');
+  panelOpacityInput.min = String(window.PanelOpacity.MIN);
+  panelOpacityInput.max = String(window.PanelOpacity.MAX);
+  panelOpacityInput.addEventListener('input', (e) => applyPanelOpacity(e.target.value));
   function updatePrepStatus() {
     if (!settings) return;
     const fields = {

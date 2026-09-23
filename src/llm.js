@@ -401,7 +401,8 @@ async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTok
 const MAX_TOKENS = { fast: 700, smart: 1400, coding: 8192 };
 
 // tier: 'coding' for coding solves; otherwise the Smart toggle picks fast/smart.
-// A provider with no coding model set falls back to its smart model.
+// A provider with no coding model set uses the user's smart model, then their fast
+// model, so a setup that works for spoken answers also works for coding.
 function createLLM(settings, { tier: requestedTier } = {}) {
   const provider = settings.provider;
   const keys = settings.apiKeys || {};
@@ -409,14 +410,15 @@ function createLLM(settings, { tier: requestedTier } = {}) {
   let baseURL = '';
   let configurationError = '';
   const tier = requestedTier === 'coding' ? 'coding' : (settings.smart ? 'smart' : 'fast');
-  const modelTier = tier === 'coding' ? 'smart' : tier;
   const models = settings.models || {};
   const providerModels = models[provider] || {};
-  let model = (tier === 'coding' && providerModels.coding) || providerModels[modelTier];
+  let model = tier === 'coding'
+    ? (providerModels.coding || providerModels.smart || providerModels.fast)
+    : providerModels[tier];
   if (provider === 'gemini' && DEAD_GEMINI_MODEL_RE.test(model || '')) {
     model = CURRENT_GEMINI_DEFAULT;
   }
-  if (provider === PUBLIK_PROVIDER && !model) model = publik.DEFAULT_MODELS[modelTier];
+  if (provider === PUBLIK_PROVIDER && !model) model = publik.DEFAULT_MODELS[tier === 'coding' ? 'smart' : tier];
   if (provider === 'anthropic' && DEAD_ANTHROPIC_MODEL_RE.test(model || '')) {
     model = { fast: CURRENT_ANTHROPIC_DEFAULT_FAST, smart: CURRENT_ANTHROPIC_DEFAULT_SMART, coding: CURRENT_ANTHROPIC_DEFAULT_CODING }[tier];
   }

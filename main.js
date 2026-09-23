@@ -562,7 +562,7 @@ async function runFeature(mode, userText) {
     const settings = store.getSettings();
     // Coding solves use the Coding model whatever the Smart toggle says: a
     // fast model gets code wrong, and a wrong solve fails the interview.
-    const llm = createLLM(settings, mode === 'leetcode' ? { tier: 'coding' } : {});
+    const llm = createLLM(settings, { tier: def.tier });
     const userBubble = def.userBubble !== null
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
@@ -624,7 +624,7 @@ async function runFeature(mode, userText) {
       rearm = () => {
         clearTimeout(watchdog);
         watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')),
-          mode === 'leetcode' ? CODING_STREAM_INACTIVITY_MS : STREAM_INACTIVITY_MS);
+          def.tier === 'coding' ? CODING_STREAM_INACTIVITY_MS : STREAM_INACTIVITY_MS);
       };
       rearm();
     });

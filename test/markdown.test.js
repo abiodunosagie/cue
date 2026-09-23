@@ -24,6 +24,12 @@ test('escaped backtick outside code renders as a plain backtick', () => {
   assert.equal(visible(renderMarkdown('a \\` b')), 'a ` b');
 });
 
+test('a span ending in a backslash still closes (Windows path, no lost characters)', () => {
+  const html = renderMarkdown('Use `C:\\\\Users\\\\` for the path.');
+  assert.equal(html, '<p>Use <code>C:\\\\Users\\\\</code> for the path.</p>');
+  assert.equal(visible(renderMarkdown('Split on `\\\\` then `x`.')), 'Split on \\\\ then x.');
+});
+
 test('an unmatched backtick is kept as text', () => {
   assert.equal(visible(renderMarkdown('use the ` key')), 'use the ` key');
 });

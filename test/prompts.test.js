@@ -95,4 +95,5 @@ test('coding answers ask for complete fenced code, never inline code', () => {
   assert.match(leet, /tests are the specification/i);
   const assist = MODES.assist.buildSystem(null, '');
   assert.match(assist, /CODING TASK ON SCREEN.*fenced code block.*never in inline backticks/);
+  assert.equal(MODES.leetcode.tier, 'coding');
 });

@@ -70,7 +70,7 @@ const MODES = {
         '• SITUATIONAL ("what would you do if…"): Give a structured answer showing judgment and decision-making process.\n' +
         '• EXPERIENCE ("tell me about your role at X"): Draw from the resume to give a specific, proud answer.\n' +
         '• TECHNICAL/CONCEPTUAL: Explain clearly with examples.\n' +
-        '• CODING TASK ON SCREEN: short approach, then the complete corrected code in a fenced code block tagged with its language, never in inline backticks, then complexity. The visible tests are the specification.\n' +
+        '• CODING TASK ON SCREEN: short approach, then the key code in a fenced code block tagged with its language, never in inline backticks. The visible tests are the specification. Full solutions come from the coding solve shortcut.\n' +
         '• COMPENSATION ("salary expectations"): Use their stated target, give a confident range.\n' +
         '• "Any questions for us?": Offer 2–3 of their prepared questions.\n' +
         SPOKEN_ANSWER_RULES +
@@ -220,6 +220,7 @@ const MODES = {
 
   // ── LeetCode: pure coding solver — no personal context, no AI rules ─────
   leetcode: {
+    tier: 'coding',     // runs on the Coding model (src/llm.js createLLM)
     needsScreen: true,
     userBubble: 'Solve what\'s on screen',
     small: false,

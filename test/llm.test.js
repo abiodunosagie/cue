@@ -524,6 +524,8 @@ test('coding tier falls back to the smart model when no coding model is set', ()
 
 test('coding tier passes an 8192-token budget to the provider', async () => {
   const seen = [];
+  // Swaps the cached SDK export rather than using the Module._load stub above:
+  // the SDK is already cached by the time this test runs in the full suite.
   const sdkPath = require.resolve('@anthropic-ai/sdk');
   require(sdkPath);
   const cached = require.cache[sdkPath];
@@ -535,4 +537,14 @@ test('coding tier passes an 8192-token budget to the provider', async () => {
     await createLLM(settings).stream({ system: 's', turns: [{ role: 'user', text: 'q' }], onToken() {} });
   } finally { cached.exports = realExports; }
   assert.deepEqual(seen.map((a) => [a.model, a.max_tokens]), [['claude-opus-5-5', 8192], ['claude-haiku-4-5', 700]]);
+});
+
+test('coding tier falls back to the fast model when only fast is set', () => {
+  const custom = createLLM({ provider: 'custom', apiKeys: { custom: 'k' }, baseUrl: 'http://localhost:1234/v1',
+    models: { custom: { fast: 'my-fast-model', smart: '' } } }, { tier: 'coding' });
+  assert.equal(custom.model, 'my-fast-model');
+  assert.equal(custom.ready, true);
+  const azure = createLLM({ provider: 'azure', apiKeys: { azure: 'k' }, azureEndpoint: 'https://x.cognitiveservices.azure.com',
+    models: { azure: { fast: 'my-deployment-fast', smart: '' } } }, { tier: 'coding' });
+  assert.equal(azure.model, 'my-deployment-fast');
 });

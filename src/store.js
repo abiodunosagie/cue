@@ -3,24 +3,13 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { normalizeBaseUrl } = require('./openai-compatible');
+const PanelOpacity = require('../renderer/panel-opacity');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');
 
 // Cap on the user's custom response rules. Generous but bounded: anything longer
 // should live in a real prompt file, not in a settings field.
 const MAX_AI_RULES_CHARS = 2000;
-
-// How see-through the answer panel is. Below the floor white text stops being
-// readable over a light page; the ceiling is just short of fully opaque.
-const PANEL_OPACITY_MIN = 0.3;
-const PANEL_OPACITY_MAX = 0.97;
-const PANEL_OPACITY_DEFAULT = 0.9;
-
-function normalizePanelOpacity(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return PANEL_OPACITY_DEFAULT;
-  return Math.min(PANEL_OPACITY_MAX, Math.max(PANEL_OPACITY_MIN, Math.round(n * 100) / 100));
-}
 
 const DEFAULTS = {
   provider: 'openai',
@@ -82,7 +71,7 @@ const DEFAULTS = {
   // points", "casual tone". Applied to every LLM mode EXCEPT LeetCode (kept
   // strict for coding problems).
   aiRules: '',
-  panelOpacity: PANEL_OPACITY_DEFAULT,
+  panelOpacity: PanelOpacity.DEFAULT,
   // Window position
   windowX: null,
   windowY: null,
@@ -137,7 +126,7 @@ function load() {
   if (data) return data;
   try { data = deepMerge(DEFAULTS, JSON.parse(fs.readFileSync(FILE, 'utf8'))); }
   catch { data = deepMerge(DEFAULTS, {}); }
-  data.panelOpacity = normalizePanelOpacity(data.panelOpacity);
+  data.panelOpacity = PanelOpacity.normalize(data.panelOpacity);
 
 
   return data;
@@ -181,7 +170,6 @@ function redactForRenderer(s) {
 
 module.exports = {
   MAX_AI_RULES_CHARS,
-  normalizePanelOpacity,
   RENDERER_READ_ONLY,
   applyPublikDefault,
   stripRendererPatch,
@@ -200,7 +188,7 @@ module.exports = {
     load();
     const nextSettings = deepMerge(data, patch || {});
     nextSettings.baseUrl = normalizeBaseUrl(nextSettings.baseUrl);
-    nextSettings.panelOpacity = normalizePanelOpacity(nextSettings.panelOpacity);
+    nextSettings.panelOpacity = PanelOpacity.normalize(nextSettings.panelOpacity);
     data = nextSettings;
     save();
     return data;
