@@ -29,3 +29,7 @@ test-resume.js
 
 # Electron dist cache
 node_modules/electron/dist/electron.exe.bak
+
+# Local only: session guide and dev harness
+SESSION_GUIDE.md
+.dev/
