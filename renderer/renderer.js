@@ -66,7 +66,7 @@
     return html;
   }
 
-  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; }
+  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; readingFollow.reset(); }
 
   function addUserBubble(text) {
     const b = document.createElement('div');
@@ -115,6 +115,86 @@
     // terminal event is ever lost the whole UI stays frozen — self-clear after a generous window.
     if (v) busyFailsafe = setTimeout(() => { busy = false; $('#send-btn').classList.toggle('busy', false); }, 40000);
   }
+
+  // ---- reading follow ----------------------------------------------------
+  // While the user reads an answer aloud, their mic transcript is matched to
+  // the answer's paragraphs and #messages scrolls so the line being read sits
+  // near the top, with what comes next visible below it.
+  const readingFollow = (() => {
+    const { tokenize, locate } = window.ReadingTracker;
+    const MAX_SPOKEN = 40;      // buffer; locate() only weighs the newest WINDOW words
+    const READ_LINE = 0.3;      // reading point sits this far down the view
+    const MIN_STEP_PX = 24;     // ignore moves smaller than about a line
+    const MANUAL_PAUSE_MS = 4000;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let committed = [];
+    let interim = [];
+    let trackedEl = null;
+    let blocks = [];
+    let tokens = [];
+    let current = -1;
+    let pausedUntil = 0;
+    let pendingFrame = 0;
+
+    function reset() {
+      if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
+      committed = []; interim = [];
+      trackedEl = null; blocks = []; tokens = []; current = -1;
+    }
+
+    // The newest answer, only once it has finished streaming: finalizeAi
+    // replaces the streamed spans with paragraphs, so blocks are stable then.
+    // Error bubbles are skipped so a failed follow-up does not steal focus.
+    function latestAnswer() {
+      const all = messages.querySelectorAll('.ai-text:not([data-error])');
+      const el = all[all.length - 1];
+      if (!el || el === aiEl || el.querySelector('.ai-caret')) return null;
+      return el;
+    }
+
+    function update() {
+      const el = latestAnswer();
+      if (!el) return;
+      if (el !== trackedEl) {
+        trackedEl = el;
+        blocks = Array.from(el.querySelectorAll(':scope > p, :scope > ul > li, :scope > pre'));
+        if (!blocks.length) blocks = [el];
+        tokens = blocks.map((b) => tokenize(b.textContent));
+        current = -1;
+      }
+      if (Date.now() < pausedUntil) return;
+      const found = locate(tokens, committed.concat(interim), current);
+      if (!found) return;
+      current = found.index;
+      const block = blocks[found.index];
+      const viewTop = messages.getBoundingClientRect().top;
+      const rect = block.getBoundingClientRect();
+      const readingY = messages.scrollTop + (rect.top - viewTop) + rect.height * found.progress;
+      const target = Math.max(0, readingY - messages.clientHeight * READ_LINE);
+      if (Math.abs(target - messages.scrollTop) < MIN_STEP_PX) return;
+      messages.scrollTo({ top: target, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+    }
+
+    function onSpeech(text, isFinal) {
+      const words = tokenize(text);
+      if (isFinal) {
+        committed = committed.concat(words).slice(-MAX_SPOKEN);
+        interim = [];
+      } else {
+        interim = words;
+      }
+      // Interim results can arrive several times a second; match once per frame.
+      if (!pendingFrame) pendingFrame = requestAnimationFrame(() => { pendingFrame = 0; update(); });
+    }
+
+    // Any manual scroll wins for a few seconds, so auto-scroll never fights the user.
+    const pause = () => { pausedUntil = Date.now() + MANUAL_PAUSE_MS; };
+    messages.addEventListener('wheel', pause, { passive: true });
+    messages.addEventListener('touchmove', pause, { passive: true });
+    messages.addEventListener('mousedown', pause);
+
+    return { reset, update, onSpeech };
+  })();
 
   // ---- transcript helpers ------------------------------------------------
   // NOTE: The old transcript-list element was renamed to ts-list.
@@ -1024,6 +1104,7 @@
     el.textContent = `${label}: ${text}`;
     el.classList.add('show');
     appendTranscriptHistoryTurn(channel, text, true); // update sidebar interim
+    if (channel === 'you') readingFollow.onSpeech(text, false);
     
     // FIX #12: Show interviewer's interim speech in input area
     if (channel === 'them' && !input.value.trim()) {
@@ -1072,6 +1153,7 @@
     setLiveDotState(speaking ? 'speaking' : 'idle');
   });
   cue.on('llm:start', ({ userBubble, small, category }) => {
+    readingFollow.reset();
     responseCount++;
     if (responseCount > MAX_RESPONSES) {
       const oldest = messages.querySelector('.response-group');
@@ -1111,9 +1193,10 @@
     setBusy(true);
   });
   cue.on('llm:token', ({ text }) => appendToken(text));
-  cue.on('llm:done', () => { finalizeAi(); setBusy(false); });
+  cue.on('llm:done', () => { finalizeAi(); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
     if (!aiEl) startAi(true);
+    aiEl.dataset.error = '1'; // reading follow keeps tracking the last real answer
     aiEl.dataset.raw = message; finalizeAi(); setBusy(false);
     // publik errors carry one action: the renderer's markdown emits no anchors,
     // so a link needs a real button (same pattern as the mic banner).
@@ -1123,6 +1206,7 @@
   cue.on('transcript', ({ channel, text }) => {
     if (!text || text.trim().length < 2 || /^[?!.,;:\-…]+$/.test(text.trim())) return;
     appendTranscriptHistoryTurn(channel, text, false);
+    if (channel === 'you') readingFollow.onSpeech(text, true);
     // Auto-fill the input box with Them (interviewer) speech
     if (channel === 'them') {
       cancelSoftClear(); // Interviewer is speaking, cancel any pending clear
