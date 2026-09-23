@@ -430,13 +430,21 @@
 
     // Reset the idle timer — after 2s of silence, check if question is complete
     clearTimeout(questionFinalizeTimer);
-    questionFinalizeTimer = setTimeout(() => {
-      if (isLikelyCompleteQuestion(input.value)) {
-        composer.classList.add('stt-ready');
-        updateSendButtonState(); // FIX #9: Update send button when ready
-        // Subtle notification that question is ready
-        showToast('Press Enter to answer', 2500);
+    questionFinalizeTimer = setTimeout(function finalizeQuestion() {
+      if (!isLikelyCompleteQuestion(input.value)) return;
+      // While the user is correcting the text, leave sending to them (Enter).
+      if (settings && settings.autoAnswer !== false && document.activeElement !== input) {
+        // Still streaming the previous answer: wait for it instead of dropping this question.
+        // New interviewer words or the user answering clear this timer; setBusy's
+        // 40s failsafe bounds it if an answer never finishes.
+        if (busy) { questionFinalizeTimer = setTimeout(finalizeQuestion, 700); return; }
+        if (inputFromSTT) send();
+        return;
       }
+      composer.classList.add('stt-ready');
+      updateSendButtonState(); // FIX #9: Update send button when ready
+      // Subtle notification that question is ready
+      showToast('Press Enter to answer', 2500);
     }, 1800);
 
     // After 8s of no new words, save to history and keep stable
@@ -585,9 +593,11 @@
     syncPlaceholder();
     updateSendButtonState(); // FIX #9
     
-    // If text came from STT (interviewer question), use answerThis mode
+    // If text came from STT (interviewer question), use answerThis mode, or
+    // assist (which reads the screen) when the question points at the screen.
     // Otherwise use ask mode (user typed their own question)
-    runMode(wasFromSTT ? 'answerThis' : 'ask', text);
+    const mode = wasFromSTT ? window.SpokenQuestion.modeForSpokenQuestion(text) : 'ask';
+    runMode(mode, text);
   }
   $('#send-btn').addEventListener('click', send);
   input.addEventListener('keydown', (e) => {
@@ -1186,9 +1196,12 @@
     aiEl.appendChild(caretEl);
     group.appendChild(aiEl);
     messages.appendChild(group);
-    // Use requestAnimationFrame so the DOM is fully updated before scrolling
+    // Scroll only #messages: scrollIntoView would also scroll the page itself and
+    // push the toolbar out of the window. requestAnimationFrame lets layout settle.
     requestAnimationFrame(() => {
-      if (sep && sep.isConnected) sep.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!sep.isConnected) return;
+      const top = messages.scrollTop + sep.getBoundingClientRect().top - messages.getBoundingClientRect().top;
+      messages.scrollTo({ top, behavior: 'smooth' });
     });
     setBusy(true);
   });
@@ -1320,8 +1333,8 @@
     dismissBtn.className = 'dismiss';
     dismissBtn.addEventListener('click', () => banner.classList.remove('show'));
     actions.appendChild(dismissBtn);
-    const panel = document.getElementById('panel');
-    panel.insertBefore(banner, document.getElementById('action-row'));
+    // #action-row sits inside #panel-main, so insert there (inserting into #panel threw).
+    document.getElementById('panel-main').insertBefore(banner, document.getElementById('action-row'));
   }
 
   // ---- settings ----------------------------------------------------------
@@ -1482,6 +1495,9 @@
     document.querySelectorAll('#stt-provider-seg button').forEach((button) => {
       button.classList.toggle('on', button.dataset.sttProvider === (settings.sttProvider || 'auto'));
     });
+    document.querySelectorAll('#auto-answer-seg button').forEach((button) => {
+      button.classList.toggle('on', (button.dataset.autoAnswer === 'on') === (settings.autoAnswer !== false));
+    });
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -1592,6 +1608,13 @@
   document.querySelectorAll('#meeting-audio-seg button').forEach((button) => button.addEventListener('click', () => {
     settings.meetingAudio = button.dataset.meetingAudio === 'on';
     document.querySelectorAll('#meeting-audio-seg button').forEach((candidate) => {
+      candidate.classList.toggle('on', candidate === button);
+    });
+  }));
+
+  document.querySelectorAll('#auto-answer-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.autoAnswer = button.dataset.autoAnswer === 'on';
+    document.querySelectorAll('#auto-answer-seg button').forEach((candidate) => {
       candidate.classList.toggle('on', candidate === button);
     });
   }));

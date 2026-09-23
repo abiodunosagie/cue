@@ -116,7 +116,7 @@
       <!-- Tab: Keys -->
       <div class="s-body s-tab-pane" data-pane="keys">
         <label class="s-label">Provider</label>
-        <div class="s-seg" id="provider-seg">
+        <div class="s-seg s-seg-wrap" id="provider-seg">
           <button data-provider="publik" id="provider-publik" class="hidden">publik API <span class="s-default-badge">default</span></button>
           <button data-provider="openai">OpenAI</button>
           <button data-provider="anthropic">Anthropic</button>
@@ -206,6 +206,13 @@
         </div>
         <div class="s-note" id="meeting-audio-note"></div>
 
+        <label class="s-label">Auto-answer <span class="s-hint">answer the interviewer as soon as they finish a question</span></label>
+        <div class="s-seg" id="auto-answer-seg">
+          <button data-auto-answer="off">Off</button>
+          <button data-auto-answer="on">On</button>
+        </div>
+        <div class="s-note">Works from what cue hears, so Meeting audio must be on. A question that points at the screen ("take a look at this code", "as you can see") is answered with a screenshot of your screen, like Assist.</div>
+
         <div class="whisper-card">
           <div class="whisper-runtime-row">
             <span class="s-label">whisper.cpp runtime</span>
@@ -248,11 +255,11 @@
       <!-- Tab: Profile -->
       <div class="s-body s-tab-pane hidden" data-pane="profile">
         <label class="s-label">Your resume <span class="s-hint">paste full resume, or import a PDF/DOCX</span></label>
-        <div class="s-field s-upload"><span class="s-filename" id="resume-filename"></span><button class="s-upload-btn" id="upload-resume-btn">Import PDF/DOCX</button></div>
+        <div class="s-field s-upload"><span class="s-filename" id="resume-filename"></span><button class="s-action s-upload-btn" id="upload-resume-btn">Import PDF/DOCX</button></div>
         <textarea id="resume-text" rows="7" spellcheck="false" placeholder="Paste your full resume here. cue will extract Name, Summary, Experience, Skills, Projects, and Education automatically."></textarea>
 
         <label class="s-label">Target job description <span class="s-hint">optional — every answer gets tailored to this role</span></label>
-        <div class="s-field s-upload"><span class="s-filename" id="jd-filename"></span><button class="s-upload-btn" id="upload-jd-btn">Import PDF/DOCX</button></div>
+        <div class="s-field s-upload"><span class="s-filename" id="jd-filename"></span><button class="s-action s-upload-btn" id="upload-jd-btn">Import PDF/DOCX</button></div>
         <textarea id="job-description" rows="5" spellcheck="false" placeholder="Paste the job description for the role you're interviewing for. cue will highlight your most relevant experience."></textarea>
       </div>
 
@@ -333,6 +340,7 @@
 
   <script src="icons.js"></script>
   <script src="reading-tracker.js"></script>
+  <script src="spoken-question.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

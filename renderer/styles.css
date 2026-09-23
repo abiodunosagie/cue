@@ -33,7 +33,9 @@ html, body {
   background: transparent;               /* Electron transparent window */
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+  /* clip, not hidden: a hidden box can still be scrolled by script (scrollIntoView,
+     focus), which pushed the toolbar off the top with no way to scroll it back. */
+  overflow: clip;
   cursor: default;
   -webkit-user-select: none;
   user-select: none;
@@ -49,9 +51,13 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding-top: 14px;
+  padding: 14px 0 10px;
+  overflow: clip;
   pointer-events: none;                  /* only the actual UI blocks; gaps pass through */
 }
+/* The panel always fits under the toolbar: the answer area shrinks and scrolls
+   instead of the panel growing past the bottom of the window. */
+#toolbar { flex-shrink: 0; }
 #toolbar, #panel-wrap, #settings-scrim, #onboard-scrim, #consent-scrim { pointer-events: auto; }
 #toolbar { -webkit-app-region: drag; }   /* drag the top pill to move the window */
 #panel-wrap, #panel, #messages, #action-row, #composer, #input, textarea, button, .act, .smart-pill, .more-btn, #send-btn, .s-close, .s-seg button, .ob-buttons button, .ob-ghost, .ob-primary { -webkit-app-region: no-drag; }
@@ -147,7 +153,7 @@ html, body {
 .mic-perm-actions button.dismiss:hover { background: rgba(255,255,255,0.10); color: var(--tx-2); }
 
 /* ============================ Panel ============================ */
-#panel-wrap { position: relative; margin-top: 12px; width: min(624px, 94vw); }
+#panel-wrap { position: relative; margin-top: 12px; width: min(624px, 94vw); min-height: 0; display: flex; flex-direction: column; }
 button:focus { outline: none; }
 #live-dot {
   position: absolute; top: -3px; left: -5px; z-index: 4;
@@ -166,11 +172,11 @@ button:focus { outline: none; }
   border-radius: var(--r-panel);
   box-shadow: 0 16px 48px rgba(0,0,0,0.45), 0 2px 8px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.10);
 }
-#panel { padding: 20px 22px; animation: overlayIn 260ms cubic-bezier(0.22,1,0.36,1); }
+#panel { padding: 20px 22px; min-height: 0; display: flex; flex-direction: column; animation: overlayIn 260ms cubic-bezier(0.22,1,0.36,1); }
 #panel.collapsed { display: none; }
 
 /* ============================ Messages ============================ */
-#messages { display: flex; flex-direction: column; overflow-y: auto; max-height: 50vh; }
+#messages { display: flex; flex-direction: column; overflow-y: auto; max-height: 50vh; min-height: 0; flex: 0 1 auto; }
 .user-bubble {
   align-self: flex-end;
   max-width: 75%;
@@ -234,8 +240,8 @@ button:focus { outline: none; }
 
 /* ============================ Action row ============================ */
 #action-row {
-  display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;
-  margin-top: 6px; white-space: nowrap;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 4px;
+  margin-top: 6px; white-space: nowrap; flex-shrink: 0;
 }
 .act {
   display: inline-flex; align-items: center; gap: 6px;
@@ -392,7 +398,7 @@ button:focus { outline: none; }
   border: 1px solid rgba(255,255,255,0.10);
   border-radius: var(--r-16);
   padding: 12px 14px;
-  display: flex; flex-direction: column; gap: 10px;
+  display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
   transition: border-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
 }
 #composer.focused { border-color: var(--bd-strong); box-shadow: 0 0 0 3px rgba(60,131,245,0.15); }
@@ -400,7 +406,8 @@ button:focus { outline: none; }
 #placeholder {
   position: absolute; inset: 0; pointer-events: none;
   color: var(--tx-mut); font-size: 15px; line-height: 22px;
-  display: flex; align-items: center; flex-wrap: wrap; gap: 3px;
+  display: flex; align-items: center; flex-wrap: nowrap; gap: 3px;
+  white-space: nowrap; overflow: hidden;
 }
 #placeholder.hidden { display: none; }
 .keycap {
@@ -475,9 +482,9 @@ button:focus { outline: none; }
 .s-close { border: none; background: var(--accent); color: #fff; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: var(--r-pill); cursor: pointer; }
 
 /* Tab bar */
-.s-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-shrink: 0; overflow-x: auto; }
+.s-tabs { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 4px; margin-bottom: 12px; flex-shrink: 0; }
 .s-tab {
-  flex: 1; min-width: 72px; padding: 7px 4px; border-radius: var(--r-8);
+  min-width: 0; padding: 7px 10px; overflow: hidden; text-overflow: ellipsis; border-radius: var(--r-8);
   border: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03);
   color: var(--tx-mut); font-size: 12px; font-weight: 500; font-family: var(--font);
   cursor: pointer; transition: all 140ms ease; white-space: nowrap;
@@ -498,7 +505,7 @@ button:focus { outline: none; }
 .s-seg button { flex: 1; padding: 8px; border-radius: var(--r-8); border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.04); color: var(--tx-2); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 140ms ease; }
 .s-seg button.on { border-color: var(--accent); color: #fff; background: rgba(60,131,245,0.16); }
 .s-field { display: flex; align-items: center; gap: 10px; }
-.s-field span { width: 78px; color: var(--tx-mut); font-size: 12px; flex-shrink: 0; }
+.s-field span { width: 78px; color: var(--tx-mut); font-size: 12px; flex-shrink: 0; overflow-wrap: anywhere; }
 .s-field input { flex: 1; padding: 8px 10px; border-radius: var(--r-8); border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.25); color: var(--tx-1); font-size: 13px; font-family: var(--font); outline: none; }
 .s-field input:focus { border-color: var(--accent); }
 .s-help { color: var(--tx-mut); font-size: 11px; line-height: 1.4; margin: 4px 0 2px 88px; }
@@ -531,6 +538,10 @@ button:focus { outline: none; }
   padding: 6px 10px; border-radius: var(--r-8); border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.05); color: var(--tx-2); font: 500 12px var(--font); cursor: pointer;
 }
+.s-upload { justify-content: flex-end; }
+.s-filename { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-upload .s-filename { width: auto; }
+.s-upload-btn { flex-shrink: 0; }
 .s-action:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,0.09); }
 .s-action:disabled { opacity: 0.4; cursor: default; }
 .s-action.danger:hover:not(:disabled) { color: #fca5a5; border-color: rgba(239,68,68,0.35); background: rgba(239,68,68,0.08); }
@@ -620,13 +631,17 @@ button:focus { outline: none; }
 /* ============================ Two-column panel layout ============================ */
 #panel-columns {
   display: flex;
-  gap: 0;
-  align-items: flex-start;
+  flex-direction: column;
+  min-height: 0;
 }
 #panel-main {
-  flex: 1;
   min-width: 0; /* allow shrink */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
+#panel-main > * { flex-shrink: 0; }
+#panel-main > #messages { flex-shrink: 1; }
 
 /* Transcript history sidebar — floats OUTSIDE the main panel */
 .transcript-sidebar {
@@ -767,6 +782,13 @@ button:focus { outline: none; }
   width: min(420px, 60vw);
   transform: translateX(-120px);
 }
+/* Narrow panel: drop the keyboard hints and dot separators so the action
+   buttons fit, and let them wrap onto a second line if they still do not. */
+#panel-wrap.sidebar-open .shortcut-hint,
+#panel-wrap.sidebar-open #action-row .sep { display: none; }
+#panel-wrap.sidebar-open #placeholder { -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); mask-image: linear-gradient(to right, #000 85%, transparent); }
+/* Short window: give the answer the room the profile chips would take. */
+@media (max-height: 480px) { .prep-status { display: none; } }
 
 /* ============================ Transcript viewer ============================ */
 .transcript-wrap {

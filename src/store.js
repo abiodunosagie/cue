@@ -26,6 +26,9 @@ const DEFAULTS = {
   // screen-sharing. cue's promise is to be invisible, so on macOS this is opt-in;
   // on Windows/Linux loopback capture carries no such indicator, so it stays on.
   meetingAudio: process.platform !== 'darwin',
+  // Answer the interviewer's question as soon as they stop talking, without a
+  // click or shortcut. Only has an effect when meeting audio is heard.
+  autoAnswer: true,
   baseUrl: '',
   minimaxRegion: 'global_en',
   apiKeys: { openai: '', anthropic: '', gemini: '', deepgram: '', custom: '', ollama: '', groq: '', minimax: '' , azure: '', publik: '' },
