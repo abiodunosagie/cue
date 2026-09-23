@@ -171,18 +171,29 @@
       return true;
     }
 
+    // One log line per finished spoken sentence saying what the tracker did.
+    // Counts and positions only, never the words, so the log holds nothing private.
+    let logPending = false;
+    function note(outcome) {
+      if (!logPending) return;
+      logPending = false;
+      cue.log(`[follow] ${outcome} blocks=${blocks.length} at=${current} spoken=${committed.length + interim.length} ` +
+        `scroll=${Math.round(messages.scrollTop)}/${Math.max(0, messages.scrollHeight - messages.clientHeight)} view=${messages.clientHeight}`);
+    }
+
     function update() {
-      if (!syncAnswer()) return;
-      if (Date.now() < pausedUntil) return;
+      if (!syncAnswer()) return note('no-finished-answer');
+      if (Date.now() < pausedUntil) return note('paused-by-manual-scroll');
       const found = locate(tokens, committed.concat(interim), current);
-      if (!found) return;
+      if (!found) return note('no-match');
       current = found.index;
       const block = blocks[found.index];
       const viewTop = messages.getBoundingClientRect().top;
       const rect = block.getBoundingClientRect();
       const readingY = messages.scrollTop + (rect.top - viewTop) + rect.height * found.progress;
       const target = Math.max(0, readingY - messages.clientHeight * READ_LINE);
-      if (Math.abs(target - messages.scrollTop) < MIN_STEP_PX) return;
+      if (Math.abs(target - messages.scrollTop) < MIN_STEP_PX) return note('in-place');
+      note(`scroll-to-${Math.round(target)}`);
       messages.scrollTo({ top: target, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
     }
 
@@ -191,6 +202,7 @@
       if (isFinal) {
         committed = committed.concat(words).slice(-MAX_SPOKEN);
         interim = [];
+        logPending = true;
       } else {
         interim = words;
       }
@@ -786,7 +798,7 @@
           ? 'Microphone permission was denied. Settings → Privacy & security → Microphone → allow cue, then try again.'
           : 'Microphone permission was denied. System Settings → Privacy & Security → Microphone → allow cue, then try again.');
       } else if (name === 'NotReadableError' || name === 'TrackStartError') {
-        showStatus('The microphone could not be started — another application may be using it exclusively. Close other apps using the mic and try again.');
+        showStatus('The microphone could not be started. Another application may be using it exclusively. Close other apps using the mic and try again.');
       } else {
         showStatus('Microphone capture could not be started. Check your mic permissions and try again.');
       }
@@ -837,7 +849,7 @@
         stream.getTracks().forEach((t) => t.stop());
         showStatus(cue.platform === 'win32'
           ? 'No system-audio loopback track detected. Make sure "Share audio" is checked in the screen share dialog, and that your audio device is not in exclusive mode.'
-          : 'No system-audio loopback track detected. Meeting audio needs macOS 14.4+ — your screen and microphone still work.');
+          : 'No system-audio loopback track detected. Meeting audio needs macOS 14.4 or later. Your screen and microphone still work.');
         return;
       }
       sysStream = stream;
@@ -899,7 +911,7 @@
     dot.classList.add(dotState);
     const labels = {
       off:          'Not listening',
-      idle:         'Listening — silence detected',
+      idle:         'Listening, silence detected',
       speaking:     'Speech detected',
       transcribing: 'Transcribing…'
     };
@@ -992,7 +1004,7 @@
         tsSidebarInterimEl.className = 'ts-turn ts-' + channel + ' ts-interim-row';
         const chLabel = document.createElement('span');
         chLabel.className = 'ts-channel';
-        chLabel.textContent = channel === 'them' ? 'Them' : 'You';
+        chLabel.textContent = channel === 'them' ? 'Interviewer' : 'You';
         const txt = document.createElement('span');
         txt.className = 'ts-text ts-interim';
         tsSidebarInterimEl.appendChild(chLabel);
@@ -1020,7 +1032,7 @@
 
         const chLabel = document.createElement('span');
         chLabel.className = 'ts-channel';
-        chLabel.textContent = channel === 'them' ? 'Them' : 'You';
+        chLabel.textContent = channel === 'them' ? 'Interviewer' : 'You';
 
         const txt = document.createElement('span');
         txt.className = 'ts-text';
@@ -1059,11 +1071,6 @@
     $('#stop-btn').classList.toggle('active', active);
     // FIX #4: Add .listening class to composer when capture is active
     composer.classList.toggle('listening', active);
-    // Update history button to show active state when listening
-    const historyBtn = document.getElementById('history-btn');
-    if (historyBtn) {
-      historyBtn.classList.toggle('listening', active);
-    }
     // startSystemAudio() is called directly from the stop-button click handler
     // so that the getDisplayMedia request has a fresh user gesture.
     // Here we only start the mic (no gesture required) and stop everything on deactivate.
@@ -1131,8 +1138,10 @@
   cue.on('stt:interim', ({ channel, text }) => {
     setLiveDotState('transcribing');
     const el = getOrCreateInterimEl();
-    const label = channel === 'them' ? 'Them' : 'You';
-    el.textContent = `${label}: ${text}`;
+    const label = channel === 'them' ? 'Interviewer' : 'You';
+    // One line: show the newest words, which is what the speaker is saying now.
+    const tail = text.length > 90 ? '…' + text.slice(-90) : text;
+    el.textContent = `${label}: ${tail}`;
     el.classList.add('show');
     appendTranscriptHistoryTurn(channel, text, true); // update sidebar interim
     if (channel === 'you' && !isInterviewerEcho(channel, text)) readingFollow.onSpeech(text, false);
@@ -1320,7 +1329,7 @@
       el.classList.toggle('missing', !loaded);
       el.title = loaded
         ? el.textContent.trim() + ' loaded'
-        : el.textContent.trim() + ' not set — add in Settings';
+        : el.textContent.trim() + ' not set, add it in Settings';
     });
   }
 
@@ -1452,7 +1461,7 @@
     } else if (p.disconnected) {
       line = 'publik API is disconnected. This computer was removed from your publik account.'; note.classList.add('warn');
     } else if (!p.disclosureAccepted) {
-      line = 'Not set up yet — no account or key needed to start.';
+      line = 'Not set up yet. No account or key needed to start.';
     } else if (p.lastError) {
       line = p.lastError; note.classList.add('warn');
     } else {
@@ -1514,7 +1523,7 @@
     const meetingAudioNote = $('#meeting-audio-note');
     if (meetingAudioNote) {
       meetingAudioNote.textContent = isMac
-        ? 'macOS can only capture system audio through a screen-capture session. While this is on, the menu bar shows the screen-recording indicator and Control Center lists cue under \u201cCurrently Sharing\u201d \u2014 visible to everyone you screen-share with. Off by default; your microphone, screen capture and answers are unaffected.'
+        ? 'macOS can only capture system audio through a screen-capture session. While this is on, the menu bar shows the screen-recording indicator and Control Center lists cue under \u201cCurrently Sharing\u201d, visible to everyone you share your whole screen with. Off by default; your microphone, screen capture and answers are unaffected.'
         : 'Transcribes the other participants alongside your microphone. This platform\u2019s loopback capture shows no recording indicator.';
     }
     document.querySelectorAll('#stt-provider-seg button').forEach((button) => {
@@ -1564,7 +1573,7 @@
       const row = document.createElement('div');
       row.className = 's-caller';
       const label = document.createElement('span');
-      label.textContent = name + ' — ' + (allowed.length ? allowed.join(' + ') : 'denied');
+      label.textContent = name + ': ' + (allowed.length ? allowed.join(' + ') : 'denied');
       label.title = id;
       const button = document.createElement('button');
       button.type = 'button';
@@ -2110,11 +2119,6 @@
     syncPlaceholder();
     updateHistoryBadge(); // FIX #3: Initialize badge on boot
     updateSendButtonState(); // Initialize send button state
-
-    // Fix placeholder shortcut hint to match platform
-    if (isWindows) {
-      placeholder.innerHTML = 'Ask about your screen or conversation, or <span class="keycap">Ctrl</span><span class="keycap">⏎</span> for Assist';
-    }
 
     const st = await cue.captureState();
     $('#live-dot').classList.toggle('off', !st.active);

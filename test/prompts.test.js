@@ -74,3 +74,14 @@ test('modes that write spoken answers carry the intro, style and no-invented-sto
   }
   assert.doesNotMatch(MODES.leetcode.buildSystem('', ''), /INTRO \(/);
 });
+
+test('answerThis sees the recent conversation so follow-ups make sense', () => {
+  const { MODES } = require('../src/prompts');
+  const prompt = MODES.answerThis.build({
+    transcript: [{ channel: 'them', text: 'Tell me about the Numd library.' }, { channel: 'them', text: 'What was hardest about that?' }],
+    userText: 'What was hardest about that?'
+  });
+  assert.match(prompt, /Numd library/);
+  assert.match(prompt, /"What was hardest about that\?"/);
+  assert.equal(prompt.match(/What was hardest about that\?/g).length, 1, 'question appears once');
+});

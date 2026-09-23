@@ -29,7 +29,7 @@ const BASE_RULES =
 // "Tell me about yourself" sets the tone for the whole interview, and a list of
 // projects and libraries is the most common way it goes wrong.
 const INTRO_RULE =
-  '• INTRO ("tell me about yourself", "your background"): 120 to 150 words, under a minute spoken, in three beats. ' +
+  '• INTRO ("tell me about yourself", "your background"): 90 to 120 words, under 45 seconds spoken, in three beats. ' +
   'Who you are and how long you have done this work, in words a non-technical manager follows. ' +
   'The work you do that matches this role, with one concrete example and its result. ' +
   'Why this role is the right next step. Do not open with your full name. Name one project at most and at most two technologies.\n';
@@ -37,8 +37,9 @@ const INTRO_RULE =
 // A made-up incident is worse than a plain answer: the interviewer's follow-up
 // questions expose it. Stories come from the candidate's own material only.
 const NO_INVENTED_STORIES =
-  'Use only incidents that appear in the candidate\'s stories or resume. If none fits the question, answer from a real project in the resume ' +
-  'and describe what they did in general terms, without inventing specific failures, numbers or outcomes.\n';
+  'Use only incidents that appear in the candidate\'s stories or resume. Never describe a specific conversation, person, disagreement, mistake ' +
+  'or incident that is not written there. If no story fits, say how the candidate handles that situation, anchored in a real role from the resume, ' +
+  'without inventing specific failures, numbers or outcomes.\n';
 
 // How every spoken answer should sound.
 const SPOKEN_STYLE_TEXT =
@@ -103,7 +104,7 @@ const MODES = {
         '• COMPENSATION: State the target range confidently without over-explaining.\n' +
         '• TECHNICAL: Give a clear, confident explanation. Use analogies for non-technical interviewers.\n' +
         SPOKEN_ANSWER_RULES +
-        'No quotes, no preamble. Write the actual words to say. 2–5 sentences, except the intro.',
+        'No quotes, no preamble. Write the actual words to say. 2 to 4 sentences, except the intro.',
         contextBlock
       ), aiRules, 'say');
     },
@@ -187,7 +188,8 @@ const MODES = {
       return applyRules(buildSystem(
         'You are cue, whispering a direct answer to the candidate for ONE specific question. ' +
         BASE_RULES +
-        'The interviewer\'s exact question is provided below. Focus ONLY on answering that question — ignore any other conversation context.\n\n' +
+        'The interviewer\'s exact question is provided below. Answer that question. The recent conversation is included only to resolve references ' +
+        '("that project", "you mentioned") and to avoid reusing the example from the previous answer.\n\n' +
         'Rules:\n' +
         NO_INVENTED_STORIES +
         '• BEHAVIORAL ("tell me about a time…"): STAR format using real stories from the candidate\'s background. Situation → Task → Action → Result. Include metrics if available.\n' +
@@ -197,13 +199,21 @@ const MODES = {
         '• COMPENSATION: State the salary target confidently in one sentence.\n' +
         '• SITUATIONAL: Structured thinking: "First I would X, then Y, because Z."\n' +
         SPOKEN_ANSWER_RULES +
-        'Write in first person, as the candidate speaking. No preamble. 2–5 sentences, except the intro.',
+        'Write in first person, as the candidate speaking. No preamble. 2 to 4 sentences, except the intro.',
         contextBlock
       ), aiRules, 'answerThis');
     },
     build(ctx) {
-      // Only pass the specific question — not the full transcript history
-      return 'Answer this specific interview question:\n\n"' + (ctx.userText || '(no question provided)') + '"\n\nGive the full answer the candidate should say out loud.';
+      // A short window of conversation, so follow-ups ("tell me more about that")
+      // make sense; the question itself is what gets answered.
+      // The heard question is also the newest interviewer turn(s); leave those
+      // out of the context so the model sees it once, as the thing to answer.
+      const question = ctx.userText || '';
+      const turns = (ctx.transcript || []).slice();
+      while (turns.length && turns[turns.length - 1].channel === 'them' && question.includes(turns[turns.length - 1].text.trim())) turns.pop();
+      const t = formatTranscript(turns, 8);
+      return (t ? 'Recent conversation, for context only:\n' + t + '\n\n' : '') +
+        'Answer this interview question:\n\n"' + (ctx.userText || '(no question provided)') + '"\n\nGive the answer the candidate should say out loud.';
     }
   },
 
