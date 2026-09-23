@@ -14,7 +14,9 @@
   // ---- paint icons -------------------------------------------------------
   $('#logo-btn').innerHTML = icon('logo', { size: 18 });
   $('.tb-hide .chev').innerHTML = icon('chevron-down', { size: 14 });
-  $('#stop-btn').innerHTML = icon('stop-square', { size: 15 });
+  // Two icons, CSS shows one: a dot to start listening, a red square to stop.
+  $('#stop-btn').innerHTML = '<span class="ic-start">' + icon('record', { size: 12 }) + '</span>' +
+    '<span class="ic-stop">' + icon('stop-square', { size: 14 }) + '</span>';
   $('#quit-btn').innerHTML = icon('x', { size: 14 });
   document.querySelector('.act[data-mode="assist"] .ic').innerHTML = icon('sparkles', { size: 16 });
   document.querySelector('.act[data-mode="say"] .ic').innerHTML = icon('wand-sparkles', { size: 16 });

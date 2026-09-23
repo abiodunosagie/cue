@@ -4,6 +4,7 @@
   --accent: #3C83F5;
   --accent-hi: #4A8DF7;
   --live: #22C55E;
+  --stop: #ff5f57;                        /* recording / quit, the macOS close red */
 
   --tx-1: rgba(255,255,255,0.95);
   --tx-2: rgba(255,255,255,0.90);
@@ -103,11 +104,17 @@ html, body {
 .tb-hide:hover { background: rgba(255,255,255,0.08); }
 .tb-hide .chev { width: 14px; height: 14px; display: inline-flex; color: rgba(255,255,255,0.9); }
 .tb-hide.collapsed .chev { transform: rotate(180deg); }
-.tb-stop { width: 28px; height: 28px; border-radius: var(--r-8); color: #fff; }
-.tb-stop:hover { background: rgba(255,255,255,0.08); }
-.tb-stop.active { color: #ff6b6b; }
-.tb-quit { width: 28px; height: 28px; border-radius: var(--r-8); color: rgba(255,255,255,0.50); }
-.tb-quit:hover { background: rgba(255,68,68,0.18); color: #ff6b6b; }
+/* Scoped under #toolbar: the generic `#toolbar button` rule would otherwise
+   win on specificity and keep these white, which hid the listening state. */
+#toolbar .tb-stop { width: 28px; height: 28px; border-radius: var(--r-8); color: var(--ic); }
+#toolbar .tb-stop:hover { background: rgba(255,255,255,0.08); }
+.tb-stop .ic-start { display: inline-flex; }
+.tb-stop .ic-stop, .tb-stop.active .ic-start { display: none; }
+.tb-stop.active .ic-stop { display: inline-flex; }
+#toolbar .tb-stop.active { color: var(--stop); background: rgba(255,95,87,0.16); }
+#toolbar .tb-stop.active:hover { background: rgba(255,95,87,0.26); }
+#toolbar .tb-quit { width: 28px; height: 28px; border-radius: var(--r-8); color: rgba(255,255,255,0.55); }
+#toolbar .tb-quit:hover { background: rgba(255,95,87,0.18); color: var(--stop); }
 
 /* ============================ Mic permission banner ============================ */
 #mic-perm-banner {

@@ -257,6 +257,10 @@ function createWindow() {
     skipTaskbar: true,
     alwaysOnTop: true,
     fullscreenable: false,
+    // cue is never the focused app during a call. Without this, macOS spends the
+    // first click on an inactive window just activating it, so X, Stop or Assist
+    // looked dead until clicked twice.
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
