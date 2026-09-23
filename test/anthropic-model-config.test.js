@@ -43,3 +43,12 @@ test('store.js default Anthropic models match the shared current defaults', () =
   assert.equal(match[1], CURRENT_ANTHROPIC_DEFAULT_FAST);
   assert.equal(match[2], CURRENT_ANTHROPIC_DEFAULT_SMART);
 });
+
+test('coding solves default to the strongest current model and store.js agrees', () => {
+  const { CURRENT_ANTHROPIC_DEFAULT_CODING } = require('../src/llm');
+  assert.ok(!DEAD_MODEL_RE.test(CURRENT_ANTHROPIC_DEFAULT_CODING));
+  const source = fs.readFileSync(path.join(__dirname, '..', 'src/store.js'), 'utf8');
+  const match = /anthropic:\s*\{[^}]*coding:\s*'([^']+)'/.exec(source);
+  assert.ok(match, 'store.js anthropic defaults have no coding model');
+  assert.equal(match[1], CURRENT_ANTHROPIC_DEFAULT_CODING);
+});

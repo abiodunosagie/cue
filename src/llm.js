@@ -19,6 +19,10 @@ const CURRENT_GEMINI_DEFAULT = 'gemini-2.5-flash';
 // live-verified with a real request before shipping this default.
 const CURRENT_ANTHROPIC_DEFAULT_FAST = 'claude-haiku-4-5-20251001';
 const CURRENT_ANTHROPIC_DEFAULT_SMART = 'claude-sonnet-4-5-20250929';
+// Coding solves (⌘H) run on the strongest model: a wrong answer there fails the
+// interview outright, so they trade cost and a few seconds for correctness.
+// Live-verified against GET /v1/models and a real solve on 2026-09-23.
+const CURRENT_ANTHROPIC_DEFAULT_CODING = 'claude-opus-5-5';
 const DEFAULT_MODELS = {
   openai: 'gpt-4o-mini',
   anthropic: CURRENT_ANTHROPIC_DEFAULT_FAST,
@@ -393,21 +397,28 @@ async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTok
   return full;
 }
 
-function createLLM(settings) {
+// Answer budgets per tier. A coding answer holds whole files and build steps.
+const MAX_TOKENS = { fast: 700, smart: 1400, coding: 8192 };
+
+// tier: 'coding' for coding solves; otherwise the Smart toggle picks fast/smart.
+// A provider with no coding model set falls back to its smart model.
+function createLLM(settings, { tier: requestedTier } = {}) {
   const provider = settings.provider;
   const keys = settings.apiKeys || {};
   let apiKey = keys[provider];
   let baseURL = '';
   let configurationError = '';
-  const tier = settings.smart ? 'smart' : 'fast';
+  const tier = requestedTier === 'coding' ? 'coding' : (settings.smart ? 'smart' : 'fast');
+  const modelTier = tier === 'coding' ? 'smart' : tier;
   const models = settings.models || {};
-  let model = (models[provider] || {})[tier];
+  const providerModels = models[provider] || {};
+  let model = (tier === 'coding' && providerModels.coding) || providerModels[modelTier];
   if (provider === 'gemini' && DEAD_GEMINI_MODEL_RE.test(model || '')) {
     model = CURRENT_GEMINI_DEFAULT;
   }
-  if (provider === PUBLIK_PROVIDER && !model) model = publik.DEFAULT_MODELS[tier];
+  if (provider === PUBLIK_PROVIDER && !model) model = publik.DEFAULT_MODELS[modelTier];
   if (provider === 'anthropic' && DEAD_ANTHROPIC_MODEL_RE.test(model || '')) {
-    model = tier === 'smart' ? CURRENT_ANTHROPIC_DEFAULT_SMART : CURRENT_ANTHROPIC_DEFAULT_FAST;
+    model = { fast: CURRENT_ANTHROPIC_DEFAULT_FAST, smart: CURRENT_ANTHROPIC_DEFAULT_SMART, coding: CURRENT_ANTHROPIC_DEFAULT_CODING }[tier];
   }
   if (!model) model = DEFAULT_MODELS[provider] || '';
   const minimaxRegion = settings.minimaxRegion || 'global_en';
@@ -446,7 +457,7 @@ function createLLM(settings) {
   }
 
   const ready = !configurationError && !!model;
-  const maxTokens = settings.smart ? 1400 : 700;
+  const maxTokens = MAX_TOKENS[tier];
 
   return {
     provider, model, apiKey, baseURL,
@@ -483,6 +494,7 @@ module.exports = {
   CURRENT_GEMINI_DEFAULT,
   CURRENT_ANTHROPIC_DEFAULT_FAST,
   CURRENT_ANTHROPIC_DEFAULT_SMART,
+  CURRENT_ANTHROPIC_DEFAULT_CODING,
   PUBLIK_PROVIDER,
   isRateLimitError
 };

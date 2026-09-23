@@ -92,6 +92,8 @@ const transcript = []; // { channel, text, ts } — capped at MAX_TRANSCRIPT_TUR
 const MAX_TRANSCRIPT_TURNS = 200; // ~30–40 minutes of conversation at normal pace
 const FLUSH_MS = 900;
 const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy can't wedge forever
+// The strongest model reading a screenshot can take ~10s to its first token.
+const CODING_STREAM_INACTIVITY_MS = 45000;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.12); // ~0.12s
 const RMS_GATE = 180;
 let flushTimer = null;
@@ -558,7 +560,9 @@ async function runFeature(mode, userText) {
   let streamSettled = false; // drop stray tokens from a stream we've already abandoned
   try {
     const settings = store.getSettings();
-    const llm = createLLM(settings);
+    // Coding solves use the Coding model whatever the Smart toggle says: a
+    // fast model gets code wrong, and a wrong solve fails the interview.
+    const llm = createLLM(settings, mode === 'leetcode' ? { tier: 'coding' } : {});
     const userBubble = def.userBubble !== null
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
@@ -619,7 +623,8 @@ async function runFeature(mode, userText) {
     const stalled = new Promise((_res, reject) => {
       rearm = () => {
         clearTimeout(watchdog);
-        watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), STREAM_INACTIVITY_MS);
+        watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')),
+          mode === 'leetcode' ? CODING_STREAM_INACTIVITY_MS : STREAM_INACTIVITY_MS);
       };
       rearm();
     });

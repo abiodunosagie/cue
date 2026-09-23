@@ -44,28 +44,27 @@
 
   function esc(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-  // minimal, safe markdown: fenced code, bullets, inline code, bold, paragraphs
-  function renderMarkdown(text) {
-    const lines = text.split('\n');
-    let html = '', inCode = false, inList = false, buf = [];
-    const flushP = () => { if (buf.length) { html += '<p>' + inline(buf.join(' ')) + '</p>'; buf = []; } };
-    const inline = (s) => esc(s)
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    for (const raw of lines) {
-      const line = raw;
-      if (/^```/.test(line.trim())) {
-        if (!inCode) { flushP(); if (inList) { html += '</ul>'; inList = false; } html += '<pre><code>'; inCode = true; }
-        else { html += '</code></pre>'; inCode = false; }
-        continue;
-      }
-      if (inCode) { html += esc(line) + '\n'; continue; }
-      if (/^\s*[-*]\s+/.test(line)) { flushP(); if (!inList) { html += '<ul>'; inList = true; } html += '<li>' + inline(line.replace(/^\s*[-*]\s+/, '')) + '</li>'; continue; }
-      if (line.trim() === '') { flushP(); if (inList) { html += '</ul>'; inList = false; } continue; }
-      buf.push(line.trim());
-    }
-    flushP(); if (inList) html += '</ul>'; if (inCode) html += '</code></pre>';
-    return html;
+  const { renderMarkdown } = window.CueMarkdown;
+
+  function fillModelFields() {
+    const m = settings.models[settings.provider] || {};
+    $('#model-fast').value = m.fast || '';
+    $('#model-smart').value = m.smart || '';
+    $('#model-coding').value = m.coding || '';
+  }
+
+  // The panel's see-through level. Blur fades out with the tint, otherwise a
+  // light tint still smears the page behind it and nothing there is readable.
+  // At low tint a soft shadow keeps white text legible over a white page.
+  function applyPanelOpacity(value) {
+    const alpha = Number(value) || 0.9;
+    const blur = Math.round(24 * Math.min(1, Math.max(0, (alpha - 0.3) / 0.6)));
+    const root = document.documentElement.style;
+    root.setProperty('--panel-alpha', String(alpha));
+    root.setProperty('--panel-blur', blur + 'px');
+    root.setProperty('--panel-text-shadow', alpha < 0.75 ? '0 1px 3px rgba(0,0,0,0.85)' : 'none');
+    const out = document.getElementById('panel-opacity-value');
+    if (out) out.textContent = Math.round(alpha * 100) + '%';
   }
 
   function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; readingFollow.reset(); }
@@ -1317,6 +1316,8 @@
   }
   const aiRulesEl = document.getElementById('ai-rules');
   if (aiRulesEl) aiRulesEl.addEventListener('input', updateAiRulesCounter);
+  // Live while dragging so the right level can be judged against the real screen.
+  $('#panel-opacity').addEventListener('input', (e) => applyPanelOpacity(e.target.value));
   function updatePrepStatus() {
     if (!settings) return;
     const fields = {
@@ -1514,8 +1515,7 @@
     document.querySelectorAll('#minimax-region-seg button').forEach((b) => b.classList.toggle('on', b.dataset.region === (settings.minimaxRegion || 'global_en')));
     $('#key-azure').value = settings.apiKeys.azure || '';
     $('#azure-endpoint').value = settings.azureEndpoint || '';
-    const m = settings.models[settings.provider] || { fast: '', smart: '' };
-    $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
+    fillModelFields();
     fillAppLinkCallers();
     $('#s-status').textContent = statusText();
     // Transcription tab
@@ -1548,6 +1548,8 @@
     // Style tab
     $('#ai-rules').value = settings.aiRules || '';
     updateAiRulesCounter();
+    $('#panel-opacity').value = settings.panelOpacity;
+    applyPanelOpacity(settings.panelOpacity);
     // Q&A tab
     $('#salary-target').value = settings.salaryTarget || '';
     $('#questions-to-ask').value = settings.questionsToAsk || '';
@@ -1631,8 +1633,7 @@
     settings.provider = b.dataset.provider;
     document.querySelectorAll('#provider-seg button').forEach((x) => x.classList.toggle('on', x === b));
     updateCustomProviderFields();
-    const m = settings.models[settings.provider] || { fast: '', smart: '' };
-    $('#model-fast').value = m.fast; $('#model-smart').value = m.smart;
+    fillModelFields();
     $('#s-status').textContent = statusText();
     updateSmartTooltip();
   }));
@@ -1819,6 +1820,7 @@
     if (!settings.models[settings.provider]) settings.models[settings.provider] = {};
     settings.models[settings.provider].fast = $('#model-fast').value.trim();
     settings.models[settings.provider].smart = $('#model-smart').value.trim();
+    settings.models[settings.provider].coding = $('#model-coding').value.trim();
     // If the active provider still has no key, but the user just filled in a
     // key for a different provider (without touching the Provider selector —
     // the flow both bug reports describe), switch to that provider. Without
@@ -1845,6 +1847,7 @@
     settings.workStyle = $('#work-style').value.trim();
     // Style tab
     settings.aiRules = $('#ai-rules').value.trim();
+    settings.panelOpacity = Number($('#panel-opacity').value);
     // Q&A
     settings.salaryTarget = $('#salary-target').value.trim();
     settings.questionsToAsk = $('#questions-to-ask').value.trim();
@@ -2087,6 +2090,7 @@
   // ---- boot --------------------------------------------------------------
   (async function boot() {
     settings = await cue.settingsGet();
+    applyPanelOpacity(settings.panelOpacity);
     const platformInfo = await cue.platformInfo();
     publikState = await cue.publikState();
     // A build with no app token never shows the option, and keeps the BYO

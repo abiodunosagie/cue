@@ -10,6 +10,18 @@ const FILE = path.join(app.getPath('userData'), 'cue-data.json');
 // should live in a real prompt file, not in a settings field.
 const MAX_AI_RULES_CHARS = 2000;
 
+// How see-through the answer panel is. Below the floor white text stops being
+// readable over a light page; the ceiling is just short of fully opaque.
+const PANEL_OPACITY_MIN = 0.3;
+const PANEL_OPACITY_MAX = 0.97;
+const PANEL_OPACITY_DEFAULT = 0.9;
+
+function normalizePanelOpacity(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return PANEL_OPACITY_DEFAULT;
+  return Math.min(PANEL_OPACITY_MAX, Math.max(PANEL_OPACITY_MIN, Math.round(n * 100) / 100));
+}
+
 const DEFAULTS = {
   provider: 'openai',
   sttProvider: 'auto',
@@ -70,6 +82,7 @@ const DEFAULTS = {
   // points", "casual tone". Applied to every LLM mode EXCEPT LeetCode (kept
   // strict for coding problems).
   aiRules: '',
+  panelOpacity: PANEL_OPACITY_DEFAULT,
   // Window position
   windowX: null,
   windowY: null,
@@ -82,7 +95,8 @@ const DEFAULTS = {
     // not src/llm.js's DEFAULT_MODELS, which only backstops a missing entry) —
     // llm.js's DEAD_ANTHROPIC_MODEL_RE self-heal additionally migrates any
     // settings file already saved with the old dead ids.
-    anthropic: { fast: 'claude-haiku-4-5-20251001', smart: 'claude-sonnet-4-5-20250929' },
+    // coding: the ⌘H solve model (CURRENT_ANTHROPIC_DEFAULT_CODING in src/llm.js).
+    anthropic: { fast: 'claude-haiku-4-5-20251001', smart: 'claude-sonnet-4-5-20250929', coding: 'claude-opus-5-5' },
     // Kept in sync with CURRENT_GEMINI_DEFAULT in src/llm.js — gemini-2.0-flash
     // (the previous default here) was retired by Google on 2026-03-03 and 404s
     // on every request. gemini-2.5-flash is current and free-tier available.
@@ -123,6 +137,7 @@ function load() {
   if (data) return data;
   try { data = deepMerge(DEFAULTS, JSON.parse(fs.readFileSync(FILE, 'utf8'))); }
   catch { data = deepMerge(DEFAULTS, {}); }
+  data.panelOpacity = normalizePanelOpacity(data.panelOpacity);
 
 
   return data;
@@ -166,6 +181,7 @@ function redactForRenderer(s) {
 
 module.exports = {
   MAX_AI_RULES_CHARS,
+  normalizePanelOpacity,
   RENDERER_READ_ONLY,
   applyPublikDefault,
   stripRendererPatch,
@@ -184,6 +200,7 @@ module.exports = {
     load();
     const nextSettings = deepMerge(data, patch || {});
     nextSettings.baseUrl = normalizeBaseUrl(nextSettings.baseUrl);
+    nextSettings.panelOpacity = normalizePanelOpacity(nextSettings.panelOpacity);
     data = nextSettings;
     save();
     return data;

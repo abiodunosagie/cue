@@ -172,9 +172,10 @@
         <label class="s-label">Azure endpoint <span class="s-hint">Azure OpenAI: https://&lt;resource&gt;.openai.azure.com/openai · AI Foundry: https://&lt;host&gt;.cognitiveservices.azure.com (cue adds /openai/v1)</span></label>
         <div class="s-field"><span>Endpoint</span><input id="azure-endpoint" type="text" placeholder="https://host.cognitiveservices.azure.com" autocomplete="off" /></div>
 
-        <label class="s-label">Models <span class="s-hint">fast = Smart off · smart = Smart on</span></label>
+        <label class="s-label">Models <span class="s-hint">fast = Smart off · smart = Smart on · coding = coding solves, always</span></label>
         <div class="s-field"><span>Fast</span><input id="model-fast" type="text" autocomplete="off" /></div>
         <div class="s-field"><span>Smart</span><input id="model-smart" type="text" autocomplete="off" /></div>
+        <div class="s-field"><span>Coding</span><input id="model-coding" type="text" placeholder="empty = use the Smart model" autocomplete="off" /></div>
 
         <label class="s-label">Assistant access <span class="s-hint">programs allowed to see what cue is doing</span></label>
         <div class="s-callers" id="applink-callers"></div>
@@ -285,7 +286,15 @@
 
       <!-- Tab: Style -->
       <div class="s-body s-tab-pane hidden" data-pane="style">
-        <label class="s-label">AI rules <span class="s-hint">how the AI should write its responses</span></label>
+        <label class="s-label" for="panel-opacity">Panel background <span class="s-hint">lower it to read the screen behind cue</span></label>
+        <div class="s-range">
+          <span>See-through</span>
+          <input id="panel-opacity" type="range" min="0.3" max="0.97" step="0.01" value="0.9" />
+          <span>Solid</span>
+          <output id="panel-opacity-value" for="panel-opacity">90%</output>
+        </div>
+
+        <label class="s-label" style="margin-top:14px;">AI rules <span class="s-hint">how the AI should write its responses</span></label>
         <textarea id="ai-rules" rows="10" spellcheck="false" maxlength="2000" placeholder="e.g.
 - Never use em-dashes.
 - Reply in 2-3 short bullet points.
@@ -337,6 +346,7 @@
   <script src="icons.js"></script>
   <script src="reading-tracker.js"></script>
   <script src="spoken-question.js"></script>
+  <script src="markdown.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

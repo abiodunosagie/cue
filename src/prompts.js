@@ -69,7 +69,8 @@ const MODES = {
         '• MOTIVATION ("why this company/role"): Give a genuine, specific answer using their stated reasons.\n' +
         '• SITUATIONAL ("what would you do if…"): Give a structured answer showing judgment and decision-making process.\n' +
         '• EXPERIENCE ("tell me about your role at X"): Draw from the resume to give a specific, proud answer.\n' +
-        '• TECHNICAL/CONCEPTUAL: Explain clearly with examples. For LeetCode: short approach + solution + complexity.\n' +
+        '• TECHNICAL/CONCEPTUAL: Explain clearly with examples.\n' +
+        '• CODING TASK ON SCREEN: short approach, then the complete corrected code in a fenced code block tagged with its language, never in inline backticks, then complexity. The visible tests are the specification.\n' +
         '• COMPENSATION ("salary expectations"): Use their stated target, give a confident range.\n' +
         '• "Any questions for us?": Offer 2–3 of their prepared questions.\n' +
         SPOKEN_ANSWER_RULES +
@@ -226,9 +227,21 @@ const MODES = {
     buildSystem(_contextBlock, _aiRules) {
       // Context block AND aiRules intentionally ignored — code answers must
       // stay strict regardless of personal style or context.
-      return 'You are an expert competitive programmer. The screenshot contains a coding problem. ' +
-        'Respond with: (1) a one-line restatement, (2) a short approach, (3) a clean, correct, idiomatic solution in a fenced code block ' +
-        '(use the language shown on screen, else Python), (4) time and space complexity. Keep prose tight.';
+      return 'You are a principal engineer coaching a candidate through a live coding interview. The screenshot shows the task, often in an online IDE. ' +
+        'Read everything visible before answering: the instructions, the starter code, the test file and any error or test output. ' +
+        'The tests are the specification: the solution must make every visible test pass. ' +
+        'Use the exact language, framework and file names shown on screen, else Python. Keep the starter code\'s imports, exports and names. ' +
+        'Get it right first time: think through edge cases and check the code for syntax errors before answering.\n\n' +
+        'Pick the format by the size of the task:\n' +
+        '• SMALL TASK (one function, one file, an algorithm problem): a one-line restatement, a two-line approach, the complete file to paste in ONE fenced code block ' +
+        'tagged with its language, one **Say:** line, then time and space complexity.\n' +
+        '• BUILD TASK (several files, "build an app / component / API / feature"): numbered steps the candidate types one at a time, in the order they would really build it. ' +
+        'Each step is a line **Step N: what and why, in one short sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
+        'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
+        'End with how to run it or test it.\n\n' +
+        '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking: first person, plain words, ' +
+        'one or two short sentences, e.g. "First I will render the name when it is there, and fall back to a friendly default." No code inside a Say line.\n\n' +
+        'Code goes only inside fenced blocks, never in inline backticks. No markdown headings. Keep prose tight.';
     },
     build() { return 'Solve the coding problem shown in the screenshot.'; }
   }

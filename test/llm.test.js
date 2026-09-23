@@ -507,3 +507,32 @@ test('isRateLimitError: a genuine quota error is never also a rate limit, and no
   assert.equal(isRateLimitError(new Error('socket hang up')), false);
   assert.equal(isRateLimitError(geminiApiError({ status: 404, body: {} })), false);
 });
+
+test('coding tier uses the coding model and a bigger budget, whatever the Smart toggle says', () => {
+  const settings = { provider: 'anthropic', smart: false, apiKeys: { anthropic: 'k' },
+    models: { anthropic: { fast: 'claude-haiku-4-5', smart: 'claude-sonnet-5', coding: 'claude-opus-5-5' } } };
+  assert.equal(createLLM(settings).model, 'claude-haiku-4-5');
+  assert.equal(createLLM({ ...settings, smart: true }).model, 'claude-sonnet-5');
+  assert.equal(createLLM(settings, { tier: 'coding' }).model, 'claude-opus-5-5');
+});
+
+test('coding tier falls back to the smart model when no coding model is set', () => {
+  const settings = { provider: 'openai', smart: false, apiKeys: { openai: 'k' },
+    models: { openai: { fast: 'gpt-4o-mini', smart: 'gpt-4o', coding: '' } } };
+  assert.equal(createLLM(settings, { tier: 'coding' }).model, 'gpt-4o');
+});
+
+test('coding tier passes an 8192-token budget to the provider', async () => {
+  const seen = [];
+  const sdkPath = require.resolve('@anthropic-ai/sdk');
+  require(sdkPath);
+  const cached = require.cache[sdkPath];
+  const realExports = cached.exports;
+  cached.exports = class { constructor() { this.messages = { create: async (args) => { seen.push(args); return (async function* () {})(); } }; } };
+  const settings = { provider: 'anthropic', apiKeys: { anthropic: 'k' }, models: { anthropic: { fast: 'claude-haiku-4-5', coding: 'claude-opus-5-5' } } };
+  try {
+    await createLLM(settings, { tier: 'coding' }).stream({ system: 's', turns: [{ role: 'user', text: 'q' }], onToken() {} });
+    await createLLM(settings).stream({ system: 's', turns: [{ role: 'user', text: 'q' }], onToken() {} });
+  } finally { cached.exports = realExports; }
+  assert.deepEqual(seen.map((a) => [a.model, a.max_tokens]), [['claude-opus-5-5', 8192], ['claude-haiku-4-5', 700]]);
+});

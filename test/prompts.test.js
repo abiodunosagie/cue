@@ -20,7 +20,7 @@ test('say mode produces a spoken answer not a question', () => {
 
 test('leetcode mode ignores context block and returns coding prompt', () => {
   const system = MODES.leetcode.buildSystem('IGNORED_CONTEXT');
-  assert.match(system, /competitive programmer|coding problem/i);
+  assert.match(system, /coding interview/i);
   assert.ok(!system.includes('IGNORED_CONTEXT'), 'leetcode should not include context block');
 });
 
@@ -62,7 +62,7 @@ test('leetcode mode never applies AI rules (coding answers stay strict)', () => 
   const withRules = MODES.leetcode.buildSystem(null, RULES);
   assert.ok(!withRules.includes('USER RULES'), 'leetcode must not include USER RULES');
   assert.ok(!withRules.includes(RULES), 'leetcode must not leak user rules into the prompt');
-  assert.match(withRules, /competitive programmer/);
+  assert.match(withRules, /coding interview/);
 });
 test('modes that write spoken answers carry the intro, style and no-invented-stories rules', () => {
   const { MODES } = require('../src/prompts');
@@ -84,4 +84,15 @@ test('answerThis sees the recent conversation so follow-ups make sense', () => {
   assert.match(prompt, /Numd library/);
   assert.match(prompt, /"What was hardest about that\?"/);
   assert.equal(prompt.match(/What was hardest about that\?/g).length, 1, 'question appears once');
+});
+
+test('coding answers ask for complete fenced code, never inline code', () => {
+  const leet = MODES.leetcode.buildSystem(null);
+  assert.match(leet, /complete file to paste/i);
+  assert.match(leet, /BUILD TASK.*\*\*Step N:/s, 'build tasks come as numbered steps');
+  assert.match(leet, /\*\*Say:\*\* lines are what the candidate says out loud/, 'every solve carries a spoken cue');
+  assert.match(leet, /never in inline backticks/i);
+  assert.match(leet, /tests are the specification/i);
+  const assist = MODES.assist.buildSystem(null, '');
+  assert.match(assist, /CODING TASK ON SCREEN.*fenced code block.*never in inline backticks/);
 });
