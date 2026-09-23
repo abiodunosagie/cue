@@ -84,3 +84,17 @@ test('a one-word paragraph counts as fully read', () => {
   assert.strictEqual(found.index, 1);
   assert.ok(found.progress > 0.9);
 });
+
+test('isEcho spots the mic hearing the interviewer through speakers', () => {
+  const { isEcho } = require('../renderer/reading-tracker');
+  const question = 'Describe a time you disagreed with a manager?';
+  assert.ok(isEcho('describe a time you disagreed with a manager', question));
+  assert.ok(!isEcho('honestly I think communication matters most with managers', question));
+  assert.ok(!isEcho('mm-hm', question));
+});
+
+test('isEcho does not mistake an answer that reuses the topic words', () => {
+  const { isEcho } = require('../renderer/reading-tracker');
+  assert.ok(!isEcho('So the deadline problem was tricky', 'How did you handle the deadline problem?'));
+  assert.ok(!isEcho('My salary', 'What are your salary expectations?'));
+});

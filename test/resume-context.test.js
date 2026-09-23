@@ -123,3 +123,36 @@ test('buildInterviewContext: JD tailor note included when JD is set', () => {
   assert.ok(ctx !== null);
   assert.ok(ctx.includes('Tailor'), 'should include tailor note when JD is set');
 });
+
+// ── Intro questions and full resume context ───────────────────────────────────
+test('detectCategory: common intro phrasings count as experience', () => {
+  for (const q of [
+    'Thanks for joining us today. Can you tell me a little about yourself and your background?',
+    'Tell me a bit about yourself.',
+    'Could you introduce yourself?',
+    'Walk me through your CV.'
+  ]) assert.equal(detectCategory([{ channel: 'them', text: q }]), 'experience', q);
+});
+
+test('buildInterviewContext: a resume that fits is sent whole, not as parsed fragments', () => {
+  // Shape of a PDF import: summary under the contact line, "Professional Experience"
+  // heading, no section after the work history that the parser recognises.
+  const resume = [
+    'Jane Doe', 'jane@example.com', 'Mobile developer with four years of commercial experience shipping apps.',
+    'Core Competencies', 'Flutter, REST APIs, CI/CD.',
+    'Professional Experience', 'PayCo Remote', 'Senior Mobile Engineer 2023 to present',
+    '- Rebuilt the checkout flow and cut failed payments by a third.',
+    'Selected Projects', 'Wallet app: Flutter and Supabase.'
+  ].join('\n');
+  const ctx = buildInterviewContext({ resumeText: resume }, 'answerThis',
+    [{ channel: 'them', text: 'Tell me a little about yourself?' }]);
+  assert.match(ctx, /four years of commercial experience/);
+  assert.match(ctx, /cut failed payments by a third/);
+});
+
+test('buildInterviewContext: the job description is not cut to a few hundred characters', () => {
+  const jd = 'Mobile Full Stack Developer. ' + 'Own the Flutter app and the APIs behind it. '.repeat(40) + 'END-OF-JD';
+  const ctx = buildInterviewContext({ jobDescription: jd }, 'answerThis', [{ channel: 'them', text: 'How does caching work?' }]);
+  assert.ok(jd.length > 600, 'longer than the old 600-character cut');
+  assert.match(ctx, /END-OF-JD/);
+});

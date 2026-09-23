@@ -64,3 +64,13 @@ test('leetcode mode never applies AI rules (coding answers stay strict)', () => 
   assert.ok(!withRules.includes(RULES), 'leetcode must not leak user rules into the prompt');
   assert.match(withRules, /competitive programmer/);
 });
+test('modes that write spoken answers carry the intro, style and no-invented-stories rules', () => {
+  const { MODES } = require('../src/prompts');
+  for (const mode of ['assist', 'say', 'answerThis']) {
+    const system = MODES[mode].buildSystem('', '');
+    assert.match(system, /INTRO \("tell me about yourself"/, mode);
+    assert.match(system, /calm, senior professional/, mode);
+    assert.match(system, /without inventing specific failures/, mode);
+  }
+  assert.doesNotMatch(MODES.leetcode.buildSystem('', ''), /INTRO \(/);
+});

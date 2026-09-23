@@ -112,7 +112,21 @@
     return best ? { index: best.index, progress: best.progress } : null;
   }
 
-  const api = { tokenize, locate };
+  // Echo: the mic picking up the interviewer's voice from speakers. Most of what
+  // it heard is in the interviewer's words, and enough of it that an answer
+  // which merely reuses the topic ("so the deadline problem was tricky") is not.
+  const ECHO_OVERLAP = 0.6;
+  const ECHO_MIN_SHARED = 3;
+
+  function isEcho(heard, reference) {
+    const words = tokenize(heard);
+    if (!words.length) return false;
+    const ref = new Set(tokenize(reference));
+    const shared = words.filter((w) => ref.has(w)).length;
+    return shared >= ECHO_MIN_SHARED && shared / words.length >= ECHO_OVERLAP;
+  }
+
+  const api = { tokenize, locate, isEcho };
   if (typeof window !== 'undefined') window.ReadingTracker = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

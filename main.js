@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, desktopCap
 const path = require('path');
 const os = require('os');
 const store = require('./src/store');
+const readingTracker = require('./renderer/reading-tracker');
 const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
@@ -125,7 +126,21 @@ const ringBuffers = {
   them: new AudioRingBuffer(300, 16000)
 };
 
+// Without headphones the mic transcribes the interviewer too. Keeping that as a
+// "You:" turn would tell the model the candidate said the interviewer's words.
+const ECHO_WINDOW_MS = 15000;
+function isMicEcho(turn) {
+  if (turn.channel !== 'you') return false;
+  for (let i = transcript.length - 1; i >= 0; i--) {
+    const prev = transcript[i];
+    if (turn.ts - prev.ts > ECHO_WINDOW_MS) return false;
+    if (prev.channel === 'them') return readingTracker.isEcho(turn.text, prev.text);
+  }
+  return false;
+}
+
 function pushTranscript(turn) {
+  if (isMicEcho(turn)) return;
   transcript.push(turn);
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
 }

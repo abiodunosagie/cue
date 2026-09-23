@@ -116,6 +116,11 @@
     if (v) busyFailsafe = setTimeout(() => { busy = false; $('#send-btn').classList.toggle('busy', false); }, 40000);
   }
 
+  // Without headphones the mic also hears the interviewer; that is not the user talking.
+  function isInterviewerEcho(channel, text) {
+    return channel === 'you' && inputFromSTT && window.ReadingTracker.isEcho(text, input.value);
+  }
+
   // ---- reading follow ----------------------------------------------------
   // While the user reads an answer aloud, their mic transcript is matched to
   // the answer's paragraphs and #messages scrolls so the line being read sits
@@ -152,9 +157,10 @@
       return el;
     }
 
-    function update() {
+    // Point the tracker at the newest finished answer. False when there is none.
+    function syncAnswer() {
       const el = latestAnswer();
-      if (!el) return;
+      if (!el) return false;
       if (el !== trackedEl) {
         trackedEl = el;
         blocks = Array.from(el.querySelectorAll(':scope > p, :scope > ul > li, :scope > pre'));
@@ -162,6 +168,11 @@
         tokens = blocks.map((b) => tokenize(b.textContent));
         current = -1;
       }
+      return true;
+    }
+
+    function update() {
+      if (!syncAnswer()) return;
       if (Date.now() < pausedUntil) return;
       const found = locate(tokens, committed.concat(interim), current);
       if (!found) return;
@@ -193,7 +204,13 @@
     messages.addEventListener('touchmove', pause, { passive: true });
     messages.addEventListener('mousedown', pause);
 
-    return { reset, update, onSpeech };
+    // True when this speech matches the answer on screen: the user is reading
+    // it out, not answering something new.
+    function isReading(text) {
+      return syncAnswer() && locate(tokens, tokenize(text), -1) !== null;
+    }
+
+    return { reset, update, onSpeech, isReading };
   })();
 
   // ---- transcript helpers ------------------------------------------------
@@ -432,8 +449,9 @@
     clearTimeout(questionFinalizeTimer);
     questionFinalizeTimer = setTimeout(function finalizeQuestion() {
       if (!isLikelyCompleteQuestion(input.value)) return;
-      // While the user is correcting the text, leave sending to them (Enter).
-      if (settings && settings.autoAnswer !== false && document.activeElement !== input) {
+      // If the user edited the heard question, leave sending to them (Enter).
+      const untouched = input.value.trim() === (lastSTTValue || '').trim();
+      if (settings && settings.autoAnswer !== false && untouched) {
         // Still streaming the previous answer: wait for it instead of dropping this question.
         // New interviewer words or the user answering clear this timer; setBusy's
         // 40s failsafe bounds it if an answer never finishes.
@@ -459,7 +477,7 @@
   }
 
   // ---- Soft clear: don't immediately wipe question when user speaks ----
-  function softClearSTTFill() {
+  function softClearSTTFill(text) {
     // When the user speaks (You channel), don't immediately clear
     // Instead, dim the input and wait — they might just be acknowledging
     if (!inputFromSTT) return;
@@ -473,9 +491,10 @@
 
     // Dim the input to show it's in "pending clear" state
     composer.classList.add('stt-dimmed');
-    
-    // Clear the finalization timer (user is responding)
-    clearTimeout(questionFinalizeTimer);
+
+    // A real sentence means the user is answering on their own, so hold the
+    // auto-answer. "mm-hm" or "okay" is under three content words and leaves it armed.
+    if (window.ReadingTracker.tokenize(text).length >= 3) clearTimeout(questionFinalizeTimer);
 
     // Re-armed on every 'you' final, so this fires ~800ms after the user stops.
     // The 2s test below is measured from the FIRST final of this cycle, so a brief
@@ -485,7 +504,9 @@
     softClearTimer = setTimeout(() => {
       const speechDuration = userSpeechStart ? Date.now() - userSpeechStart : 0;
       if (speechDuration > 2000) {
-        // User has been speaking for a while — they're answering, clear the box
+        // User has been speaking for a while, so they are answering: clear the box
+        // and drop the pending auto-answer. A short "mm-hm" leaves both alone.
+        clearTimeout(questionFinalizeTimer);
         saveToQuestionHistory(input.value);
         input.value = '';
         inputFromSTT = false;
@@ -1114,7 +1135,7 @@
     el.textContent = `${label}: ${text}`;
     el.classList.add('show');
     appendTranscriptHistoryTurn(channel, text, true); // update sidebar interim
-    if (channel === 'you') readingFollow.onSpeech(text, false);
+    if (channel === 'you' && !isInterviewerEcho(channel, text)) readingFollow.onSpeech(text, false);
     
     // FIX #12: Show interviewer's interim speech in input area
     if (channel === 'them' && !input.value.trim()) {
@@ -1219,14 +1240,18 @@
   cue.on('transcript', ({ channel, text }) => {
     if (!text || text.trim().length < 2 || /^[?!.,;:\-…]+$/.test(text.trim())) return;
     appendTranscriptHistoryTurn(channel, text, false);
+    // Without headphones the mic also hears the interviewer. That echo is not
+    // the user talking, so it must not feed reading-follow or cancel the answer.
+    if (isInterviewerEcho(channel, text)) return;
     if (channel === 'you') readingFollow.onSpeech(text, true);
     // Auto-fill the input box with Them (interviewer) speech
     if (channel === 'them') {
       cancelSoftClear(); // Interviewer is speaking, cancel any pending clear
       autoFillInputFromSTT(text);
-    } else {
-      // User spoke — soft clear (don't immediately wipe, wait to see if they're really answering)
-      softClearSTTFill();
+    } else if (!readingFollow.isReading(text)) {
+      // User spoke (and is not just reading the last answer aloud): soft clear,
+      // don't immediately wipe, wait to see if they're really answering
+      softClearSTTFill(text);
     }
   });
   let statusTimer = null;

@@ -26,6 +26,29 @@ function applyRules(prompt, aiRules, mode) {
 const BASE_RULES =
   'Always respond in clear, natural English. Never switch to Hindi or any other language unless the user explicitly asks for it. ';
 
+// "Tell me about yourself" sets the tone for the whole interview, and a list of
+// projects and libraries is the most common way it goes wrong.
+const INTRO_RULE =
+  '• INTRO ("tell me about yourself", "your background"): 120 to 150 words, under a minute spoken, in three beats. ' +
+  'Who you are and how long you have done this work, in words a non-technical manager follows. ' +
+  'The work you do that matches this role, with one concrete example and its result. ' +
+  'Why this role is the right next step. Do not open with your full name. Name one project at most and at most two technologies.\n';
+
+// A made-up incident is worse than a plain answer: the interviewer's follow-up
+// questions expose it. Stories come from the candidate's own material only.
+const NO_INVENTED_STORIES =
+  'Use only incidents that appear in the candidate\'s stories or resume. If none fits the question, answer from a real project in the resume ' +
+  'and describe what they did in general terms, without inventing specific failures, numbers or outcomes.\n';
+
+// How every spoken answer should sound.
+const SPOKEN_STYLE_TEXT =
+  'Sound like a calm, senior professional talking, not a written summary: plain words, short sentences, ' +
+  'no stacks of library or framework names, no buzzwords, no hedging ("I think", "kind of", "I guess") and no gushing. ' +
+  'Mention a technology only when it carries the point.\n\n';
+
+// Shared by every mode that writes words for the candidate to say.
+const SPOKEN_ANSWER_RULES = INTRO_RULE + '\n' + SPOKEN_STYLE_TEXT;
+
 const MODES = {
 
   // ── Assist: one-shot "do the smart thing" ─────────────────────────────────
@@ -40,13 +63,15 @@ const MODES = {
         BASE_RULES +
         'Look at the screenshot and the recent conversation, decide what the user needs RIGHT NOW, and deliver it directly with no preamble.\n\n' +
         'Detect the question type and respond accordingly:\n' +
+        NO_INVENTED_STORIES +
         '• BEHAVIORAL ("tell me about a time…"): Give a complete STAR answer (Situation, Task, Action, Result) using the candidate\'s real stories when available. Be specific, include metrics, 3–4 sentences.\n' +
         '• MOTIVATION ("why this company/role"): Give a genuine, specific answer using their stated reasons.\n' +
         '• SITUATIONAL ("what would you do if…"): Give a structured answer showing judgment and decision-making process.\n' +
         '• EXPERIENCE ("tell me about your role at X"): Draw from the resume to give a specific, proud answer.\n' +
         '• TECHNICAL/CONCEPTUAL: Explain clearly with examples. For LeetCode: short approach + solution + complexity.\n' +
         '• COMPENSATION ("salary expectations"): Use their stated target, give a confident range.\n' +
-        '• "Any questions for us?": Offer 2–3 of their prepared questions.\n\n' +
+        '• "Any questions for us?": Offer 2–3 of their prepared questions.\n' +
+        SPOKEN_ANSWER_RULES +
         'Write in first person as if the candidate is speaking. No preamble, no "Here\'s what you could say". Just the answer.',
         contextBlock
       ), aiRules, 'assist');
@@ -70,13 +95,15 @@ const MODES = {
         '"Them" is the interviewer; "You" is the candidate.\n\n' +
         'Draft ONE natural, confident reply the candidate can say out loud, in first person.\n\n' +
         'Rules by question type:\n' +
+        NO_INVENTED_STORIES +
         '• BEHAVIORAL: Use a real STAR story from their background. Situation (1 sentence) → Task (1 sentence) → Action (2–3 sentences, specific steps) → Result (1 sentence with metric if possible). Never generic.\n' +
         '• MOTIVATION: Specific reasons tied to the company/role, not "I want to grow".\n' +
         '• SITUATIONAL: Show structured thinking — "I\'d first X, then Y, because Z".\n' +
         '• EXPERIENCE: Reference the specific role/project from their resume.\n' +
         '• COMPENSATION: State the target range confidently without over-explaining.\n' +
-        '• TECHNICAL: Give a clear, confident explanation. Use analogies for non-technical interviewers.\n\n' +
-        'No quotes, no preamble. Write the actual words to say. 2–5 sentences.',
+        '• TECHNICAL: Give a clear, confident explanation. Use analogies for non-technical interviewers.\n' +
+        SPOKEN_ANSWER_RULES +
+        'No quotes, no preamble. Write the actual words to say. 2–5 sentences, except the intro.',
         contextBlock
       ), aiRules, 'say');
     },
@@ -162,13 +189,15 @@ const MODES = {
         BASE_RULES +
         'The interviewer\'s exact question is provided below. Focus ONLY on answering that question — ignore any other conversation context.\n\n' +
         'Rules:\n' +
+        NO_INVENTED_STORIES +
         '• BEHAVIORAL ("tell me about a time…"): STAR format using real stories from the candidate\'s background. Situation → Task → Action → Result. Include metrics if available.\n' +
         '• MOTIVATION ("why this company/role"): Specific, genuine reasons from their stated preferences.\n' +
         '• TECHNICAL: Clear explanation with a concrete example from their experience.\n' +
         '• EXPERIENCE: Reference specific roles/projects from their resume.\n' +
         '• COMPENSATION: State the salary target confidently in one sentence.\n' +
-        '• SITUATIONAL: Structured thinking — "First I would X, then Y, because Z."\n\n' +
-        'Write in first person, as the candidate speaking. No preamble. 2–5 sentences.',
+        '• SITUATIONAL: Structured thinking: "First I would X, then Y, because Z."\n' +
+        SPOKEN_ANSWER_RULES +
+        'Write in first person, as the candidate speaking. No preamble. 2–5 sentences, except the intro.',
         contextBlock
       ), aiRules, 'answerThis');
     },

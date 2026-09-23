@@ -49,7 +49,10 @@ const CATEGORY_PATTERNS = {
     /biggest (project|achievement) (at|there|in your)/i,
     /tech stack/i, /day.to.day/i, /what did you build/i,
     /tell me more about/i, /elaborate on/i,
-    /tell me about yourself/i,
+    /tell me (a (little|bit) |something |more )?about yourself/i,
+    /introduce yourself/i,
+    /(your|a little about your) background/i,
+    /walk me through your (cv|resume)/i,
     /tell me about your (current|previous|last|recent) (role|job|position|company)/i,
     /tell me about your time at/i,
     /what have you been working on/i,
@@ -130,11 +133,20 @@ function clip(text, limit) {
 
 // ── Context builders by category ──────────────────────────────────────────────
 
-function buildResumeBlock(resumeText, limit = 2400) {
+// Enough for a full two-page resume and the core of a job description. Every
+// answer depends on these, so they are not trimmed per question category.
+const RESUME_LIMIT = 6000;
+const JD_LIMIT = 2500;
+
+function buildResumeBlock(resumeText, limit = RESUME_LIMIT) {
   if (!resumeText || !resumeText.trim()) return '';
   const parsed = parseResume(resumeText);
   if (!parsed) return '';
-  if (parsed.parsed) {
+  // A resume that fits goes in whole. The section parser misses headings it does
+  // not know (a summary under the contact line, "Professional Experience" with
+  // no following section), and answers built from fragments sound generic.
+  if (parsed.raw.length <= limit) return parsed.raw;
+  if (parsed.parsed && parsed.sections.experience) {
     const parts = [];
     let rem = limit;
     const order = ['name', 'summary', 'experience', 'skills', 'projects', 'education'];
@@ -153,7 +165,7 @@ function buildResumeBlock(resumeText, limit = 2400) {
   return clip(parsed.raw, limit);
 }
 
-function buildJDBlock(jd, limit = 600) {
+function buildJDBlock(jd, limit = JD_LIMIT) {
   if (!jd || !jd.trim()) return '';
   return 'Target Role / Job Description:\n' + clip(jd.trim().replace(/\s+/g, ' '), limit);
 }
@@ -186,17 +198,12 @@ function buildInterviewContext(settings, mode, transcript) {
 
   const blocks = [];
 
-  // Always include resume if available (but size varies by category)
+  // Always include resume and job description when available
   if (hasResume) {
-    const resumeLimit = (category === 'behavioral' || category === 'experience') ? 2400 : 1400;
-    const rb = buildResumeBlock(resume, resumeLimit);
+    const rb = buildResumeBlock(resume);
     if (rb) blocks.push('=== Your Background ===\n' + rb);
   }
-
-  // Job description — always include when available
-  if (hasJD) {
-    blocks.push(buildJDBlock(jd, category === 'technical' ? 300 : 600));
-  }
+  if (hasJD) blocks.push(buildJDBlock(jd));
 
   // Category-specific injections
   switch (category) {
@@ -212,8 +219,8 @@ function buildInterviewContext(settings, mode, transcript) {
         );
       } else {
         blocks.push(
-          '(No STAR stories provided — construct a plausible story from the candidate\'s experience above. ' +
-          'Be specific and grounded, avoid generic statements.)'
+          '(No STAR stories provided. Answer from a real role or project in the resume above and describe what ' +
+          'the candidate did in general terms. Do not invent specific incidents, numbers or outcomes.)'
         );
       }
       if (workStyle) blocks.push('Work Style / Values:\n' + clip(workStyle, 400));
