@@ -164,7 +164,7 @@ test('a small coding task is taught step by step in plain words, with a walk-thr
   const system = MODES.leetcode.buildSystem('', '');
   // Only the SMALL TASK part: BUILD TASK also uses **Step N:.
   const small = system.slice(system.indexOf('SMALL TASK'), system.indexOf('DESIGN TASK'));
-  const order = ['**What it asks:**', '**The idea:**', '**Step N:', '**Check it on the example:**', '**Full code to paste:**', '**Time and space:**'];
+  const order = ['**What it asks:**', '**The idea:**', '**Step N:', '**Check it on the example:**', '**Full code to paste:**', '**Time and space:**', '**Run it:**'];
   const at = order.map((part) => small.indexOf(part));
   assert.ok(at.every((i) => i >= 0), 'every section is in the small-task format');
   assert.deepEqual([...at].sort((a, b) => a - b), at, 'the sections come in this order');
@@ -175,4 +175,13 @@ test('a small coding task is taught step by step in plain words, with a walk-thr
 test('a build task starts with every file to create, before the steps', () => {
   const system = MODES.leetcode.buildSystem('', '');
   assert.match(system, /BUILD TASK[^•]*\*\*Files to create:\*\* a bulleted list of every file path in build order/);
+});
+
+test('every coding answer says how to run it', () => {
+  const system = MODES.leetcode.buildSystem('', '');
+  const small = system.slice(system.indexOf('SMALL TASK'), system.indexOf('DESIGN TASK'));
+  assert.match(small, /\*\*Run it:\*\* a short fenced block with a main function .* expected output as a comment/s);
+  assert.match(small, /dart run main\.dart/);
+  const build = system.slice(system.indexOf('BUILD TASK'));
+  assert.match(build, /End with \*\*Run it:\*\* the exact commands/);
 });

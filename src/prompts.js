@@ -323,6 +323,9 @@ const MODES = {
         '  **Check it on the example:** walk the first example through the code in 2 to 4 short plain sentences (no code block), showing the values as they change, so the candidate can say it aloud.\n' +
         '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together.\n' +
         '  **Time and space:** the complexity in Big O, each with a plain reason (for example "O(n log n) time because sorting is the slowest part").\n' +
+        '  **Run it:** a short fenced block with a main function (or the language\'s usual entry point) that calls the solution on the examples on screen ' +
+        'and prints each result, with the expected output as a comment on each line; then one plain sentence on where to run it: the interview\'s own Run button ' +
+        'when there is one, else the exact command (for example dart run main.dart, python3 main.py, node main.js) or an online playground such as DartPad for Dart.\n' +
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
@@ -330,7 +333,7 @@ const MODES = {
         'each with what it is for in a few words, so nothing is missed; then numbered steps the candidate types one at a time, in the order they would really build it. ' +
         'Each step is a line **Step N: what to build and why, in one plain sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
         'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
-        'End with how to run it or test it.\n\n' +
+        'End with **Run it:** the exact commands to run it and one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking: first person, plain words, ' +
         'one or two short sentences, e.g. "First I will render the name when it is there, and fall back to a friendly default." No code inside a Say line.\n\n' +
         'If the task depends on files you cannot see, say which file to open next and why, then solve what is visible. ' +
