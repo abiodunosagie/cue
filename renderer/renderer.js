@@ -196,7 +196,8 @@
   function appendThinking(t) {
     const wait = aiEl && aiEl.querySelector('.ai-wait');
     if (!wait) return;
-    wait.dataset.summary = (wait.dataset.summary || '') + t;
+    // Only the tail matters (the newest line), so the kept text stays short.
+    wait.dataset.summary = ((wait.dataset.summary || '') + t).slice(-2000);
     wait.querySelector('.ai-wait-thought').textContent = latestThought(wait.dataset.summary);
   }
 
@@ -1551,7 +1552,7 @@
     setLiveDotState(speaking ? 'speaking' : 'idle');
     speakerLabel.update(channel, speaking);
   });
-  cue.on('llm:start', ({ userBubble, small, category, coding, slowStart }) => {
+  cue.on('llm:start', ({ userBubble, small, category, coding, showWait }) => {
     readingFollow.reset();
     paceHint.reset();
     responseCount++;
@@ -1582,9 +1583,9 @@
     // A coding answer is worked through step by step, not read aloud: no
     // highlight and no automatic scrolling; the user scrolls it.
     if (coding) { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
-    // The coding model can be slow to start: if no word has come after a few
-    // seconds, say so, so it does not look frozen. A fast start never shows it.
-    if (slowStart) showWaitNote(aiEl);
+    // The coding model thinks before its first word: show the live wait note at
+    // once (elapsed seconds and the newest thinking line); the first word removes it.
+    if (showWait) showWaitNote(aiEl);
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
     // push the toolbar out of the window. requestAnimationFrame lets layout settle.

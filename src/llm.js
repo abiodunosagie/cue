@@ -298,22 +298,29 @@ const CODING_SPEEDS = {
 // Models that take output_config.effort, and the ones with fast mode.
 const EFFORT_MODEL = /^claude-(opus-4-[5-9]|opus-5|sonnet-4-6|sonnet-5|fable-5|mythos-5)/;
 const FAST_MODE_MODEL = /^claude-(opus-4-8|opus-5)/;
+// Models that take thinking {type: 'adaptive'} (4.6 and later), which the summary needs.
+const ADAPTIVE_THINKING_MODEL = /^claude-(opus-4-[6-9]|opus-5|sonnet-4-6|sonnet-5|fable-5|mythos-5)/;
 
-// Fast mode is a research preview with its own rate limit; an account without
-// it refuses every request. Once refused, skip it for the rest of the session
-// instead of paying a wasted round trip on every solve.
-let fastModeRefused = false;
+// Fast mode is a research preview with its own rate limit. Once a key is
+// refused, skip fast mode for that key instead of paying a wasted round trip on
+// every solve: a 403 (no access) until restart, a 429 (rate limit, which can
+// clear) for ten minutes. Keyed by hash, so no extra copy of a key sits in
+// memory, and a new key in Settings gets its own chance.
+const FAST_MODE_RATE_LIMIT_PAUSE_MS = 10 * 60 * 1000;
+const fastModePausedUntil = new Map();
+const keyId = (apiKey) => require('crypto').createHash('sha256').update(String(apiKey || '')).digest('hex');
 
 // The extra request fields for a coding solve on this model, or null.
 // summarize: stream a short summary of the thinking (the same models take it),
 // so the wait shows progress and the watchdog sees a live stream instead of
 // minutes of silence before the first word.
-function codingSpeedOptions(model, speed) {
+function codingSpeedOptions(model, speed, apiKey) {
   const choice = CODING_SPEEDS[speed] || CODING_SPEEDS.fastest;
   const m = String(model || '');
   const out = {};
-  if (EFFORT_MODEL.test(m)) { out.effort = choice.effort; out.summarize = true; }
-  if (choice.fast && FAST_MODE_MODEL.test(m) && !fastModeRefused) out.fast = true;
+  if (EFFORT_MODEL.test(m)) out.effort = choice.effort;
+  if (ADAPTIVE_THINKING_MODEL.test(m)) out.summarize = true;
+  if (choice.fast && FAST_MODE_MODEL.test(m) && !(Date.now() < (fastModePausedUntil.get(keyId(apiKey)) || 0))) out.fast = true;
   return Object.keys(out).length ? out : null;
 }
 
@@ -336,7 +343,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   let emitted = false;
   // A stage with a fallback after it gets no SDK retries: a 429 on fast mode
   // would otherwise wait out retry-after (up to a minute) inside the SDK and
-  // eat the first-word limit before the next stage could run.
+  // eat most of main.js's first-word silence window before the next stage could run.
   const run = async (extra, hasFallback) => {
     const request = { ...body };
     const headers = {};
@@ -371,11 +378,12 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     } catch (error) {
       if (emitted || i === stages.length - 1) throw error;
       const stage = stages[i];
-      if (stage && stage.fast && error && (error.status === 429 || error.status === 403)) fastModeRefused = true;
+      const fastRefused = !!(stage && stage.fast && error && (error.status === 429 || error.status === 403));
+      if (fastRefused) fastModePausedUntil.set(keyId(apiKey), error.status === 403 ? Infinity : Date.now() + FAST_MODE_RATE_LIMIT_PAUSE_MS);
       const reason = (error && (error.status || error.code)) || 'no status';
       const message = hideKey(error && error.message ? error.message : String(error), apiKey).slice(0, 200);
       const next = stages[i + 1];
-      console.log(`[timing] coding stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastModeRefused ? ', fast mode off for this session' : ''}`);
+      console.log(`[timing] coding stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastRefused ? (error.status === 403 ? ', fast mode off for this key until restart' : ', fast mode paused for 10 minutes') : ''}`);
     }
   }
 }
@@ -541,7 +549,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 
   const ready = !configurationError && !!model;
   const maxTokens = MAX_TOKENS[tier];
-  const speedOptions = tier === 'coding' && provider === 'anthropic' ? codingSpeedOptions(model, settings.codingSpeed) : null;
+  const speedOptions = tier === 'coding' && provider === 'anthropic' ? codingSpeedOptions(model, settings.codingSpeed, apiKey) : null;
 
   return {
     provider, model, apiKey, baseURL,
@@ -573,11 +581,14 @@ function createLLM(settings, { tier: requestedTier } = {}) {
   };
 }
 
+// Test-only hooks, kept apart from the real API.
+const _test = { resetFastMode: () => fastModePausedUntil.clear() };
+
 module.exports = {
+  _test,
   createLLM,
   hideKey,
   codingSpeedOptions,
-  resetFastModeForTests: () => { fastModeRefused = false; },
   streamAnthropic,
   formatProviderErrorMessage,
   isQuotaError,

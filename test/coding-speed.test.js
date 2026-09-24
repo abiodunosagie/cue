@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { codingSpeedOptions, resetFastModeForTests } = require('../src/llm');
+const { codingSpeedOptions, _test } = require('../src/llm');
 
-test.beforeEach(() => resetFastModeForTests());
+test.beforeEach(() => _test.resetFastMode());
 
 test('Fastest uses low effort and fast mode on Opus 5.5', () => {
   assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'fastest'), { effort: 'low', summarize: true, fast: true });
@@ -98,13 +98,15 @@ test('stages with a fallback skip SDK retries; the last stage keeps them', async
 test('a fast mode refusal turns fast mode off for the session', async () => {
   fakeSdk([429]);
   await solve({ effort: 'low', summarize: true, fast: true });
-  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'fastest'), { effort: 'low', summarize: true });
+  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'fastest', 'k'), { effort: 'low', summarize: true });
+  // Another key (a new one in Settings) still gets fast mode.
+  assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest', 'other').fast, true);
 });
 
 test('an overload does not turn fast mode off', async () => {
   fakeSdk([529]);
   await solve({ effort: 'low', summarize: true, fast: true });
-  assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest').fast, true);
+  assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest', 'k').fast, true);
 });
 
 test('summarized thinking is kept when fast mode drops, and the plain request has none', async () => {
@@ -123,4 +125,26 @@ test('every stream event counts as activity and thinking text is passed on', asy
   assert.equal(text, 'ok');
   assert.equal(activity, 3);
   assert.deepEqual(thoughts, ['Planning.']);
+});
+
+test('a 429 pauses fast mode for a while; a 403 turns it off', async () => {
+  const realNow = Date.now;
+  try {
+    fakeSdk([429]);
+    await solve({ effort: 'low', summarize: true, fast: true });
+    assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest', 'k').fast, undefined);
+    Date.now = () => realNow() + 11 * 60 * 1000;
+    assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest', 'k').fast, true);
+    Date.now = realNow;
+    fakeSdk([403]);
+    await solve({ effort: 'low', summarize: true, fast: true });
+    Date.now = () => realNow() + 24 * 60 * 60 * 1000;
+    assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest', 'k').fast, undefined);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('the thinking summary is only asked of models that take adaptive thinking', () => {
+  assert.deepEqual(codingSpeedOptions('claude-opus-4-5', 'fastest'), { effort: 'low' });
 });

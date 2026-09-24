@@ -37,14 +37,23 @@
   // editor on screen (checkProgress), never guessed from the words alone.
   const FIX_PATTERNS = [
     /\b(error|errors|exception|crash(es|ed|ing)?|stack ?trace|red (line|underline|squiggle)s?)\b/i,
-    /\b(can(no|')?t|could ?n[o']t|does ?n[o']?t|did ?n[o']?t|is ?n[o']?t|not) (find|found|resolve|import|compile|build|run|work)(s|ing)?\b/i,
-    /\b(not (found|defined|working|compiling)|undefined|undeclared)\b/i,
+    /\b(can(no|')?t|could ?n[o']t|does ?n[o']?t|did ?n[o']?t|is ?n[o']?t|not) (find|finding|found|resolve|resolving|import|importing|compile|compiling|build|building|run|running|work|working)s?\b/i,
+    /\b(not (found|defined|working|compiling)|(is|was|shows|says|returns|gets|got) (undefined|undeclared|null))\b/i,
     /\b(fix|debug)\b.{0,30}\b(it|this|that|my|the (code|error|issue|problem|bug))\b/i,
-    /\bwhat('s| is) wrong\b/i
+    /\bwhat('s| is) wrong (here|with (it|this|my|the code))\b/i
+  ];
+  // A fix request is about the candidate's own code, not error handling as a
+  // topic ("what is a stack trace?" is a conceptual question): it speaks in the
+  // first person, asks for help or a fix, or says what "it" or "this" does.
+  const OWN_CODE_ANCHORS = [
+    /\b(i|i'm|im|i've|my|mine)\b/i,
+    /\b(help me|fix (it|this|that)|debug (it|this|that))\b/i,
+    /\bhere\b/i,
+    /\b(it|this|that)('s| is| keeps| won'?t| does ?n[o']?t| did ?n[o']?t| can(no|')?t| is ?n[o']?t| says| shows| gives| throws)\b/i
   ];
   function isFixRequest(text) {
     const t = String(text || '');
-    return t.trim().length >= 6 && FIX_PATTERNS.some((p) => p.test(t));
+    return t.trim().length >= 6 && FIX_PATTERNS.some((p) => p.test(t)) && OWN_CODE_ANCHORS.some((p) => p.test(t));
   }
 
   const api = { modeForSpokenQuestion, isExplainRequest, isFixRequest };

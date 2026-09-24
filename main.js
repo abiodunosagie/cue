@@ -126,7 +126,7 @@ const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy 
 // between events; before the first word, a longer one, because the plain
 // fallback request thinks with no events at all.
 const CODING_STREAM_INACTIVITY_MS = 45000;
-const CODING_FIRST_WORD_SILENCE_MS = 90000;
+const CODING_FIRST_WORD_SILENCE_MS = 120000;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.12); // ~0.12s
 const RMS_GATE = 180;
 let flushTimer = null;
@@ -763,7 +763,7 @@ async function runFeature(mode, userText, options = {}) {
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
-    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, slowStart: def.tier === 'coding' });
+    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, showWait: def.tier === 'coding' });
 
     if (!llm.ready) {
       const message = llm.configurationError || ('Complete the ' + settings.provider + ' provider settings. Model: ' + (llm.model || 'unset') + '.');

@@ -80,10 +80,13 @@ test('a long coding plan is kept whole, so a progress check sees its later steps
 
 test('typed help with an error is recognised; ordinary questions are not', () => {
   const { isFixRequest } = require('../renderer/spoken-question');
-  for (const q of ['it cannot find ContactsRepository', 'I added the import and it did not work', 'help me figure out this error', 'fix this', 'what is wrong here']) {
+  for (const q of ['it cannot find ContactsRepository', 'I added the import and it did not work', 'help me figure out this error', 'fix this', 'what is wrong here', 'my name field shows undefined', 'the module is not resolving here', 'my tests are not running']) {
     assert.equal(isFixRequest(q), true, q);
   }
-  for (const q of ['Tell me about yourself', 'how do I run it', 'why use a map', 'What is your biggest strength?']) {
+  for (const q of ['Tell me about yourself', 'how do I run it', 'why use a map', 'What is your biggest strength?',
+    'what does undefined mean in JavaScript', "what's wrong with using a HashMap for this?",
+    'Can you explain error handling patterns in Node.js?', 'What errors does this HTTP status code represent?',
+    'Walk me through a time you debugged a production crash.', 'What is a stack trace?', 'What is undefined behavior in C++?']) {
     assert.equal(isFixRequest(q), false, q);
   }
 });
