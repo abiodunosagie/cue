@@ -8,6 +8,7 @@ const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
+const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -602,6 +603,18 @@ async function runFeature(mode, userText) {
       return;
     }
 
+    // Instant first line: with Smart on, the Fast model starts a one-sentence
+    // opener now (in parallel with any screenshot), and the Smart answer then
+    // continues from it. Skipped when there is no separate, ready Fast model.
+    let openerPromise = null;
+    const question = settings.smart && OPENER_MODES.has(mode) ? openerQuestion(mode, userText, transcript) : '';
+    if (question) {
+      const fast = createLLM({ ...settings, smart: false });
+      if (fast.ready && fast.model !== llm.model) {
+        openerPromise = runOpener({ llm: fast, question, onToken: (t) => send('llm:token', { text: t }) });
+      }
+    }
+
     let imageDataUrl = null;
     if (def.needsScreen) {
       try {
@@ -630,11 +643,14 @@ async function runFeature(mode, userText) {
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
+    const opener = openerPromise ? await openerPromise : '';
     const built = (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
       transcript,
       userText: userText || '',
       priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
-    });
+    }) + continuationNote(opener);
+    // The continuation starts after a space so the two read as one paragraph.
+    if (opener) send('llm:token', { text: ' ' });
 
     // Watchdog: a provider that stalls mid-stream would otherwise hang the await forever,
     // leaving state.busy = true and wedging every later question until an app restart.
@@ -665,7 +681,7 @@ async function runFeature(mode, userText) {
       clearTimeout(watchdog);
     }
     send('llm:done', {});
-    interviewMemory.addAnswer({ mode, text: answer, generation: memoryGeneration });
+    interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration });
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
