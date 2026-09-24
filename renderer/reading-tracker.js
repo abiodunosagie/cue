@@ -126,7 +126,15 @@
     return shared >= ECHO_MIN_SHARED && shared / words.length >= ECHO_OVERLAP;
   }
 
-  const api = { tokenize, locate, isEcho };
+  // Distinct words two sets have in common. Question matching uses it with its
+  // own ratio (prepared answers: over both sides; screen watch: over the smaller).
+  function countShared(a, b) {
+    let shared = 0;
+    for (const w of a) if (b.has(w)) shared++;
+    return shared;
+  }
+
+  const api = { tokenize, locate, isEcho, countShared };
   if (typeof window !== 'undefined') window.ReadingTracker = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

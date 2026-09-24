@@ -1793,14 +1793,16 @@
   }
   // Play the question, then tell main it has been asked. The Mac's own voice
   // stands in when there is no ElevenLabs audio.
-  cue.on('practice:play', ({ text, audio }) => {
+  let practiceUtterance = null; // held so the speech engine cannot drop it before onend
+  cue.on('practice:play', ({ token, text, audio }) => {
     stopPracticeVoice();
     let reported = false;
-    const done = () => { if (!reported) { reported = true; cue.practicePlayed(); } };
+    const done = () => { if (!reported) { reported = true; practiceUtterance = null; cue.practicePlayed(token); } };
     const speak = () => {
       if (!window.speechSynthesis) { done(); return; }
       const u = new SpeechSynthesisUtterance(text);
       u.onend = done; u.onerror = done;
+      practiceUtterance = u;
       window.speechSynthesis.speak(u);
     };
     if (!audio) { speak(); return; }

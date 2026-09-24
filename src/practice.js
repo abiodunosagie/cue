@@ -136,7 +136,9 @@ async function synthesize({ apiKey, voice, text, fetchImpl = fetch }) {
     return Buffer.from(await res.arrayBuffer());
   } catch (e) {
     if (e && e.name === 'AbortError') throw new Error('ElevenLabs took too long to answer.');
-    throw e;
+    // Our own messages above pass through; a raw network error does not.
+    if (e && /^ElevenLabs /.test(e.message)) throw e;
+    throw new Error('Could not reach ElevenLabs.');
   } finally {
     clearTimeout(timer);
   }

@@ -1,18 +1,21 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, desktopCapturer, shell, dialog, systemPreferences, clipboard } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
 const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
-const { pickQuestions, scoreAnswer, formatReport, synthesize } = require('./src/practice');
+const { synthesize } = require('./src/practice');
+const { createPracticeSession } = require('./src/practice-session');
 const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
-const { createPreparedStore, profileHash, canPrepare, preparePrompt, parseItems, confirmSameQuestion, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
+const { createPreparedStore, profileHash, canPrepare, parseItems, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
+const { quickAsk } = require('./src/quick-ask');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -166,109 +169,36 @@ function pushTranscript(turn) {
 }
 
 // -------- practice interview --------
-// A voice asks the likely questions; cue answers as in a real interview; each
-// spoken answer is scored locally (src/practice.js). Practice runs on an empty
-// interview memory and clears it when it ends, so a real interview never sees
-// practice questions.
-const practice = { active: false, questions: [], index: -1, askedAt: 0, results: [], hearingQuestion: false, hideThemUntil: 0 };
-// The practice voice is also heard as meeting audio. The question is published
-// as text instead, so the transcribed copy is dropped while it plays and briefly after.
-const PRACTICE_ECHO_MS = 3000;
-
-function practiceHidesTurn(turn) {
-  return practice.active && turn.channel === 'them' && (practice.hearingQuestion || Date.now() < practice.hideThemUntil);
-}
-
-function practiceState() {
-  return { active: practice.active, index: practice.index, total: practice.questions.length, question: practice.questions[practice.index] || '' };
-}
-
-function startPractice() {
-  if (practice.active) return practiceState();
-  if (!state.capturing) return { error: 'Start listening first, so cue can hear your answers.' };
-  if (interviewMemory.summary().turnCount > 0) {
-    return { error: 'Clear interview memory first (History). Practice starts empty and clears itself when it ends, so a real interview never sees practice questions.' };
+// src/practice-session.js runs the flow; this wires it to the app. Practice runs
+// on an empty interview memory and clears it when it ends, so a real interview
+// never sees practice questions. A marker file notes a practice in progress, so
+// a crash mid-practice is cleaned up at the next launch.
+const PRACTICE_MARKER = path.join(app.getPath('userData'), 'cue-practice-active');
+const practice = createPracticeSession({
+  send: (channel, data) => send(channel, data),
+  publishQuestion: (text) => publishTranscript('them', text, { fromPractice: true }),
+  getSettings: () => store.getSettings(),
+  synthesize,
+  transcript: () => transcript,
+  isCapturing: () => state.capturing,
+  isBusy: () => state.busy,
+  memoryIsEmpty: () => interviewMemory.summary().turnCount === 0,
+  clearInterview: () => clearInterview(),
+  preparedQuestions: () => (preparedStore.isCurrent(profileHash(store.getSettings())) ? preparedStore.items() : []),
+  markActive: (on) => {
+    try { if (on) fs.writeFileSync(PRACTICE_MARKER, '', { mode: 0o600 }); else fs.unlinkSync(PRACTICE_MARKER); } catch { /* best effort */ }
   }
-  const settings = store.getSettings();
-  const bank = preparedStore.isCurrent(profileHash(settings)) ? preparedStore.items() : [];
-  Object.assign(practice, { active: true, questions: pickQuestions(bank), index: -1, results: [], hearingQuestion: false, hideThemUntil: 0 });
-  askPracticeQuestion();
-  return practiceState();
+});
+if (fs.existsSync(PRACTICE_MARKER)) {
+  // The last practice never finished: its turns are in memory, not a real interview's.
+  clearInterview();
+  try { fs.unlinkSync(PRACTICE_MARKER); } catch { /* best effort */ }
 }
 
-async function askPracticeQuestion() {
-  practice.index++;
-  if (practice.index >= practice.questions.length) { finishPractice(); return; }
-  const question = practice.questions[practice.index];
-  practice.hearingQuestion = true;
-  practice.askedAt = Date.now();
-  send('practice:state', practiceState());
-  const settings = store.getSettings();
-  const apiKey = settings.apiKeys && settings.apiKeys.elevenlabs;
-  if (apiKey) {
-    try {
-      const audio = await synthesize({ apiKey, voice: settings.practiceVoice, text: question });
-      if (!practice.active) return;
-      send('practice:play', { text: question, audio: audio.toString('base64') });
-      return;
-    } catch (e) {
-      send('status', { message: (e && e.message ? e.message : 'The ElevenLabs voice failed.') + ' Using the system voice instead.' });
-    }
-  }
-  if (practice.active) send('practice:play', { text: question });
-}
-
-// The renderer finished playing the question: now it counts as asked.
-function practiceQuestionPlayed() {
-  if (!practice.active || !practice.hearingQuestion) return;
-  practice.hearingQuestion = false;
-  practice.hideThemUntil = Date.now() + PRACTICE_ECHO_MS;
-  practice.askedAt = Date.now();
-  publishTranscript('them', practice.questions[practice.index]);
-}
-
-// Score what the candidate said since the question was asked.
-function scorePracticeAnswer() {
-  const question = practice.questions[practice.index];
-  if (!question) return;
-  const settings = store.getSettings();
-  const answer = transcript.filter((t) => t.channel === 'you' && t.ts >= practice.askedAt).map((t) => t.text).join(' ');
-  const reference = [settings.resumeText, settings.jobDescription, settings.starStories, settings.workStyle].join('\n');
-  practice.results.push(scoreAnswer({ question, answer, reference, length: settings.answerLength }));
-}
-
-function nextPracticeQuestion() {
-  if (!practice.active) return practiceState();
-  scorePracticeAnswer();
-  askPracticeQuestion();
-  return practiceState();
-}
-
-function endPractice() {
-  if (!practice.active) return practiceState();
-  if (!practice.hearingQuestion) scorePracticeAnswer();
-  finishPractice();
-  return practiceState();
-}
-
-const PRACTICE_REPORT_WAIT_MS = 60000;
-function finishPractice() {
-  practice.active = false;
-  practice.hearingQuestion = false;
-  send('practice:state', practiceState());
-  const report = formatReport(practice.results);
-  const started = Date.now();
-  // Wait for an answer still streaming, so the report does not interleave with it.
-  const show = () => {
-    if (state.busy && Date.now() - started < PRACTICE_REPORT_WAIT_MS) { setTimeout(show, 500); return; }
-    send('llm:start', { userBubble: 'Practice report', small: false });
-    send('llm:token', { text: report });
-    send('llm:done', {});
-    transcript.splice(0, transcript.length);
-    const cleared = interviewMemory.clear();
-    send('practice:cleared', cleared);
-  };
-  show();
+// Forget the current interview: the live transcript and the file on disk.
+function clearInterview() {
+  transcript.splice(0, transcript.length);
+  return interviewMemory.clear();
 }
 
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
@@ -284,9 +214,11 @@ function getWhisperRuntime() {
   });
 }
 
-function publishTranscript(channel, text) {
+// fromPractice: the practice question itself, which the practice echo gate must let through.
+function publishTranscript(channel, text, { fromPractice = false } = {}) {
   if (!text || !text.trim()) return;
   const turn = { channel, text: text.trim(), ts: Date.now() };
+  if (!fromPractice && practice.hidesTurn(turn)) return;
   pushTranscript(turn);
   send('transcript', turn);
   send('stt:final', { channel, text: turn.text });
@@ -489,7 +421,7 @@ async function flushChannel(channel) {
     }
     if (res.text && res.text.trim() && res.text.trim().length > 1 && !/^[?!.,;:\-…]+$/.test(res.text.trim())) {
       const turn = { channel, text: res.text.trim(), ts: Date.now() };
-      if (practiceHidesTurn(turn)) return;
+      if (practice.hidesTurn(turn)) return;
       pushTranscript(turn);
       send('transcript', turn);
     }
@@ -539,7 +471,7 @@ function initStreamingSTT() {
     const sttInstance = createStreamingSTT(settings, channel, {
       onTranscript: (ch, text) => {
         const turn = { channel: ch, text, ts: Date.now() };
-        if (practiceHidesTurn(turn)) return;
+        if (practice.hidesTurn(turn)) return;
         pushTranscript(turn);
         send('transcript', turn);
         send('stt:final', { channel: ch, text });
@@ -618,6 +550,8 @@ function routeAudio(channel, pcmBuffer) {
 // and use cue's own Screen-Recording grant — no separate helper binary to authorize.
 async function setCapturing(active) {
   if (active === state.capturing) return state.capturing;
+  // Practice cannot hear answers without listening: end it with its report.
+  if (!active && practice.isActive()) practice.end();
 
   if (active) {
     sttDisabled = false; // reset on re-enable
@@ -702,11 +636,13 @@ async function prepareAnswers({ force }) {
   preparing.running = true; preparing.error = '';
   send('prepared:state', preparedState());
   try {
+    // The candidate's context goes in the system prompt exactly as for a live
+    // answer, so prepared answers follow the same voice, length and story rules.
     const context = buildInterviewContext(settings, 'answerThis', []);
     const system = MODES.answerThis.buildSystem(context, settings.aiRules || '');
     let timer = null;
     const reply = await Promise.race([
-      llm.stream({ system, turns: [{ role: 'user', text: preparePrompt() }], maxTokens: PREPARE_MAX_TOKENS, onToken: () => {} }),
+      llm.stream({ system, turns: [{ role: 'user', text: PREPARE_INSTRUCTIONS }], maxTokens: PREPARE_MAX_TOKENS, onToken: () => {} }),
       new Promise((_res, reject) => { timer = setTimeout(() => reject(new Error('the model took too long')), PREPARE_TIMEOUT_MS); })
     ]).finally(() => clearTimeout(timer));
     const items = parseItems(reply);
@@ -745,7 +681,9 @@ async function findPreparedAnswer(mode, userText, settings) {
   return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.item.question })) ? match.item : null;
 }
 
-async function runFeature(mode, userText) {
+// options.imageDataUrl: a screenshot already taken (the screen watcher's, with
+// cue's own panel blacked out), used instead of a fresh capture.
+async function runFeature(mode, userText, options = {}) {
   if (state.busy) return;
   const def = MODES[mode];
   if (!def) return;
@@ -812,8 +750,8 @@ async function runFeature(mode, userText) {
       }
     }
 
-    let imageDataUrl = null;
-    if (def.needsScreen) {
+    let imageDataUrl = options.imageDataUrl || null;
+    if (def.needsScreen && !imageDataUrl) {
       try {
         imageDataUrl = await captureScreenshot();
         if (!imageDataUrl) throw new Error('No screen source was available.');
@@ -905,10 +843,10 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
-ipcMain.handle('practice:start', () => startPractice());
-ipcMain.handle('practice:next', () => nextPracticeQuestion());
-ipcMain.handle('practice:end', () => endPractice());
-ipcMain.on('practice:played', () => practiceQuestionPlayed());
+ipcMain.handle('practice:start', () => practice.start());
+ipcMain.handle('practice:next', () => practice.next());
+ipcMain.handle('practice:end', () => practice.end());
+ipcMain.on('practice:played', (_e, token) => practice.played(token));
 ipcMain.handle('prepared:run', () => prepareAnswers({ force: true }));
 
 // -------- publik API --------
@@ -1139,8 +1077,7 @@ ipcMain.handle('platform:info', () => ({
   winSupportsContentProtection: WIN_SUPPORTS_CONTENT_PROTECTION
 }));
 ipcMain.handle('transcript:clear', () => {
-  transcript.splice(0, transcript.length);
-  return interviewMemory.clear();
+  return clearInterview();
 });
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
@@ -1390,33 +1327,37 @@ function launchApp() {
   screenWatcher.start();
 }
 
+// cue's own window, to black out of screenshots; null when it is not on screen.
+function cueWindowBounds() {
+  return win && !win.isDestroyed() && win.isVisible() ? win.getBounds() : null;
+}
+
 // Screen watch: while listening and idle, a question or coding task that
 // appears on screen without being said gets answered like a heard one.
 const SCREEN_RECENT_MS = 90000;
+const SCREEN_DETECT_TIMEOUT_MS = 15000;
 const screenWatcher = createScreenWatcher({
-  isActive: () => state.capturing && !state.busy && store.getSettings().watchScreen !== false && !!win && !win.isDestroyed(),
-  capture: () => captureMaskedScreen(win && !win.isDestroyed() && win.isVisible() ? win.getBounds() : null),
+  isActive: () => state.capturing && !state.busy && !practice.isActive() && store.getSettings().watchScreen !== false && !!win && !win.isDestroyed(),
+  capture: () => captureMaskedScreen(cueWindowBounds()),
   detect: async (dataUrl) => {
     const fast = createLLM({ ...store.getSettings(), smart: false });
     if (!fast.ready) return '';
-    let reply = '';
-    await fast.stream({
-      system: DETECT_SYSTEM,
-      turns: [{ role: 'user', text: 'What is the candidate being asked on this screen?' }],
-      imageDataUrl: dataUrl,
-      maxTokens: 200,
-      onToken: (t) => { reply += t; }
-    });
-    return reply;
+    try {
+      return await quickAsk({ llm: fast, system: DETECT_SYSTEM, text: 'What is the candidate being asked on this screen?', imageDataUrl: dataUrl, maxTokens: 200, timeoutMs: SCREEN_DETECT_TIMEOUT_MS });
+    } catch (e) {
+      recordEvent({ level: 'warn', event: 'screen_detect_failed', msg: e && e.message ? e.message : String(e), frame: 'screenWatcher', context: {} });
+      return '';
+    }
   },
   recentQuestions: () => {
     const since = Date.now() - SCREEN_RECENT_MS;
     return transcript.filter((t) => t.channel === 'them' && t.ts >= since);
   },
-  onDetect: (detection) => {
+  onDetect: (detection, dataUrl) => {
     if (detection.kind === 'coding') {
       send('status', { message: 'Coding task on screen: solving it.' });
-      runFeature('leetcode', '');
+      // The screenshot the task was read from: masked, so cue's own panel is not in it.
+      runFeature('leetcode', '', { imageDataUrl: dataUrl });
     } else {
       // Same path as a heard question: history, memory, then the auto-answer.
       publishTranscript('them', detection.text);

@@ -8,7 +8,8 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const { writeFileAtomic, removeFileAndTemp } = require('./atomic-file');
-const { tokenize } = require('../renderer/reading-tracker');
+const { tokenize, countShared } = require('../renderer/reading-tracker');
+const { quickAsk } = require('./quick-ask');
 
 const MAX_ITEMS = 30;
 const MAX_ANSWER_CHARS = 2000;
@@ -22,7 +23,8 @@ const CANDIDATE_MIN = 0.4;
 const MIN_SHARED_WORDS = 2;
 const CONFIRM_TIMEOUT_MS = 1500;
 // Same idea, different word, after stemming.
-const SYNONYMS = { application: 'app', program: 'app', codebase: 'project', repo: 'project', repository: 'project' };
+// Keys are stemmed forms: tokenize turns "repositories" into "repositori".
+const SYNONYMS = { application: 'app', program: 'app', codebase: 'project', repo: 'project', repository: 'project', repositori: 'project' };
 // Room for about 20 questions with 3 or 4 phrasings and a spoken answer each.
 const PREPARE_MAX_TOKENS = 8000;
 
@@ -47,13 +49,6 @@ const PREPARE_INSTRUCTIONS =
   'the behavioral questions the stories answer, strengths and weaknesses, and salary if a target is given.\n\n' +
   'For each question also give 3 or 4 other ways an interviewer might phrase it.\n\n' +
   'Reply with JSON only, no prose and no code fence: an array of objects {"question": string, "variants": [string], "answer": string}.';
-
-// The candidate's context goes in the system prompt exactly as for a live
-// answer (buildSystem from the answerThis mode), so prepared answers follow the
-// same voice, length and no-invented-stories rules.
-function preparePrompt() {
-  return PREPARE_INSTRUCTIONS;
-}
 
 // Pull the JSON array out of the model's reply, tolerating a stray code fence
 // or sentence around it. Invalid items are dropped, never guessed at.
@@ -86,8 +81,7 @@ function similarity(a, b) {
   const x = words(a);
   const y = words(b);
   if (!x.size || !y.size) return { score: 0, shared: 0 };
-  let shared = 0;
-  for (const w of x) if (y.has(w)) shared++;
+  const shared = countShared(x, y);
   return { score: shared / (x.size + y.size - shared), shared };
 }
 
@@ -115,19 +109,8 @@ const CONFIRM_SYSTEM =
 // Resolves false on NO, on any error, and after the timeout, so doubt always
 // falls back to a normal answer.
 function confirmSameQuestion({ llm, heard, prepared, timeoutMs = CONFIRM_TIMEOUT_MS }) {
-  return new Promise((resolve) => {
-    let reply = '';
-    let settled = false;
-    let timer = null;
-    const finish = (value) => { if (settled) return; settled = true; clearTimeout(timer); resolve(value); };
-    timer = setTimeout(() => finish(false), timeoutMs);
-    llm.stream({
-      system: CONFIRM_SYSTEM,
-      turns: [{ role: 'user', text: 'Question heard: ' + heard + '\nPrepared question: ' + prepared }],
-      maxTokens: 5,
-      onToken: (t) => { reply += t; }
-    }).then(() => finish(/^\s*yes\b/i.test(reply)), () => finish(false));
-  });
+  return quickAsk({ llm, system: CONFIRM_SYSTEM, text: 'Question heard: ' + heard + '\nPrepared question: ' + prepared, maxTokens: 5, timeoutMs })
+    .then((reply) => /^\s*yes\b/i.test(reply), () => false);
 }
 
 function createPreparedStore({ file } = {}) {
@@ -167,6 +150,6 @@ function createPreparedStore({ file } = {}) {
 }
 
 module.exports = {
-  createPreparedStore, profileHash, canPrepare, preparePrompt, parseItems, findMatch, confirmSameQuestion,
-  DIRECT_MATCH, PREPARE_MAX_TOKENS
+  createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion,
+  PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS
 };

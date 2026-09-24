@@ -7,7 +7,7 @@
 // cue's own panel is blacked out of every capture first: its answer text
 // changes and scrolls all the time, and must never be read as a question.
 
-const { tokenize } = require('../renderer/reading-tracker');
+const { tokenize, countShared } = require('../renderer/reading-tracker');
 
 const INTERVAL_MS = 10000;
 // Share of thumbnail cells that must change before the model looks.
@@ -86,9 +86,7 @@ function isSameQuestion(a, b) {
   const x = new Set(tokenize(a));
   const y = new Set(tokenize(b));
   if (!x.size || !y.size) return false;
-  let shared = 0;
-  for (const w of x) if (y.has(w)) shared++;
-  return shared / Math.min(x.size, y.size) >= SAME_QUESTION_OVERLAP;
+  return countShared(x, y) / Math.min(x.size, y.size) >= SAME_QUESTION_OVERLAP;
 }
 
 // True when this detection repeats something heard or seen in the last RECENT_MS.
@@ -99,7 +97,8 @@ function isRecent(detection, recent, now) {
 // The watcher loop. capture() resolves { thumb, dataUrl } (thumb is the small
 // BGRA bitmap, both already masked) or null; detect(dataUrl) resolves the
 // model's reply; recentQuestions() gives { text, ts } for recent interviewer
-// turns; onDetect(detection) acts on a new question.
+// turns; onDetect(detection, dataUrl) acts on a new question, with the masked
+// screenshot it was read from.
 function createScreenWatcher({ capture, detect, isActive, recentQuestions, onDetect, now = Date.now, intervalMs = INTERVAL_MS, threshold = CHANGE_THRESHOLD }) {
   let timer = null;
   let lastThumb = null;
@@ -123,7 +122,7 @@ function createScreenWatcher({ capture, detect, isActive, recentQuestions, onDet
       if (seen.some((s) => isSameQuestion(detection.text, s.text)) || isRecent(detection, recentQuestions(), t)) return;
       seen.push({ text: detection.text, ts: t });
       if (seen.length > 20) seen.shift();
-      onDetect(detection);
+      onDetect(detection, shot.dataUrl);
     } catch { /* a failed capture or model call just waits for the next tick */ } finally {
       running = false;
     }

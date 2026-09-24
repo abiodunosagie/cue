@@ -27,7 +27,7 @@ contextBridge.exposeInMainWorld('cue', {
   practiceStart: () => ipcRenderer.invoke('practice:start'),
   practiceNext: () => ipcRenderer.invoke('practice:next'),
   practiceEnd: () => ipcRenderer.invoke('practice:end'),
-  practicePlayed: () => ipcRenderer.send('practice:played'),
+  practicePlayed: (token) => ipcRenderer.send('practice:played', token),
   openPane: (url) => ipcRenderer.send('open-pane', url),
   publikState: () => ipcRenderer.invoke('publik:state'),
   publikAcceptDisclosure: () => ipcRenderer.invoke('publik:accept-disclosure'),

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { pickQuestions, scoreAnswer, unsupportedDetails, formatReport, synthesize, DEFAULT_QUESTIONS, VOICES } = require('../src/practice');
 
-const reference = 'Smith Abiodun Osagie. Flutter developer. Beepex fintech app, Paystack, Reloadly, Supabase. VotixCare healthcare. Numd, about 95 commits. 1.3.0 release.';
+const reference = 'Jordan Lee Carter. Flutter developer. Ledgerly fintech app, Paystack, Reloadly, Supabase. Clinicly healthcare. Numlib, about 95 commits. 1.3.0 release.';
 
 test('questions come from the prepared bank with the intro first, else the defaults', () => {
   assert.deepEqual(pickQuestions([]), DEFAULT_QUESTIONS.slice(0, 8));
@@ -11,12 +11,12 @@ test('questions come from the prepared bank with the intro first, else the defau
 });
 
 test('names and numbers not in the candidate material are flagged; ones in it are not', () => {
-  const answer = 'At Beepex I cut failed payments by 40 percent with Paystack. Later at Google I led 12 engineers. Numd has about 95 commits.';
+  const answer = 'At Ledgerly I cut failed payments by 40 percent with Paystack. Later at Google I led 12 engineers. Numlib has about 95 commits.';
   assert.deepEqual(unsupportedDetails(answer, reference), ['40', 'Google', '12']);
 });
 
 test('a clean medium answer passes; filler, hedging, AI words and length are reported', () => {
-  const clean = scoreAnswer({ question: 'How do you handle payments?', answer: 'Every debit at Beepex goes through a server function that checks the PIN, locks the wallet row and records a unique reference, so a retried request can never charge twice, and refunds only go through an audited path that someone can check later. That keeps the money logic in the database, where the app cannot get it wrong.', reference });
+  const clean = scoreAnswer({ question: 'How do you handle payments?', answer: 'Every debit at Ledgerly goes through a server function that checks the PIN, locks the wallet row and records a unique reference, so a retried request can never charge twice, and refunds only go through an audited path that someone can check later. That keeps the money logic in the database, where the app cannot get it wrong.', reference });
   assert.equal(clean.clean, true, clean.notes.join(' '));
   const messy = scoreAnswer({ question: 'How do you handle payments?', answer: 'Um, I think we basically leverage a robust, seamless flow, you know.', reference });
   assert.equal(messy.clean, false);
@@ -53,4 +53,8 @@ test('text to speech sends the voice, model and key, and turns HTTP errors into 
   assert.equal(JSON.parse(call.opts.body).text, 'Hello');
   await assert.rejects(synthesize({ apiKey: 'bad', voice: 'x', text: 't', fetchImpl: async () => ({ ok: false, status: 401 }) }), /rejected the API key/);
   await assert.rejects(synthesize({ apiKey: 'k', voice: 'x', text: 't', fetchImpl: async () => ({ ok: false, status: 500 }) }), /HTTP 500/);
+});
+
+test('a network failure becomes a plain message', async () => {
+  await assert.rejects(synthesize({ apiKey: 'k', voice: 'x', text: 't', fetchImpl: async () => { throw new TypeError('fetch failed'); } }), /^Error: Could not reach ElevenLabs\.$/);
 });

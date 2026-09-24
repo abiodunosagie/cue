@@ -801,6 +801,8 @@ button:focus { outline: none; }
 #practice-bar.hidden { display: none; }
 #practice-label { flex: 1; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
 #practice-voice { flex: 1; min-width: 0; }
+/* A status line that wraps: an error must be readable in full, not cut to an ellipsis. */
+.s-status { flex: 1; min-width: 0; color: rgba(255,255,255,0.6); font-size: 12.5px; line-height: 1.4; }
 .s-upload-btn:disabled { opacity: 0.45; cursor: default; }
 .prepared-pill {
   align-self: flex-start;

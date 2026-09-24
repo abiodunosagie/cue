@@ -86,3 +86,9 @@ test('nothing runs while inactive, and a failed capture waits for the next tick'
   await w.tick();
   assert.equal(detected.length, 0);
 });
+
+test('a spoken question older than the recent window no longer blocks the same question on screen', async () => {
+  const h = harness({ replies: ['QUESTION: How do you handle offline sync on mobile?'], thumbs: [bitmap(2, 2, 1)], recent: [{ text: 'how do you handle offline sync on mobile', ts: 1000 - 91000 }] });
+  await h.w.tick();
+  assert.equal(h.detected.length, 1);
+});
