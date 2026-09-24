@@ -88,7 +88,7 @@ test('answerThis sees the recent conversation so follow-ups make sense', () => {
 
 test('coding answers ask for complete fenced code, never inline code', () => {
   const leet = MODES.leetcode.buildSystem(null);
-  assert.match(leet, /complete file to paste/i);
+  assert.match(leet, /Full code to paste:\*\* the complete file in ONE fenced block/);
   assert.match(leet, /BUILD TASK.*\*\*Step N:/s, 'build tasks come as numbered steps');
   assert.match(leet, /\*\*Say:\*\* lines are what the candidate says out loud/, 'every solve carries a spoken cue');
   assert.match(leet, /never in inline backticks/i);
@@ -158,4 +158,13 @@ test('an API key inside a provider error is hidden before the message is shown',
   assert.equal(hideKey('GET https://x/v1?key=' + key + ' failed, key ' + key, key), 'GET https://x/v1?key=[key hidden] failed, key [key hidden]');
   assert.equal(hideKey('Connection error.', key), 'Connection error.');
   assert.equal(hideKey('short key abc', 'abc'), 'short key abc');   // too short to be a real key: left alone
+});
+
+test('a small coding task is taught step by step in plain words, with a walk-through and the full code', () => {
+  const system = MODES.leetcode.buildSystem('', '');
+  for (const part of ['**What it asks:**', '**The idea:**', '**Step N:', '**Check it on the example:**', '**Full code to paste:**', '**Speed:**']) {
+    assert.ok(system.includes(part), part);
+  }
+  assert.match(system, /new to this kind of problem/);
+  assert.doesNotMatch(system, /two-line approach/);
 });

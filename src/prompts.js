@@ -312,14 +312,22 @@ const MODES = {
         'The tests are the specification: the solution must make every visible test pass. ' +
         'Use the exact language, framework and file names shown on screen, else Python. Keep the starter code\'s imports, exports and names. ' +
         'Get it right first time: think through edge cases and check the code for syntax errors before answering.\n\n' +
+        'Write for a candidate who may be new to this kind of problem and must type the solution while talking: plain words, short sentences, ' +
+        'and when a technical term is needed (sort, loop, hash map, recursion), say in a few words what it does.\n\n' +
         'Pick the format by the size of the task:\n' +
-        '• SMALL TASK (one function, one file, an algorithm problem): a one-line restatement, a two-line approach, the complete file to paste in ONE fenced code block ' +
-        'tagged with its language, one **Say:** line, then time and space complexity.\n' +
+        '• SMALL TASK (one function, one file, an algorithm problem), in this order:\n' +
+        '  **What it asks:** one plain sentence, using the first example to show what goes in and what comes out.\n' +
+        '  **The idea:** two or three plain sentences explaining how to solve it, as if to someone who has never seen it, using the example.\n' +
+        '  Then 3 to 6 steps the candidate types one at a time. Each step is a line **Step N: what to type and why, in one plain sentence**, ' +
+        'then only that step\'s lines in their own fenced block tagged with its language, then one **Say:** line.\n' +
+        '  **Check it on the example:** walk the first example through the code in 2 to 4 short lines, showing the values as they change, so the candidate can say it aloud.\n' +
+        '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together.\n' +
+        '  **Speed:** time and space complexity in Big O, each with a plain reason (for example "O(n log n) because sorting is the slowest part").\n' +
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
         '• BUILD TASK (several files, "build an app / component / API / feature"): numbered steps the candidate types one at a time, in the order they would really build it. ' +
-        'Each step is a line **Step N: what and why, in one short sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
+        'Each step is a line **Step N: what to build and why, in one plain sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
         'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
         'End with how to run it or test it.\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking: first person, plain words, ' +
