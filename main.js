@@ -6,6 +6,7 @@ const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
 const { isExplainRequest } = require('./renderer/spoken-question');
 const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
+const { nudge } = require('./src/window-move');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
@@ -50,7 +51,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, moveWindow: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -121,6 +122,9 @@ const FLUSH_MS = 900;
 const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy can't wedge forever
 // The strongest model reading a screenshot can take ~10s to its first token.
 const CODING_STREAM_INACTIVITY_MS = 45000;
+// The coding model reads a screenshot and a long format before its first word:
+// measured at 35s, so the first word gets far longer than the gap between words.
+const CODING_FIRST_TOKEN_MS = 120000;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.12); // ~0.12s
 const RMS_GATE = 180;
 let flushTimer = null;
@@ -754,7 +758,7 @@ async function runFeature(mode, userText, options = {}) {
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
-    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp });
+    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, slowStart: def.tier === 'coding' });
 
     if (!llm.ready) {
       const message = llm.configurationError || ('Complete the ' + settings.provider + ' provider settings. Model: ' + (llm.model || 'unset') + '.');
@@ -848,11 +852,12 @@ async function runFeature(mode, userText, options = {}) {
     // leaving state.busy = true and wedging every later question until an app restart.
     let watchdog = null;
     let rearm = () => {};
+    let streamedAny = false;
     const stalled = new Promise((_res, reject) => {
       rearm = () => {
         clearTimeout(watchdog);
-        watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')),
-          def.tier === 'coding' ? CODING_STREAM_INACTIVITY_MS : STREAM_INACTIVITY_MS);
+        const limit = def.tier !== 'coding' ? STREAM_INACTIVITY_MS : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_TOKEN_MS;
+        watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), limit);
       };
       rearm();
     });
@@ -863,7 +868,7 @@ async function runFeature(mode, userText, options = {}) {
           system,
           turns: [{ role: 'user', text: built }],
           imageDataUrl,
-          onToken: (t) => { if (streamSettled) return; firstWord(llm.model); rearm(); send('llm:token', { text: t }); },
+          onToken: (t) => { if (streamSettled) return; firstWord(llm.model); streamedAny = true; rearm(); send('llm:token', { text: t }); },
           onResponse: settings.provider === publik.PUBLIK_PROVIDER ? (res) => publikNoteHeaders(res && res.headers) : undefined
         }),
         stalled
@@ -1220,6 +1225,16 @@ ipcMain.on('permissions:continue', async () => {
 });
 
 // -------- shortcuts --------
+// One keyboard nudge, kept on the display cue is on; saved like a drag.
+function nudgeWindow(direction) {
+  if (!win || win.isDestroyed()) return;
+  const bounds = win.getBounds();
+  const { workArea } = screen.getDisplayMatching(bounds);
+  const { x, y } = nudge(bounds, workArea, direction);
+  win.setPosition(x, y);
+  store.setSettings({ windowX: x, windowY: y });
+}
+
 // A global key, so the length changes mid-interview without touching the panel.
 function cycleAnswerLength() {
   const answerLength = nextLength(store.getSettings().answerLength);
@@ -1240,6 +1255,14 @@ function registerShortcuts() {
   shortcutState.buyTime = globalShortcut.register('CommandOrControl+Shift+B', () => runFeature('buyTime', ''));
   // E for explain: the words to walk the interviewer through the code just written.
   shortcutState.explainCode = globalShortcut.register('CommandOrControl+Shift+E', () => runFeature('explainCode', ''));
+  // Move cue without the mouse: in a screen share the pointer always shows, and
+  // dragging an invisible window makes it wander for no visible reason.
+  const moveMods = isMac ? 'Control+Alt+Command+' : 'Control+Alt+Shift+';
+  let moveOk = true;
+  for (const [key, dir] of [['Left', 'left'], ['Right', 'right'], ['Up', 'up'], ['Down', 'down']]) {
+    moveOk = globalShortcut.register(moveMods + key, () => nudgeWindow(dir)) && moveOk;
+  }
+  shortcutState.moveWindow = moveOk;
   // C for check: what is done on screen, anything wrong, and the next step.
   shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {

@@ -11,6 +11,8 @@
   quitButton.addEventListener('click', () => cue.quit());
   quitButton.title = isMac ? 'Quit cue (⌘⇧X)' : 'Quit cue (Ctrl+Shift+X)';
   $('#hide-btn').title = isMac ? 'Hide or show the answers (⌘⇧H)' : 'Hide or show the answers (Ctrl+Shift+H)';
+  // Keyboard moves keep the mouse pointer still, which matters when the screen is shared.
+  $('.drag-pill').title = isMac ? 'Drag to move, or Ctrl+Option+⌘ with the arrow keys to move without the mouse' : 'Drag to move, or Ctrl+Alt+Shift with the arrow keys to move without the mouse';
 
   // ---- paint icons -------------------------------------------------------
   $('#logo-btn').innerHTML = icon('logo', { size: 18 });
@@ -141,6 +143,8 @@
 
   function appendToken(t) {
     if (!aiEl) startAi(false);
+    const wait = aiEl.querySelector('.ai-wait');
+    if (wait) wait.remove();
     aiEl.dataset.raw += t;
     if (aiEl.dataset.md === '1' || aiEl.dataset.raw.includes('```')) {
       aiEl.dataset.md = '1';
@@ -1480,7 +1484,7 @@
     setLiveDotState(speaking ? 'speaking' : 'idle');
     speakerLabel.update(channel, speaking);
   });
-  cue.on('llm:start', ({ userBubble, small, category, coding }) => {
+  cue.on('llm:start', ({ userBubble, small, category, coding, slowStart }) => {
     readingFollow.reset();
     paceHint.reset();
     responseCount++;
@@ -1511,6 +1515,13 @@
     // A coding answer is worked through step by step, not read aloud: no
     // highlight and no automatic scrolling; the user scrolls it.
     if (coding) { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
+    // The coding model can take half a minute to start: say so, so it does not look frozen.
+    if (slowStart) {
+      const wait = document.createElement('span');
+      wait.className = 'ai-wait';
+      wait.textContent = 'Working on the solution. The first words can take up to a minute.';
+      aiEl.insertBefore(wait, caretEl);
+    }
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
     // push the toolbar out of the window. requestAnimationFrame lets layout settle.
