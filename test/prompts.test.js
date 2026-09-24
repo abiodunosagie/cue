@@ -183,5 +183,6 @@ test('every coding answer says how to run it', () => {
   assert.match(small, /\*\*Run it:\*\*[^\n]*main function[^\n]*expected output as a comment[^\n]*below the full code in the same file/);
   assert.match(small, /dart run main\.dart/);
   const build = system.slice(system.indexOf('BUILD TASK'), system.indexOf('**Say:** lines are'));
-  assert.match(build, /End with \*\*Run it:\*\* the exact commands/);
+  assert.match(build, /End with \*\*Run it:\*\* the exact commands in a fenced block tagged shell/);
+  assert.match(small, /Full code to paste:\*\*[^\n]*no main function or print calls/);
 });

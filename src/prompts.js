@@ -321,7 +321,8 @@ const MODES = {
         '  Then 3 to 6 steps the candidate types one at a time. Each step is a line **Step N: what to type and why, in one plain sentence**, ' +
         'then only that step\'s lines in their own fenced block tagged with its language, then one **Say:** line.\n' +
         '  **Check it on the example:** walk the first example through the code in 2 to 4 short plain sentences (no code block), showing the values as they change, so the candidate can say it aloud.\n' +
-        '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together.\n' +
+        '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together, ' +
+        'with no main function or print calls (those go in Run it), so it pastes cleanly into the interview\'s editor.\n' +
         '  **Time and space:** the complexity in Big O, each with a plain reason (for example "O(n log n) time because sorting is the slowest part").\n' +
         '  **Run it:** a short fenced block tagged with its language, holding only a main function (or the language\'s usual entry point) ' +
         'that calls the solution on the examples on screen and prints each result, with the expected output as a comment on each line. ' +
@@ -335,7 +336,7 @@ const MODES = {
         'each with what it is for in a few words, so nothing is missed; then numbered steps the candidate types one at a time, in the order they would really build it. ' +
         'Each step is a line **Step N: what to build and why, in one plain sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
         'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
-        'End with **Run it:** the exact commands to run it and one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
+        'End with **Run it:** the exact commands in a fenced block tagged shell, then one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking: first person, plain words, ' +
         'one or two short sentences, e.g. "First I will render the name when it is there, and fall back to a friendly default." No code inside a Say line.\n\n' +
         'If the task depends on files you cannot see, say which file to open next and why, then solve what is visible. ' +
