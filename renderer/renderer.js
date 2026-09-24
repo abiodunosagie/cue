@@ -66,16 +66,19 @@
   messages.addEventListener('click', async (e) => {
     const b = e.target.closest('.copy-code');
     if (!b) return;
+    // renderMarkdown always emits <pre><code>, the only place these buttons go.
     const code = b.parentElement.querySelector('code');
     try {
-      await cue.copyText(code ? code.textContent.replace(/\n$/, '') : '');
+      await cue.copyText(code.textContent.replace(/\n$/, ''));
     } catch (err) {
+      cue.log('copy failed: ' + (err && err.message ? err.message : String(err)));
       showToast('Could not copy', 1600);
       return;
     }
     b.innerHTML = icon('check', { size: 14 });
     b.classList.add('done');
-    setTimeout(() => { b.innerHTML = icon('copy', { size: 14 }); b.classList.remove('done'); }, 1400);
+    clearTimeout(b._revert);
+    b._revert = setTimeout(() => { b.innerHTML = icon('copy', { size: 14 }); b.classList.remove('done'); }, 1400);
     showToast('Copied', 1200);
   });
 
