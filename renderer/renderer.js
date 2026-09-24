@@ -139,6 +139,7 @@
     aiEl.dataset.raw += t;
     if (aiEl.dataset.md === '1' || aiEl.dataset.raw.includes('```')) {
       aiEl.dataset.md = '1';
+      aiEl.dataset.noFollow = '1'; // an answer with code is worked through, not read aloud
       if (!markdownFrame) markdownFrame = requestAnimationFrame(renderStreamingMarkdown);
       return;
     }
@@ -276,11 +277,14 @@
       trackedEl = null; trackedFinal = false; trackedLen = -1; trackedRendered = false; blocks = []; tokens = []; current = -1;
     }
 
-    // The newest answer, streaming or finished. Error bubbles are skipped so a
-    // failed follow-up does not steal focus.
+    // The newest answer, streaming or finished, when it is one to follow.
+    // Error bubbles are skipped so a failed follow-up does not steal focus, and
+    // code answers are never followed: their steps are worked through, and
+    // reading one Say line aloud would jump to a later step.
     function latestAnswer() {
       const all = messages.querySelectorAll('.ai-text:not([data-error])');
-      return all[all.length - 1] || null;
+      const el = all[all.length - 1] || null;
+      return el && el.dataset.noFollow === '1' ? null : el;
     }
 
     // Point the tracker at the newest answer. False when there is none.
@@ -1433,7 +1437,7 @@
     setLiveDotState(speaking ? 'speaking' : 'idle');
     speakerLabel.update(channel, speaking);
   });
-  cue.on('llm:start', ({ userBubble, small, category }) => {
+  cue.on('llm:start', ({ userBubble, small, category, coding }) => {
     readingFollow.reset();
     paceHint.reset();
     responseCount++;
@@ -1461,6 +1465,9 @@
       group.appendChild(pill);
     }
     startAi(small, group);
+    // A coding answer is worked through step by step, not read aloud: no
+    // highlight and no automatic scrolling; the user scrolls it.
+    if (coding) aiEl.dataset.noFollow = '1';
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
     // push the toolbar out of the window. requestAnimationFrame lets layout settle.

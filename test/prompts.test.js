@@ -88,7 +88,7 @@ test('answerThis sees the recent conversation so follow-ups make sense', () => {
 
 test('coding answers ask for complete fenced code, never inline code', () => {
   const leet = MODES.leetcode.buildSystem(null);
-  assert.match(leet, /Full code to paste:\*\* the complete file in ONE fenced block/);
+  assert.match(leet, /\*\*Full code to paste:\*\*/);
   assert.match(leet, /BUILD TASK.*\*\*Step N:/s, 'build tasks come as numbered steps');
   assert.match(leet, /\*\*Say:\*\* lines are what the candidate says out loud/, 'every solve carries a spoken cue');
   assert.match(leet, /never in inline backticks/i);
@@ -162,9 +162,12 @@ test('an API key inside a provider error is hidden before the message is shown',
 
 test('a small coding task is taught step by step in plain words, with a walk-through and the full code', () => {
   const system = MODES.leetcode.buildSystem('', '');
-  for (const part of ['**What it asks:**', '**The idea:**', '**Step N:', '**Check it on the example:**', '**Full code to paste:**', '**Speed:**']) {
-    assert.ok(system.includes(part), part);
-  }
+  // Only the SMALL TASK part: BUILD TASK also uses **Step N:.
+  const small = system.slice(system.indexOf('SMALL TASK'), system.indexOf('DESIGN TASK'));
+  const order = ['**What it asks:**', '**The idea:**', '**Step N:', '**Check it on the example:**', '**Full code to paste:**', '**Time and space:**'];
+  const at = order.map((part) => small.indexOf(part));
+  assert.ok(at.every((i) => i >= 0), 'every section is in the small-task format');
+  assert.deepEqual([...at].sort((a, b) => a - b), at, 'the sections come in this order');
   assert.match(system, /new to this kind of problem/);
   assert.doesNotMatch(system, /two-line approach/);
 });

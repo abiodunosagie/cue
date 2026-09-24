@@ -320,9 +320,9 @@ const MODES = {
         '  **The idea:** two or three plain sentences explaining how to solve it, as if to someone who has never seen it, using the example.\n' +
         '  Then 3 to 6 steps the candidate types one at a time. Each step is a line **Step N: what to type and why, in one plain sentence**, ' +
         'then only that step\'s lines in their own fenced block tagged with its language, then one **Say:** line.\n' +
-        '  **Check it on the example:** walk the first example through the code in 2 to 4 short lines, showing the values as they change, so the candidate can say it aloud.\n' +
+        '  **Check it on the example:** walk the first example through the code in 2 to 4 short plain sentences (no code block), showing the values as they change, so the candidate can say it aloud.\n' +
         '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together.\n' +
-        '  **Speed:** time and space complexity in Big O, each with a plain reason (for example "O(n log n) because sorting is the slowest part").\n' +
+        '  **Time and space:** the complexity in Big O, each with a plain reason (for example "O(n log n) time because sorting is the slowest part").\n' +
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +

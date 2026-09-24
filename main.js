@@ -49,7 +49,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, hideH: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -734,7 +734,7 @@ async function runFeature(mode, userText, options = {}) {
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
-    send('llm:start', { userBubble, small: !!def.small, category });
+    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' });
 
     if (!llm.ready) {
       const message = llm.configurationError || ('Complete the ' + settings.provider + ' provider settings. Model: ' + (llm.model || 'unset') + '.');
@@ -1209,8 +1209,9 @@ function registerShortcuts() {
   shortcutState.say = globalShortcut.register('CommandOrControl+Shift+Return', () => runFeature('say', ''));
   shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => runFeature('leetcode', ''));
   shortcutState.hide = globalShortcut.register('CommandOrControl+Shift+/', () => send('hide:toggle', {}));
-  // H for hide, next to Cmd+H for solve: easier to remember than Cmd+Shift+/.
-  shortcutState.hideH = globalShortcut.register('CommandOrControl+Shift+H', () => send('hide:toggle', {}));
+  // H for hide, next to Cmd+H for solve: easier to remember than Cmd+Shift+/,
+  // which stays for anyone already used to it. Both do the same thing.
+  shortcutState.hideAlt = globalShortcut.register('CommandOrControl+Shift+H', () => send('hide:toggle', {}));
   shortcutState.quit = globalShortcut.register('CommandOrControl+Shift+X', () => app.quit());
   shortcutState.length = globalShortcut.register('CommandOrControl+Shift+.', cycleAnswerLength);
   shortcutState.buyTime = globalShortcut.register('CommandOrControl+Shift+B', () => runFeature('buyTime', ''));
