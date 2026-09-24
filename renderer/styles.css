@@ -809,6 +809,15 @@ button:focus { outline: none; }
 .stt-connecting   { color: #facc15; }
 .stt-streaming    { color: var(--live); }
 .stt-local        { color: var(--live); }
+/* Who is talking right now, so an answer is never read over the interviewer. */
+#speaker-label {
+  position: absolute; top: 5px; right: 22px; z-index: 4;
+  font-size: 12px; font-weight: 600; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity 160ms ease;
+}
+#speaker-label.show { opacity: 1; }
+#speaker-label.them { color: #fbbf24; }
+#speaker-label.you  { color: var(--live); }
 .stt-loading      { color: #facc15; }
 .stt-stopping     { color: #facc15; }
 .stt-batch        { color: rgba(160,210,255,0.7); }

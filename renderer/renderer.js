@@ -1009,6 +1009,34 @@
 
   // ---- STT / VAD status helpers ------------------------------------------
   // Live dot states: 'off' | 'idle' | 'speaking' | 'transcribing'
+  // Who is speaking: the interviewer wins when both channels hear voice, since
+  // without headphones the mic also picks up the interviewer. Held briefly
+  // after speech ends so the label does not flicker between words.
+  const speakerLabel = (() => {
+    const HOLD_MS = 600;
+    const speaking = { you: false, them: false };
+    let hideTimer = null;
+    function render() {
+      const el = document.getElementById('speaker-label');
+      if (!el) return;
+      const who = speaking.them ? 'them' : speaking.you ? 'you' : null;
+      if (!who) {
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => el.classList.remove('show'), HOLD_MS);
+        return;
+      }
+      clearTimeout(hideTimer);
+      el.textContent = who === 'them' ? 'Interviewer speaking' : 'You are speaking';
+      el.classList.toggle('them', who === 'them');
+      el.classList.toggle('you', who === 'you');
+      el.classList.add('show');
+    }
+    return {
+      update(channel, isSpeaking) { if (channel in speaking) { speaking[channel] = !!isSpeaking; render(); } },
+      reset() { speaking.you = false; speaking.them = false; render(); }
+    };
+  })();
+
   function setLiveDotState(dotState) {
     const dot = document.getElementById('live-dot');
     if (!dot) return;
@@ -1177,6 +1205,7 @@
   // ---- events from main --------------------------------------------------
   cue.on('capture:state', ({ active, streaming, mode }) => {
     setLiveDotState(active ? 'idle' : 'off');
+    if (!active) speakerLabel.reset(); // no stale label once listening stops
     $('#stop-btn').classList.toggle('active', active);
     // FIX #4: Add .listening class to composer when capture is active
     composer.classList.toggle('listening', active);
@@ -1300,6 +1329,7 @@
   });
   cue.on('vad:state', ({ channel, speaking }) => {
     setLiveDotState(speaking ? 'speaking' : 'idle');
+    speakerLabel.update(channel, speaking);
   });
   cue.on('llm:start', ({ userBubble, small, category }) => {
     readingFollow.reset();
