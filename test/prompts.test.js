@@ -174,7 +174,7 @@ test('a small coding task is taught step by step in plain words, with a walk-thr
 
 test('a build task starts with every file to create, before the steps', () => {
   const system = MODES.leetcode.buildSystem('', '');
-  assert.match(system, /BUILD TASK[^•]*\*\*Files to create:\*\* a bulleted list of every file path in build order/);
+  assert.match(system, /BUILD TASK[^•]*\*\*Files to create:\*\* a bulleted list of every file path/);
 });
 
 test('every coding answer says how to run it', () => {
@@ -191,4 +191,14 @@ test('coding Say lines follow each code block and explain what it does and why',
   const system = MODES.leetcode.buildSystem('', '');
   assert.match(system, /Put one right after each code block/);
   assert.match(system, /say what those lines do and why/);
+});
+
+test('a build task is ordered so nothing is used before the step that writes it', () => {
+  const system = MODES.leetcode.buildSystem('', '');
+  const build = system.slice(system.indexOf('BUILD TASK'), system.indexOf('**Say:** lines are'));
+  assert.match(build, /in exactly the order the steps below write them/);
+  assert.match(build, /dependency order, bottom up: data models first.*then state.*then screens and widgets, then the wiring/s);
+  assert.match(build, /Never import or use anything that an earlier step has not already written in full/);
+  assert.match(build, /Each step writes ONE whole file, complete with its imports/);
+  assert.match(build, /Never come back later to add to a file/);
 });

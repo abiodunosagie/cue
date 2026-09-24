@@ -363,10 +363,15 @@ const MODES = {
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
-        '• BUILD TASK (several files, "build an app / component / API / feature"): first **Files to create:** a bulleted list of every file path in build order, ' +
-        'each with what it is for in a few words, so nothing is missed; then numbered steps the candidate types one at a time, in the order they would really build it. ' +
-        'Each step is a line **Step N: what to build and why, in one plain sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
-        'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
+        '• BUILD TASK (several files, "build an app / component / API / feature"): first **Files to create:** a bulleted list of every file path, ' +
+        'each with what it is for in a few words, in exactly the order the steps below write them, so nothing is missed. ' +
+        'Then numbered steps in dependency order, bottom up: data models first, then repositories, services and API clients, then state (providers, blocs, controllers), ' +
+        'then screens and widgets, then the wiring (main, routes, app setup) last. Never import or use anything that an earlier step has not already written in full: ' +
+        'a file must exist with its code before any other file imports it, so after every step the project compiles. ' +
+        'Each step writes ONE whole file, complete with its imports, ready to paste into that empty file: a line **Step N: Write <file path>, what it does and why, in one plain sentence**, ' +
+        'then the file\'s full code in its own fenced block tagged with its language, starting with a comment that names the file. ' +
+        'If a file is long, split its code into consecutive fenced blocks of that same step, each followed by its **Say:** line, so the pieces read top to bottom as one file. ' +
+        'Never come back later to add to a file an earlier step already wrote. ' +
         'End with **Run it:** the exact commands in a fenced block tagged shell, then one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking. Put one right after each code block, ' +
         'and keep each code block to one logical piece (a few lines) so its Say line can cover it: say what those lines do and why, in first person and plain words, ' +
