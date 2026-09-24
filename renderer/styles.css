@@ -292,13 +292,16 @@ button:focus { outline: none; }
 }
 
 /* ============================ Action row ============================ */
+/* The buttons share the full width of the panel: each grows from its own
+   width, so a long label never overflows, and a wrapped row fills too. */
 #action-row {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 4px;
+  display: flex; flex-wrap: wrap; gap: 6px;
   margin-top: 6px; white-space: nowrap; flex-shrink: 0;
 }
 .act {
-  display: inline-flex; align-items: center; gap: 6px;
-  border: none; background: transparent; cursor: pointer;
+  flex: 1 1 auto;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: none; background: rgba(255,255,255,0.04); cursor: pointer;
   color: rgba(255,255,255,0.72); font-size: 13px; font-weight: 500; font-family: var(--font);
   padding: 5px 9px; border-radius: 8px;
   transition: background 140ms ease, color 140ms ease;
@@ -481,8 +484,12 @@ button:focus { outline: none; }
 .s-hint { color: rgba(255,255,255,0.4); font-weight: 400; font-size: 11px; margin-left: 6px; }
 /* Segmented control: one field, the chosen option lifted */
 .s-seg { display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--field); border: 1px solid var(--bd-hair); }
-.s-seg-wrap { flex-wrap: wrap; }
-.s-seg-wrap button { flex: 0 0 auto; }
+/* A list too long for one row: an even grid, so every row lines up. */
+.s-seg-grid { display: grid; gap: 2px; }
+.s-seg-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.s-seg-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.s-seg-grid button { overflow: hidden; text-overflow: ellipsis; }
+#provider-publik { grid-column: 1 / -1; }
 .s-seg button { flex: 1; padding: 5px 10px; border-radius: 6px; border: none; background: transparent; color: rgba(255,255,255,0.62); font: 500 12px var(--font); cursor: pointer; white-space: nowrap; transition: background 140ms ease, color 140ms ease; }
 .s-seg button:hover { color: #fff; }
 .s-seg button.on { color: #fff; background: var(--selected); }
@@ -829,13 +836,23 @@ button:focus { outline: none; }
 #practice-voice, #profile-select { flex: 1; min-width: 0; }
 #profile-new-name, #company-url { flex: 1; min-width: 0; }
 /* Test my setup: one line per check, the result word in its own colour. */
-.setup-results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.setup-test { border: 1px solid var(--bd-hair); border-radius: 10px; background: var(--field); overflow: hidden; margin-bottom: 18px; }
+.setup-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.setup-intro { flex: 1; min-width: 0; }
+.setup-title { font-size: 13px; font-weight: 600; color: var(--tx-1); }
+.setup-sub { font-size: 12px; line-height: 1.4; color: rgba(255,255,255,0.62); margin-top: 2px; }
+.setup-btn { flex-shrink: 0; }
+.setup-results { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--bd-hair); }
 .setup-results:empty { display: none; }
-.setup-results li { font-size: 12.5px; line-height: 1.4; color: rgba(255,255,255,0.75); }
-.setup-results b { font-weight: 600; margin-right: 6px; }
-.setup-results .pass b { color: var(--live); }
-.setup-results .fail b { color: #f87171; }
-.setup-results .skip b { color: rgba(255,255,255,0.62); }
+.setup-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 14px; }
+.setup-row + .setup-row { border-top: 1px solid var(--bd-hair); }
+.setup-badge { justify-self: start; font-size: 11px; font-weight: 600; line-height: 18px; padding: 0 8px; border-radius: var(--r-pill); }
+.setup-row.pass .setup-badge { color: var(--live); background: rgba(34,197,94,0.14); }
+.setup-row.fail .setup-badge { color: #f87171; background: rgba(248,113,113,0.14); }
+.setup-row.skip .setup-badge { color: rgba(255,255,255,0.62); background: rgba(255,255,255,0.08); }
+.setup-name { font-size: 12.5px; font-weight: 500; line-height: 18px; color: var(--tx-1); }
+.setup-detail { font-size: 12px; line-height: 1.4; color: rgba(255,255,255,0.62); margin-top: 1px; overflow-wrap: anywhere; }
+.setup-row.fail .setup-detail { color: rgba(255,255,255,0.78); }
 /* A status line that wraps: an error must be readable in full, not cut to an ellipsis. */
 .s-status { flex: 1; min-width: 0; color: rgba(255,255,255,0.6); font-size: 12.5px; line-height: 1.4; }
 .s-upload-btn:disabled { opacity: 0.45; cursor: default; }

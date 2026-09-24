@@ -2116,13 +2116,27 @@
   const setupResults = document.getElementById('setup-test-results');
   const setupStatus = document.getElementById('setup-test-status');
   const SETUP_WORDS = { pass: 'Pass', fail: 'Fail', skip: 'Skipped' };
+  // One row per check: a fixed-width status column, then the check's name with
+  // its detail under it, so the list reads as a table rather than a paragraph.
   cue.on('setup:result', ({ name, status, detail }) => {
     const li = document.createElement('li');
-    li.className = status;
-    const word = document.createElement('b');
-    word.textContent = SETUP_WORDS[status] || status;
-    li.appendChild(word);
-    li.appendChild(document.createTextNode(name + (detail ? ': ' + detail : '')));
+    li.className = 'setup-row ' + status;
+    const badge = document.createElement('span');
+    badge.className = 'setup-badge';
+    badge.textContent = SETUP_WORDS[status] || status;
+    const text = document.createElement('div');
+    text.className = 'setup-text';
+    const title = document.createElement('div');
+    title.className = 'setup-name';
+    title.textContent = name;
+    text.appendChild(title);
+    if (detail) {
+      const more = document.createElement('div');
+      more.className = 'setup-detail';
+      more.textContent = detail;
+      text.appendChild(more);
+    }
+    li.append(badge, text);
     setupResults.appendChild(li);
   });
   document.getElementById('setup-test-btn').addEventListener('click', async (e) => {
@@ -2130,12 +2144,14 @@
     await saveSettings(); // test what is typed now, not the last saved values
     setupResults.replaceChildren();
     btn.disabled = true;
-    setupStatus.textContent = 'Testing, about 20 seconds…';
+    setupStatus.textContent = 'Testing, about 20 seconds.';
     try {
       const results = await cue.setupTest();
       if (results && results.busy) { setupStatus.textContent = 'A test is already running.'; return; }
-      const fails = (results || []).filter((r) => r.status === 'fail').length;
-      setupStatus.textContent = fails ? fails + (fails === 1 ? ' check failed. Fix it before the interview.' : ' checks failed. Fix them before the interview.') : 'Everything cue needs works.';
+      const count = (s) => (results || []).filter((r) => r.status === s).length;
+      const fails = count('fail');
+      const tally = count('pass') + ' passed' + (fails ? ', ' + fails + ' failed' : '') + (count('skip') ? ', ' + count('skip') + ' skipped' : '') + '. ';
+      setupStatus.textContent = tally + (fails ? (fails === 1 ? 'Fix the failed check before the interview.' : 'Fix the failed checks before the interview.') : 'Everything cue needs works.');
     } finally {
       btn.disabled = false;
     }

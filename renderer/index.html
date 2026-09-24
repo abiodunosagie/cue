@@ -120,12 +120,19 @@
 
       <!-- Tab: Keys -->
       <div class="s-body s-tab-pane" data-pane="keys">
-        <label class="s-label">Test my setup <span class="s-hint">real calls to every model, key and permission cue needs, including one masked screenshot to your Fast model; run it before an interview</span></label>
-        <div class="s-field s-upload"><span class="s-status" id="setup-test-status">Uses your saved settings.</span><button class="s-action s-upload-btn" id="setup-test-btn">Test my setup</button></div>
-        <ul id="setup-test-results" class="setup-results"></ul>
+        <div class="setup-test">
+          <div class="setup-head">
+            <div class="setup-intro">
+              <div class="setup-title">Test my setup</div>
+              <div class="setup-sub" id="setup-test-status">Real calls to every model, key and permission cue needs. Run it before an interview.</div>
+            </div>
+            <button class="s-action setup-btn" id="setup-test-btn">Run test</button>
+          </div>
+          <ul id="setup-test-results" class="setup-results"></ul>
+        </div>
 
         <label class="s-label">Provider</label>
-        <div class="s-seg s-seg-wrap" id="provider-seg">
+        <div class="s-seg s-seg-grid s-seg-grid-4" id="provider-seg">
           <button data-provider="publik" id="provider-publik" class="hidden">publik API <span class="s-default-badge">default</span></button>
           <button data-provider="openai">OpenAI</button>
           <button data-provider="anthropic">Anthropic</button>
@@ -200,7 +207,7 @@
       <!-- Tab: Transcription -->
       <div class="s-body s-tab-pane hidden" data-pane="transcription">
         <label class="s-label">Speech-to-text provider</label>
-        <div class="s-seg s-seg-wrap" id="stt-provider-seg">
+        <div class="s-seg s-seg-grid s-seg-grid-3" id="stt-provider-seg">
           <button data-stt-provider="auto">Auto</button>
           <button data-stt-provider="local">Local</button>
           <button data-stt-provider="deepgram">Deepgram</button>
