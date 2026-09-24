@@ -82,7 +82,7 @@
     showToast('Copied', 1200);
   });
 
-  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; readingFollow.reset(); }
+  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; streamPara = null; readingFollow.reset(); }
 
   function addUserBubble(text) {
     const b = document.createElement('div');
@@ -92,6 +92,7 @@
   }
 
   function startAi(small) {
+    streamPara = null; streamWs = '';
     aiEl = document.createElement('div');
     aiEl.className = 'ai-text' + (small ? ' small' : '');
     aiEl.dataset.raw = '';
@@ -101,24 +102,57 @@
     messages.appendChild(aiEl);
   }
 
+  // While an answer streams, its text is grouped into .w-para blocks split
+  // where the final markdown will split paragraphs and list items, so reading
+  // follow can track the user from the first sentence instead of waiting for
+  // the whole answer. finalizeAi replaces them with the rendered markdown.
+  let streamPara = null;
+  let streamWs = '';       // whitespace held until the next character decides a break
+  function currentStreamPara() {
+    if (!streamPara || streamPara.parentNode !== aiEl) {
+      streamPara = document.createElement('div');
+      streamPara.className = 'w-para';
+      aiEl.appendChild(streamPara);
+      if (caretEl) streamPara.appendChild(caretEl); // the caret follows the newest text
+    }
+    return streamPara;
+  }
+
   function appendToken(t) {
     if (!aiEl) startAi(false);
+    // Blank lines inside a code fence are code, not a paragraph break.
+    let inFence = ((aiEl.dataset.raw.match(/```/g) || []).length % 2) === 1;
     aiEl.dataset.raw += t;
-    const span = document.createElement('span');
-    span.className = 'w';
-    span.textContent = t;
-    // Guard: caretEl must be a child of aiEl
-    if (caretEl && caretEl.parentNode === aiEl) {
-      aiEl.insertBefore(span, caretEl);
-    } else {
-      aiEl.appendChild(span);
+    let text = '';
+    const flush = () => {
+      if (!text) return;
+      const span = document.createElement('span');
+      span.className = 'w';
+      span.textContent = text;
+      const para = currentStreamPara();
+      para.insertBefore(span, caretEl && caretEl.parentNode === para ? caretEl : null);
+      text = '';
+    };
+    for (let i = 0; i < t.length; i++) {
+      const ch = t[i];
+      if (/\s/.test(ch)) { streamWs += ch; continue; }
+      if (t.startsWith('```', i)) inFence = !inFence;
+      const newlines = (streamWs.match(/\n/g) || []).length;
+      // A blank line, or a new line that opens a bullet or numbered item.
+      const newBlock = !inFence && streamPara && (newlines >= 2 || (newlines === 1 && /[-*•\d]/.test(ch)));
+      if (newBlock) { flush(); streamPara = null; } else { text += streamWs; }
+      streamWs = '';
+      text += ch;
     }
+    flush();
   }
 
   function finalizeAi() {
     if (!aiEl) return;
     const raw = aiEl.dataset.raw || '';
     aiEl.innerHTML = renderMarkdown(raw);
+    aiEl.dataset.final = '1';
+    streamPara = null; streamWs = '';
     // Icon only, so the reading tracker (which reads each <pre>'s text) gains no words.
     aiEl.querySelectorAll('pre').forEach((pre) => {
       const b = document.createElement('button');
@@ -177,29 +211,43 @@
     function reset() {
       if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
       committed = []; interim = [];
-      trackedEl = null; blocks = []; tokens = []; current = -1;
+      trackedEl = null; trackedFinal = false; trackedText = -1; blocks = []; tokens = []; current = -1;
     }
 
-    // The newest answer, only once it has finished streaming: finalizeAi
-    // replaces the streamed spans with paragraphs, so blocks are stable then.
-    // Error bubbles are skipped so a failed follow-up does not steal focus.
+    // The newest answer, streaming or finished. Error bubbles are skipped so a
+    // failed follow-up does not steal focus.
     function latestAnswer() {
       const all = messages.querySelectorAll('.ai-text:not([data-error])');
-      const el = all[all.length - 1];
-      if (!el || el === aiEl || el.querySelector('.ai-caret')) return null;
-      return el;
+      return all[all.length - 1] || null;
     }
 
-    // Point the tracker at the newest finished answer. False when there is none.
+    // Point the tracker at the newest answer. False when there is none.
+    // While it streams, blocks are its .w-para groups and are re-read as text
+    // arrives; when it finishes, finalizeAi swaps them for rendered paragraphs
+    // on the same element, so the finished flag is part of the identity check.
+    let trackedFinal = false;
+    let trackedText = -1;
     function syncAnswer() {
       const el = latestAnswer();
       if (!el) return false;
-      if (el !== trackedEl) {
-        trackedEl = el;
+      const final = el.dataset.final === '1';
+      if (el !== trackedEl || final !== trackedFinal) {
+        trackedEl = el; trackedFinal = final; trackedText = -1;
+        current = -1;
+      }
+      if (!final) {
+        const len = (el.dataset.raw || '').length;
+        if (len !== trackedText) {
+          trackedText = len;
+          blocks = Array.from(el.querySelectorAll(':scope > .w-para'));
+          tokens = blocks.map((b) => tokenize(b.textContent));
+        }
+        if (!blocks.length) return false;
+      } else if (trackedText !== -2) {
+        trackedText = -2;
         blocks = Array.from(el.querySelectorAll(':scope > p, :scope > ul > li, :scope > pre'));
         if (!blocks.length) blocks = [el];
         tokens = blocks.map((b) => tokenize(b.textContent));
-        current = -1;
       }
       return true;
     }
@@ -1259,6 +1307,7 @@
     aiEl = document.createElement('div');
     aiEl.className = 'ai-text' + (small ? ' small' : '');
     aiEl.dataset.raw = '';
+    streamPara = null; streamWs = '';
     caretEl = document.createElement('span');
     caretEl.className = 'ai-caret';
     aiEl.appendChild(caretEl);
