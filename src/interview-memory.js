@@ -9,6 +9,9 @@ const { writeFileAtomic, removeFileAndTemp } = require('./atomic-file');
 const MAX_TURNS = 600;            // ~90 minutes of conversation
 const MAX_ANSWERS = 80;
 const MAX_ANSWER_CHARS = 6000;
+// A coding solve is the plan the candidate builds from, step after step, and
+// checking progress needs its later steps: kept whole (a full 8192-token answer).
+const MAX_CODING_ANSWER_CHARS = 40000;
 // A record untouched this long belongs to an earlier interview the user forgot
 // to clear; carrying it into the next one would mix two conversations.
 const STALE_MS = 6 * 60 * 60 * 1000;
@@ -82,7 +85,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     if (startedIn !== generation) return;
     const body = String(text || '').trim();
     if (!body) return;
-    record.answers.push({ mode, text: body.slice(0, MAX_ANSWER_CHARS), ts: now() });
+    record.answers.push({ mode, text: body.slice(0, mode === 'leetcode' ? MAX_CODING_ANSWER_CHARS : MAX_ANSWER_CHARS), ts: now() });
     if (record.answers.length > MAX_ANSWERS) record.answers.splice(0, record.answers.length - MAX_ANSWERS);
     touch();
   }
@@ -129,7 +132,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
 
   // The newest coding solve, when it is among the last few answers: explaining
   // "your code" only makes sense while the coding round is still going.
-  function recentCodingSolve({ withinAnswers = 4, maxChars = CODING_HISTORY_CHARS * 2 } = {}) {
+  function recentCodingSolve({ withinAnswers = 4, maxChars = MAX_CODING_ANSWER_CHARS } = {}) {
     // Explaining the code is still the coding round, so it does not count toward the window.
     const recent = record.answers.filter((a) => a.mode !== 'explainCode').slice(-withinAnswers);
     for (let i = recent.length - 1; i >= 0; i--) {

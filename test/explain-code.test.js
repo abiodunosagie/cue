@@ -67,3 +67,13 @@ test('explaining the code does not end the coding round', () => {
   for (let i = 0; i < 6; i++) m.addAnswer({ mode: 'explainCode', text: 'e' + i });
   assert.equal(m.recentCodingSolve(), 'SOLVE');
 });
+
+test('a long coding plan is kept whole, so a progress check sees its later steps', () => {
+  const m = createInterviewMemory({});
+  const plan = 'Step 1\n' + 'x'.repeat(20000) + '\nStep 9: Write lib/main.dart\nRun it: flutter run';
+  m.addAnswer({ mode: 'leetcode', text: plan });
+  assert.match(m.recentCodingSolve(), /Step 9: Write lib\/main\.dart\nRun it: flutter run$/);
+  assert.match(m.codingHistory({ count: 1, maxChars: Infinity })[0], /Run it: flutter run$/);
+  m.addAnswer({ mode: 'answerThis', text: 'y'.repeat(9000) });
+  assert.equal(m.answers()[1].text.length, 6000);   // spoken answers keep their normal cap
+});

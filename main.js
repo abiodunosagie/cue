@@ -712,7 +712,8 @@ async function prepareFollowUps(question, answer, generation) {
 // (the newest, even after the round).
 function priorSolvesFor(def, mode) {
   if (def.tier === 'coding') return interviewMemory.codingHistory();
-  if (mode === 'explainCode' || mode === 'checkProgress') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''];
+  // The whole solve: a progress check needs the plan's later steps, not its first few thousand characters.
+  if (mode === 'explainCode' || mode === 'checkProgress') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
   return [];
 }
 
