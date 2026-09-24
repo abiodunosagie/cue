@@ -736,6 +736,7 @@ async function runFeature(mode, userText, options = {}) {
   // Timing, for the log: how long until the first word shows, and from where.
   const startedAt = Date.now();
   let firstShown = false;
+  let modelInUse = '';
   const firstWord = (source) => {
     if (firstShown) return;
     firstShown = true;
@@ -748,6 +749,7 @@ async function runFeature(mode, userText, options = {}) {
     // Coding solves use the Coding model whatever the Smart toggle says: a
     // fast model gets code wrong, and a wrong solve fails the interview.
     const llm = createLLM(settings, { tier: def.tier });
+    modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
@@ -879,6 +881,8 @@ async function runFeature(mode, userText, options = {}) {
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
   } catch (e) {
     if (opener) interviewMemory.addAnswer({ mode, text: opener, generation: memoryGeneration });
+    // Timing, for the log: which model failed and after how long (never keys or text).
+    console.log(`[timing] ${mode}: failed after ${Date.now() - startedAt}ms (${modelInUse || 'no model'}${firstShown ? ', after the first word' : ', before any word'}): ${e && e.message ? e.message : String(e)}`);
     recordEvent({ level: 'error', event: 'llm_failed', msg: e && e.message ? e.message : String(e), frame: 'runFeature', context: { mode, provider: store.getSettings().provider } });
     const action = e && e.action ? e.action : null;
     send('llm:error', { message: e && e.message ? e.message : String(e), action });
