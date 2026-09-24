@@ -178,7 +178,7 @@ test('every coding answer says how to run it', () => {
   const small = system.slice(system.indexOf('SMALL TASK'), system.indexOf('DESIGN TASK'));
   assert.match(small, /\*\*Run it:\*\*[^\n]*main function[^\n]*expected output as a comment[^\n]*below the full code in the same file/);
   assert.match(small, /dart run main\.dart/);
-  const build = system.slice(system.indexOf('BUILD TASK'), system.indexOf('**Say:** lines are'));
+  const build = system.slice(system.indexOf('BUILD TASK (several files'), system.indexOf('**Say:** lines are'));
   assert.match(build, /End with \*\*Run it:\*\* the exact commands in a fenced block tagged shell/);
   assert.match(small, /Full code to paste:\*\*[^\n]*no main function or print calls/);
 });
@@ -191,7 +191,7 @@ test('coding Say lines follow each code block and explain what it does and why',
 
 test('a build task shows its folders, then builds file by file with nothing used before it is written', () => {
   const system = MODES.leetcode.buildSystem('', '');
-  const build = system.slice(system.indexOf('BUILD TASK'), system.indexOf('**Say:** lines are'));
+  const build = system.slice(system.indexOf('BUILD TASK (several files'), system.indexOf('**Say:** lines are'));
   const order = ['**Folders and files:**', '**Files to create:**', '**Tables:**', 'dependency order, innermost layer first', 'Each step writes ONE whole file', '**Run it:**'];
   const at = order.map((part) => build.indexOf(part));
   assert.ok(at.every((i) => i >= 0), 'every part is present');
@@ -211,4 +211,14 @@ test('the chosen architecture is named in the coding request, clean by default',
   assert.deepEqual(Object.keys(ARCHITECTURES), ['clean', 'mvvm', 'simple']);
   assert.match(MODES.leetcode.build({}), /any other stack.*keep these same layers/);
   assert.doesNotMatch(MODES.leetcode.build({ architecture: 'mvvm' }), /domain\//, 'MVVM is never told to use Clean Architecture folders');
+});
+
+test('app work is always a build task, never squeezed into one file', () => {
+  const system = MODES.leetcode.buildSystem('', '');
+  assert.match(system, /any app work \(a screen, a widget with state, a feature, an API endpoint, anything with a model, repository, provider or data\) is a BUILD TASK/);
+  assert.match(system, /A SMALL TASK is only a single function or algorithm problem/);
+  assert.match(system, /Never put app code in one file/);
+  const build = system.slice(system.indexOf('BUILD TASK (several files'), system.indexOf('**Say:** lines are'));
+  assert.match(build, /flutter run on the emulator/);
+  assert.match(build, /Never a main function pasted into a file/);
 });

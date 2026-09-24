@@ -208,7 +208,7 @@
     // Pair before wrapping sentences: pairing looks for the bold Say label as
     // the paragraph's first element, which sentence spans would hide.
     if (aiEl.dataset.md === '1') pairCodeWithSay(aiEl);
-    aiEl.querySelectorAll(':scope > p, :scope > ul > li').forEach(wrapSentences);
+    aiEl.querySelectorAll(':scope > p, :scope > ul > li, :scope > ol > li').forEach(wrapSentences);
     aiEl.dataset.final = '1';
     streamPara = null; splitter = null;
     // Icon only, so the reading tracker (which reads each <pre>'s text) gains no words.
@@ -235,7 +235,7 @@
     for (const [label, letter, mode] of [['Explain this code', 'E', 'explainCode'], ['Check my progress', 'C', 'checkProgress']]) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'explain-code';
+      b.className = 'coding-action';
       b.textContent = label + ' (' + key(letter) + ')';
       b.addEventListener('click', () => runMode(mode));
       row.appendChild(b);
@@ -350,13 +350,13 @@
         const len = (el.dataset.raw || '').length;
         if (len !== trackedLen) {
           trackedLen = len;
-          blocks = Array.from(el.querySelectorAll(el.dataset.md === '1' ? ':scope > p, :scope > ul > li, :scope > pre' : ':scope > .w-para'));
+          blocks = Array.from(el.querySelectorAll(el.dataset.md === '1' ? ':scope > p, :scope > ul > li, :scope > ol > li, :scope > pre' : ':scope > .w-para'));
           tokens = blocks.map((b) => tokenize(b.textContent));
         }
         if (!blocks.length) return false;
       } else if (!trackedRendered) {
         trackedRendered = true;
-        blocks = Array.from(el.querySelectorAll(':scope > p, :scope > ul > li, :scope > pre'));
+        blocks = Array.from(el.querySelectorAll(':scope > p, :scope > ul > li, :scope > ol > li, :scope > pre'));
         if (!blocks.length) blocks = [el];
         tokens = blocks.map((b) => tokenize(b.textContent));
       }

@@ -708,7 +708,8 @@ async function prepareFollowUps(question, answer, generation) {
 }
 
 // The earlier coding solves a mode builds on: the last two for a new solve,
-// the one being explained for explainCode (the newest, even after the round).
+// and for explainCode and checkProgress the one being explained or checked
+// (the newest, even after the round).
 function priorSolvesFor(def, mode) {
   if (def.tier === 'coding') return interviewMemory.codingHistory();
   if (mode === 'explainCode' || mode === 'checkProgress') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''];

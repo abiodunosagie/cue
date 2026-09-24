@@ -41,7 +41,7 @@ test('plain inline code and bold still render', () => {
 test('fenced code keeps template literals and escapes html', () => {
   const src = '```jsx\nexport default ({ name }) =>\n  <div>{name ? `Hello, ${name}!` : "Hello there!"}</div>;\n```';
   const html = renderMarkdown(src);
-  assert.ok(html.startsWith('<pre><code>'));
+  assert.ok(html.startsWith('<pre data-lang="jsx"><code>'));
   assert.ok(html.includes('{name ? `Hello, ${name}!` : &quot;Hello there!&quot;}'));
   assert.ok(!html.includes('<div>'));
 });
@@ -53,4 +53,23 @@ test('bullets and paragraphs', () => {
 test('model html is escaped, never injected', () => {
   const html = renderMarkdown('<img src=x onerror=alert(1)> `<script>`');
   assert.ok(!/<img|<script/.test(html));
+});
+
+test('numbered lists render as ordered lists, not one run-on paragraph', () => {
+  const { renderMarkdown } = require('../renderer/markdown.js');
+  assert.equal(
+    renderMarkdown('**lib/features/auth/domain/**\n1. entities/user.dart, the user entity\n2) repositories/auth_repository.dart, the contract'),
+    '<p><strong>lib/features/auth/domain/</strong></p><ol><li>entities/user.dart, the user entity</li><li>repositories/auth_repository.dart, the contract</li></ol>'
+  );
+  // Switching list kind closes the first list.
+  assert.equal(renderMarkdown('- a\n1. b'), '<ul><li>a</li></ul><ol><li>b</li></ol>');
+  // A year at the start of a sentence is not a list.
+  assert.equal(renderMarkdown('2024 was busy.'), '<p>2024 was busy.</p>');
+});
+
+test('a code block carries its language tag for styling', () => {
+  const { renderMarkdown } = require('../renderer/markdown.js');
+  assert.equal(renderMarkdown('```text\nlib/\n  main.dart\n```'), '<pre data-lang="text"><code>lib/\n  main.dart\n</code></pre>');
+  assert.equal(renderMarkdown('```\nx\n```'), '<pre><code>x\n</code></pre>');
+  assert.equal(renderMarkdown('```"><script>\nx\n```'), '<pre><code>x\n</code></pre>');
 });

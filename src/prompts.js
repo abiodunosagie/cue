@@ -181,7 +181,9 @@ const MODES = {
 
   // ── Explain the code: walk the interviewer through the candidate's own solution ──
   explainCode: {
-    codingFollowUp: true, // about the coding solve: shown like one (no follow, Explain and Check buttons)
+    // codingFollowUp: about the latest coding solve (priorSolves[0], called the solution
+    // here and the plan in checkProgress), so it is shown like one: no follow, Explain and Check buttons.
+    codingFollowUp: true,
     skipMemory: true,    // it gets the solution itself; interview history adds nothing here
     contextTurns: 6, // turns build() sends
     needsScreen: true,   // the editor now: the code as actually typed, maybe partial
@@ -213,7 +215,7 @@ const MODES = {
 
   // ── Check my progress: what is done, what is wrong, and what to write next ──
   checkProgress: {
-    codingFollowUp: true, // about the coding solve: shown like one (no follow, Explain and Check buttons)
+    codingFollowUp: true, // see explainCode
     skipMemory: true,
     notAnswer: true,      // a checkpoint for the candidate, not something said in the interview
     needsScreen: true,    // the editor now is the whole point
@@ -396,7 +398,10 @@ const MODES = {
         'Write for a candidate who may be new to this kind of problem and must type the solution while talking: plain words, short sentences, ' +
         'and when a technical term is needed (sort, loop, hash map, recursion), say in a few words what it does.\n\n' +
         'Pick the format by the size of the task:\n' +
-        '• SMALL TASK (one function, one file, an algorithm problem), in this order:\n' +
+        'Deciding the size: any app work (a screen, a widget with state, a feature, an API endpoint, anything with a model, repository, provider or data) is a BUILD TASK, ' +
+        'even when it could be squeezed into one file, because an interviewer judges the structure. A SMALL TASK is only a single function or algorithm problem ' +
+        '(like merging intervals or reversing a list) with no app around it. Never put app code in one file.\n\n' +
+        '• SMALL TASK (a single function or algorithm problem), in this order:\n' +
         '  **What it asks:** one plain sentence, using the first example to show what goes in and what comes out.\n' +
         '  **The idea:** two or three plain sentences explaining how to solve it, as if to someone who has never seen it, using the example.\n' +
         '  Then 3 to 6 steps the candidate types one at a time. Each step is a line **Step N: what to type and why, in one plain sentence**, ' +
@@ -419,14 +424,15 @@ const MODES = {
         'then a **Say:** line explaining in plain words why the code is organised this way.\n' +
         '  **Files to create:** folder by folder, a bold line with the folder path, then a bullet for each file in it with what it is for in a few words ' +
         'and the number of the step that writes it.\n' +
-        '  **Tables:** only when the task needs a database: each table with its columns and types, and the SQL or migration in a fenced block, before any code that uses them.\n' +
+        '  **Tables:** only when the task needs a database: each table with its columns and types, and the SQL or migration in a fenced block followed by its **Say:** line, before any code that uses them.\n' +
         '  Then numbered steps in dependency order, innermost layer first: the pieces nothing else depends on (entities, models, contracts), then the logic that uses them ' +
         '(use cases, repositories, services, data sources), then state (providers, stores or view models), then screens and widgets, and the wiring (main, routes, setup) last. ' +
         'Never import or use anything an earlier step has not already written, so each step only depends on files already written.\n' +
         '  Each step writes ONE whole file, ready to paste into that empty file: a line **Step N: Write the file (its full path), what it does and why, in one plain sentence**, ' +
         'then the file from top to bottom as consecutive fenced blocks tagged with its language, the first starting with a comment that names the file and holding its imports, ' +
         'each block one logical piece followed by its **Say:** line; read in order, the blocks are the complete file. Never come back later to add to a file an earlier step wrote.\n' +
-        '  End with **Run it:** the exact commands in a fenced block tagged shell, then one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
+        '  End with **Run it:** the exact commands in a fenced block tagged shell, run from the project in the IDE (for Flutter: flutter pub get then flutter run on the emulator or a device; ' +
+        'for a backend its start command), then one quick way to check it works (a request to send, a test to run, or what to tap on screen). Never a main function pasted into a file.\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking. Put one right after each code block, ' +
         'and keep each code block to one logical piece (a few lines) so its Say line can cover it: say what those lines do and why, in first person and plain words, ' +
         'one to three short sentences, e.g. "First I sort the intervals by their start, so any that overlap end up next to each other." No code inside a Say line.\n\n' +

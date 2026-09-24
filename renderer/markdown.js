@@ -72,20 +72,31 @@
 
   function renderMarkdown(text) {
     const lines = text.split('\n');
-    let html = '', inCode = false, inList = false, buf = [];
+    // inList is the open list's tag ('ul' or 'ol') or '' when none is open.
+    let html = '', inCode = false, inList = '', buf = [];
     const flushP = () => { if (buf.length) { html += '<p>' + inline(buf.join(' ')) + '</p>'; buf = []; } };
+    const closeList = () => { if (inList) { html += '</' + inList + '>'; inList = ''; } };
+    const listItem = (tag, content) => {
+      flushP();
+      if (inList !== tag) { closeList(); html += '<' + tag + '>'; inList = tag; }
+      html += '<li>' + inline(content) + '</li>';
+    };
     for (const line of lines) {
-      if (/^```/.test(line.trim())) {
-        if (!inCode) { flushP(); if (inList) { html += '</ul>'; inList = false; } html += '<pre><code>'; inCode = true; }
+      const fence = /^```\s*([\w+#.-]*)/.exec(line.trim());
+      if (fence) {
+        // The language tag rides along as data-lang, so a plain-text block
+        // (a folder tree) can keep its spacing instead of wrapping like code.
+        if (!inCode) { flushP(); closeList(); html += '<pre' + (fence[1] ? ' data-lang="' + esc(fence[1].toLowerCase()) + '"' : '') + '><code>'; inCode = true; }
         else { html += '</code></pre>'; inCode = false; }
         continue;
       }
       if (inCode) { html += esc(line) + '\n'; continue; }
-      if (/^\s*[-*]\s+/.test(line)) { flushP(); if (!inList) { html += '<ul>'; inList = true; } html += '<li>' + inline(line.replace(/^\s*[-*]\s+/, '')) + '</li>'; continue; }
-      if (line.trim() === '') { flushP(); if (inList) { html += '</ul>'; inList = false; } continue; }
+      if (/^\s*[-*]\s+/.test(line)) { listItem('ul', line.replace(/^\s*[-*]\s+/, '')); continue; }
+      if (/^\s*\d+[.)]\s+/.test(line)) { listItem('ol', line.replace(/^\s*\d+[.)]\s+/, '')); continue; }
+      if (line.trim() === '') { flushP(); closeList(); continue; }
       buf.push(line.trim());
     }
-    flushP(); if (inList) html += '</ul>'; if (inCode) html += '</code></pre>';
+    flushP(); closeList(); if (inCode) html += '</code></pre>';
     return html;
   }
 
