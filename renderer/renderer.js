@@ -130,6 +130,7 @@
     const raw = aiEl.dataset.raw || '';
     const openFence = ((raw.match(/```/g) || []).length % 2) === 1;
     aiEl.innerHTML = renderMarkdown(openFence ? raw + '\n```' : raw);
+    pairCodeWithSay(aiEl);
     streamPara = null;
     if (caretEl) (aiEl.lastElementChild && aiEl.lastElementChild.tagName !== 'PRE' ? aiEl.lastElementChild : aiEl).appendChild(caretEl);
   }
@@ -150,6 +151,22 @@
       span.textContent = piece.text;
       const para = currentStreamPara();
       para.insertBefore(span, caretEl && caretEl.parentNode === para ? caretEl : null);
+    }
+  }
+
+  // In a coding answer, each code block and the Say line right after it sit
+  // side by side, code on the left and the words to say on the right, so the
+  // user can type and talk from one glance. Nothing else in the answer moves.
+  function pairCodeWithSay(el) {
+    for (const pre of Array.from(el.querySelectorAll(':scope > pre'))) {
+      const say = pre.nextElementSibling;
+      const first = say && say.tagName === 'P' ? say.firstElementChild : null;
+      if (!first || first.tagName !== 'STRONG' || !/^Say:?$/i.test(first.textContent.trim())) continue;
+      const pair = document.createElement('div');
+      pair.className = 'step-pair';
+      el.insertBefore(pair, pre);
+      pair.appendChild(pre);
+      pair.appendChild(say);
     }
   }
 
@@ -184,6 +201,9 @@
     const raw = aiEl.dataset.raw || '';
     if (markdownFrame) { cancelAnimationFrame(markdownFrame); markdownFrame = 0; }
     aiEl.innerHTML = renderMarkdown(raw);
+    // Pair before wrapping sentences: pairing looks for the bold Say label as
+    // the paragraph's first element, which sentence spans would hide.
+    if (aiEl.dataset.md === '1') pairCodeWithSay(aiEl);
     aiEl.querySelectorAll(':scope > p, :scope > ul > li').forEach(wrapSentences);
     aiEl.dataset.final = '1';
     streamPara = null; splitter = null;

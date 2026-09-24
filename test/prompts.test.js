@@ -186,3 +186,9 @@ test('every coding answer says how to run it', () => {
   assert.match(build, /End with \*\*Run it:\*\* the exact commands in a fenced block tagged shell/);
   assert.match(small, /Full code to paste:\*\*[^\n]*no main function or print calls/);
 });
+
+test('coding Say lines follow each code block and explain what it does and why', () => {
+  const system = MODES.leetcode.buildSystem('', '');
+  assert.match(system, /Put one right after each code block/);
+  assert.match(system, /say what those lines do and why/);
+});

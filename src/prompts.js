@@ -337,8 +337,9 @@ const MODES = {
         'Each step is a line **Step N: what to build and why, in one plain sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
         'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
         'End with **Run it:** the exact commands in a fenced block tagged shell, then one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
-        '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking: first person, plain words, ' +
-        'one or two short sentences, e.g. "First I will render the name when it is there, and fall back to a friendly default." No code inside a Say line.\n\n' +
+        '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking. Put one right after each code block, ' +
+        'and keep each code block to one logical piece (a few lines) so its Say line can cover it: say what those lines do and why, in first person and plain words, ' +
+        'one to three short sentences, e.g. "First I sort the intervals by their start, so any that overlap end up next to each other." No code inside a Say line.\n\n' +
         'If the task depends on files you cannot see, say which file to open next and why, then solve what is visible. ' +
         'When earlier solves from this session are given, build on them: keep names and decisions consistent and do not repeat code already written.\n\n' +
         'Code goes only inside fenced blocks, never in inline backticks. No markdown headings. Keep prose tight.';
