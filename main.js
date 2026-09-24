@@ -812,6 +812,7 @@ async function runFeature(mode, userText, options = {}) {
     const built = (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
       transcript,
       userText: userText || '',
+      answers: mode === 'report' ? interviewMemory.answers() : [],
       priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
     }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.

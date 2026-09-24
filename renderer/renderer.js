@@ -877,6 +877,9 @@
 
   // Transcript toggle removed — sidebar now auto-opens with listening
 
+  // After the interview: a report built from the whole remembered interview.
+  document.getElementById('interview-report-btn').addEventListener('click', () => runMode('report'));
+
   // Clear transcript
   const clearTranscriptBtn = document.getElementById('clear-transcript-btn');
   if (clearTranscriptBtn) {

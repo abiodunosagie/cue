@@ -135,3 +135,19 @@ test('buy time always runs on the Fast model, skips memory, and is not stored as
   assert.match(system, /clarifying question/);
   assert.match(def.build({ transcript: [{ channel: 'them', text: 'Design a rate limiter.' }] }), /Them: Design a rate limiter\./);
 });
+
+test('the interview report uses the whole interview and the suggested answers, never coding solves', () => {
+  const def = MODES.report;
+  assert.equal(def.skipMemory, true);
+  assert.equal(def.notAnswer, true);
+  const transcript = Array.from({ length: 30 }, (_, i) => ({ channel: i % 2 ? 'you' : 'them', text: 'turn ' + i }));
+  const built = def.build({ transcript, answers: [{ mode: 'answerThis', text: 'Spoken answer' }, { mode: 'leetcode', text: 'code solve' }] });
+  assert.match(built, /Them: turn 0\n/);
+  assert.match(built, /You: turn 29/);
+  assert.match(built, /- Spoken answer/);
+  assert.doesNotMatch(built, /code solve/);
+  const system = def.buildSystem('', '');
+  assert.match(system, /Thank-you email/);
+  assert.match(system, /no em dashes/);
+  assert.match(system, /Never describe a specific conversation/);
+});

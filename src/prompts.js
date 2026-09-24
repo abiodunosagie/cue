@@ -184,6 +184,39 @@ const MODES = {
     }
   },
 
+  // ── After-interview report: what happened, what to fix, and the thank-you ──
+  report: {
+    skipMemory: true,    // it gets the whole interview, turns and answers, directly
+    notAnswer: true,
+    contextTurns: 0, // 0 = the whole transcript
+    needsScreen: false,
+    userBubble: 'Interview report',
+    small: false,
+    buildSystem(contextBlock, aiRules) {
+      return applyRules(buildSystem(
+        'You are cue. The interview has ended. Write the candidate a report on it from the transcript and the answers cue suggested. ' + BASE_RULES +
+        'Sections, each a bold label followed by short bullets:\n' +
+        '**Summary:** who asked about what, in 2 or 3 bullets.\n' +
+        '**What they focused on:** the themes the interviewer kept returning to.\n' +
+        '**Answers to strengthen:** each weak or vague answer the candidate gave, why it was weak, and one better line to use next time. ' +
+        'Judge what the candidate actually said ("You" turns), not cue\'s suggestions.\n' +
+        '**Prepare for the next round:** the questions likely to come next, given what was asked.\n' +
+        '**Thank-you email:** a short, warm, specific email the candidate can send today, mentioning one real topic from the interview. ' +
+        'Plain words, no em dashes, no invented details, and leave [Name] where the interviewer\'s name is not in the transcript.\n\n' +
+        NO_INVENTED_STORIES +
+        'If the transcript is too short to judge something, say so instead of guessing.',
+        contextBlock
+      ), aiRules, 'report');
+    },
+    build(ctx) {
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
+      const answers = (ctx.answers || []).filter((a) => a.mode !== 'leetcode').map((a) => '- ' + a.text.slice(0, 600)).join('\n');
+      return 'Full interview transcript:\n' + (t || '(nothing captured)') +
+        (answers ? '\n\nAnswers cue suggested, oldest first:\n' + answers : '') +
+        '\n\nWrite the report.';
+    }
+  },
+
   // ── Recap ──────────────────────────────────────────────────────────────────
   recap: {
     contextTurns: 0, // 0 = the whole transcript; recap gets no memory digest

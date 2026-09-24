@@ -137,6 +137,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     codingHistory,
     generation() { return generation; },
     turns() { return record.turns.slice(); },
+    answers() { return record.answers.slice(); },
     summary() { return { startedAt: record.startedAt, updatedAt: record.updatedAt, turnCount: record.turns.length, answerCount: record.answers.length }; }
   };
 }

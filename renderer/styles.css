@@ -729,6 +729,8 @@ button:focus { outline: none; }
   transition: background 120ms ease, color 120ms ease;
 }
 .ts-clear-btn:hover { background: rgba(239,68,68,0.10); color: #fca5a5; }
+.ts-report-btn { color: rgba(255,255,255,0.8); margin-bottom: 4px; }
+.ts-report-btn:hover { background: var(--hover); color: #fff; }
 
 /* Sidebar no longer widens panel — it floats outside */
 /* The history sidebar is position:fixed at right:20px and 220px wide. In a 700px
