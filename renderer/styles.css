@@ -816,7 +816,7 @@ button:focus { outline: none; }
   opacity: 0; transition: opacity 160ms ease;
 }
 #speaker-label.show { opacity: 1; }
-#speaker-label.them { color: #fbbf24; }
+#speaker-label.them { color: #facc15; }
 #speaker-label.you  { color: var(--live); }
 .stt-loading      { color: #facc15; }
 .stt-stopping     { color: #facc15; }

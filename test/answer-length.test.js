@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeLength, nextLength, lengthRule } = require('../src/answer-length');
+const { normalizeLength, nextLength, lengthRule } = require('../renderer/answer-length');
 
 test('unknown or missing lengths fall back to medium', () => {
   assert.equal(normalizeLength(undefined), 'medium');

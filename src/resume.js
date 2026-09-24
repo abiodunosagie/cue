@@ -41,6 +41,9 @@ function renderPage(pageData) {
 
 async function parseDocumentFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
+  if (!['.pdf', '.docx', '.txt', '.md'].includes(ext)) {
+    throw new Error('Unsupported file type: ' + (ext || '(none)') + '. Use a PDF, DOCX, TXT or Markdown file.');
+  }
   const buf = fs.readFileSync(filePath);
   if (ext === '.pdf') {
     const pdfParse = require('pdf-parse');
@@ -52,8 +55,7 @@ async function parseDocumentFile(filePath) {
     const res = await mammoth.extractRawText({ buffer: buf });
     return (res.value || '').trim();
   }
-  if (ext === '.txt' || ext === '.md') return buf.toString('utf8').trim();
-  throw new Error('Unsupported file type: ' + (ext || '(none)') + '. Use a PDF, DOCX or TXT file.');
+  return buf.toString('utf8').trim(); // .txt or .md
 }
 
 module.exports = { parseDocumentFile, joinTextItems, cleanPdfText };

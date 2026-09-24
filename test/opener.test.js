@@ -3,18 +3,22 @@ const assert = require('node:assert/strict');
 const { openerQuestion, continuationNote, runOpener } = require('../src/opener');
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// A fake Fast model that sends each word after a delay.
+// A fake Fast model that sends each word after a delay. Call arguments are
+// recorded and checked in the test body: an assert thrown inside stream() would
+// be swallowed by runOpener as a provider error.
 function fakeLLM(words, { firstDelay = 0, gap = 0, fail = false } = {}) {
-  return {
-    async stream({ onToken, maxTokens, system }) {
-      assert.equal(maxTokens, 40);
-      assert.match(system, /Do not name any company/);
+  const llm = {
+    calls: [],
+    async stream(args) {
+      llm.calls.push(args);
+      const { onToken } = args;
       await wait(firstDelay);
       for (const w of words) { onToken(w); await wait(gap); }
       if (fail) throw new Error('provider down');
       return words.join('');
     }
   };
+  return llm;
 }
 
 test('opener question: heard question for answerThis, newest interviewer turn otherwise, none for other modes', () => {
@@ -34,7 +38,12 @@ test('continuation note tells the Smart model not to repeat the opener', () => {
 
 test('a fast opener streams every token and resolves with the tidy sentence', async () => {
   const shown = [];
-  const text = await runOpener({ llm: fakeLLM(['I usually ', 'start with\n', ' the data.']), question: 'q', onToken: (t) => shown.push(t) });
+  const llm = fakeLLM(['I usually ', 'start with\n', ' the data.']);
+  const text = await runOpener({ llm, question: 'Why Flutter?', onToken: (t) => shown.push(t) });
+  assert.equal(llm.calls.length, 1);
+  assert.equal(llm.calls[0].maxTokens, 40);
+  assert.match(llm.calls[0].system, /Do not name any company/);
+  assert.equal(llm.calls[0].turns[0].text, 'Interview question: Why Flutter?');
   assert.equal(shown.join(''), 'I usually start with\n the data.');
   assert.equal(text, 'I usually start with the data.');
 });

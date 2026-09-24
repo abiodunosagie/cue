@@ -43,6 +43,8 @@ function runOpener({ llm, question, onToken, firstTokenMs = FIRST_TOKEN_MS, tota
   return new Promise((resolve) => {
     let text = '';
     let settled = false;
+    let firstTimer = null;
+    let totalTimer = null;
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -50,8 +52,8 @@ function runOpener({ llm, question, onToken, firstTokenMs = FIRST_TOKEN_MS, tota
       resolve(tidy(text));
     };
     // No first word in time: the opener is dropped entirely, nothing was shown.
-    const firstTimer = setTimeout(() => { if (!text) finish(); }, firstTokenMs);
-    const totalTimer = setTimeout(finish, totalMs);
+    firstTimer = setTimeout(() => { if (!text) finish(); }, firstTokenMs);
+    totalTimer = setTimeout(finish, totalMs);
     llm.stream({
       system: OPENER_SYSTEM,
       turns: [{ role: 'user', text: 'Interview question: ' + question }],

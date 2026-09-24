@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { normalizeBaseUrl } = require('./openai-compatible');
-const { normalizeLength } = require('./answer-length');
+const { normalizeLength } = require('../renderer/answer-length');
 const PanelOpacity = require('../renderer/panel-opacity');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');

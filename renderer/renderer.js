@@ -37,6 +37,11 @@
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
   let caretEl = null;
+  // While an answer streams, its text is grouped into .w-para blocks split where
+  // the final markdown will split it (window.StreamBlocks), so reading follow can
+  // track the user from the first sentence. finalizeAi swaps in the rendered markdown.
+  let streamPara = null;
+  let splitter = null;
   let responseCount = 0;
   const MAX_RESPONSES = 20;
 
@@ -82,7 +87,7 @@
     showToast('Copied', 1200);
   });
 
-  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; streamPara = null; readingFollow.reset(); }
+  function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; streamPara = null; splitter = null; readingFollow.reset(); }
 
   function addUserBubble(text) {
     const b = document.createElement('div');
@@ -91,23 +96,18 @@
     messages.appendChild(b);
   }
 
-  function startAi(small) {
-    streamPara = null; streamWs = '';
+  function startAi(small, parent = messages) {
+    streamPara = null;
+    splitter = window.StreamBlocks.createStreamSplitter();
     aiEl = document.createElement('div');
     aiEl.className = 'ai-text' + (small ? ' small' : '');
     aiEl.dataset.raw = '';
     caretEl = document.createElement('span');
     caretEl.className = 'ai-caret';
     aiEl.appendChild(caretEl);
-    messages.appendChild(aiEl);
+    parent.appendChild(aiEl);
   }
 
-  // While an answer streams, its text is grouped into .w-para blocks split
-  // where the final markdown will split paragraphs and list items, so reading
-  // follow can track the user from the first sentence instead of waiting for
-  // the whole answer. finalizeAi replaces them with the rendered markdown.
-  let streamPara = null;
-  let streamWs = '';       // whitespace held until the next character decides a break
   function currentStreamPara() {
     if (!streamPara || streamPara.parentNode !== aiEl) {
       streamPara = document.createElement('div');
@@ -120,31 +120,15 @@
 
   function appendToken(t) {
     if (!aiEl) startAi(false);
-    // Blank lines inside a code fence are code, not a paragraph break.
-    let inFence = ((aiEl.dataset.raw.match(/```/g) || []).length % 2) === 1;
     aiEl.dataset.raw += t;
-    let text = '';
-    const flush = () => {
-      if (!text) return;
+    for (const piece of splitter.push(t)) {
+      if (piece.break) { streamPara = null; continue; }
       const span = document.createElement('span');
       span.className = 'w';
-      span.textContent = text;
+      span.textContent = piece.text;
       const para = currentStreamPara();
       para.insertBefore(span, caretEl && caretEl.parentNode === para ? caretEl : null);
-      text = '';
-    };
-    for (let i = 0; i < t.length; i++) {
-      const ch = t[i];
-      if (/\s/.test(ch)) { streamWs += ch; continue; }
-      if (t.startsWith('```', i)) inFence = !inFence;
-      const newlines = (streamWs.match(/\n/g) || []).length;
-      // A blank line, or a new line that opens a bullet or numbered item.
-      const newBlock = !inFence && streamPara && (newlines >= 2 || (newlines === 1 && /[-*•\d]/.test(ch)));
-      if (newBlock) { flush(); streamPara = null; } else { text += streamWs; }
-      streamWs = '';
-      text += ch;
     }
-    flush();
   }
 
   function finalizeAi() {
@@ -152,7 +136,7 @@
     const raw = aiEl.dataset.raw || '';
     aiEl.innerHTML = renderMarkdown(raw);
     aiEl.dataset.final = '1';
-    streamPara = null; streamWs = '';
+    streamPara = null; splitter = null;
     // Icon only, so the reading tracker (which reads each <pre>'s text) gains no words.
     aiEl.querySelectorAll('pre').forEach((pre) => {
       const b = document.createElement('button');
@@ -211,7 +195,7 @@
     function reset() {
       if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
       committed = []; interim = [];
-      trackedEl = null; trackedFinal = false; trackedText = -1; blocks = []; tokens = []; current = -1;
+      trackedEl = null; trackedFinal = false; trackedLen = -1; trackedRendered = false; blocks = []; tokens = []; current = -1;
     }
 
     // The newest answer, streaming or finished. Error bubbles are skipped so a
@@ -226,25 +210,26 @@
     // arrives; when it finishes, finalizeAi swaps them for rendered paragraphs
     // on the same element, so the finished flag is part of the identity check.
     let trackedFinal = false;
-    let trackedText = -1;
+    let trackedLen = -1;          // streamed text length the blocks were read at
+    let trackedRendered = false;  // blocks already read from the finished render
     function syncAnswer() {
       const el = latestAnswer();
       if (!el) return false;
       const final = el.dataset.final === '1';
       if (el !== trackedEl || final !== trackedFinal) {
-        trackedEl = el; trackedFinal = final; trackedText = -1;
+        trackedEl = el; trackedFinal = final; trackedLen = -1; trackedRendered = false;
         current = -1;
       }
       if (!final) {
         const len = (el.dataset.raw || '').length;
-        if (len !== trackedText) {
-          trackedText = len;
+        if (len !== trackedLen) {
+          trackedLen = len;
           blocks = Array.from(el.querySelectorAll(':scope > .w-para'));
           tokens = blocks.map((b) => tokenize(b.textContent));
         }
         if (!blocks.length) return false;
-      } else if (trackedText !== -2) {
-        trackedText = -2;
+      } else if (!trackedRendered) {
+        trackedRendered = true;
         blocks = Array.from(el.querySelectorAll(':scope > p, :scope > ul > li, :scope > pre'));
         if (!blocks.length) blocks = [el];
         tokens = blocks.map((b) => tokenize(b.textContent));
@@ -762,21 +747,21 @@
     await cue.settingsSet({ smart: settings.smart });
   });
 
-  // Answer length: short, medium, long. Same order as src/answer-length.js; the
-  // global shortcut cycles it in main and reports back with length:changed.
-  const LENGTH_ORDER = ['short', 'medium', 'long'];
+  // Answer length: short, medium, long (renderer/answer-length.js, shared with
+  // main). The global shortcut cycles it in main and reports back with length:changed.
+  const { normalizeLength, nextLength, LABELS: LENGTH_LABELS, DEFAULT_LENGTH } = window.AnswerLength;
   const lengthBtn = $('#length-toggle');
   function showLength(value, announce) {
-    const v = LENGTH_ORDER.includes(value) ? value : 'medium';
-    const label = v.charAt(0).toUpperCase() + v.slice(1);
+    const v = normalizeLength(value);
+    const label = LENGTH_LABELS[v];
     lengthBtn.querySelector('span').textContent = label;
-    lengthBtn.classList.toggle('on', v !== 'medium');
+    lengthBtn.classList.toggle('on', v !== DEFAULT_LENGTH);
     lengthBtn.title = 'Answer length: ' + label + (isWindows ? ' (Ctrl+Shift+.)' : ' (⌘⇧.)');
     if (announce) showToast(label + ' answers', 1400);
   }
   lengthBtn.addEventListener('click', async () => {
     if (!settings) return;
-    settings.answerLength = LENGTH_ORDER[(LENGTH_ORDER.indexOf(settings.answerLength) + 1) % LENGTH_ORDER.length];
+    settings.answerLength = nextLength(settings.answerLength);
     showLength(settings.answerLength, true);
     await cue.settingsSet({ answerLength: settings.answerLength });
   });
@@ -1357,14 +1342,7 @@
       pill.textContent = category.charAt(0).toUpperCase() + category.slice(1);
       group.appendChild(pill);
     }
-    aiEl = document.createElement('div');
-    aiEl.className = 'ai-text' + (small ? ' small' : '');
-    aiEl.dataset.raw = '';
-    streamPara = null; streamWs = '';
-    caretEl = document.createElement('span');
-    caretEl.className = 'ai-caret';
-    aiEl.appendChild(caretEl);
-    group.appendChild(aiEl);
+    startAi(small, group);
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
     // push the toolbar out of the window. requestAnimationFrame lets layout settle.
@@ -1378,6 +1356,13 @@
   cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
   cue.on('llm:done', () => { finalizeAi(); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
+    // Keep what already streamed (an opener the user may be saying aloud) and
+    // show the error as its own line under it.
+    if (aiEl && aiEl.dataset.raw.trim()) {
+      const parent = aiEl.parentNode;
+      finalizeAi();
+      startAi(true, parent);
+    }
     if (!aiEl) startAi(true);
     aiEl.dataset.error = '1'; // reading follow keeps tracking the last real answer
     aiEl.dataset.raw = message; finalizeAi(); setBusy(false);

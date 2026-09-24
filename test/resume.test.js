@@ -20,3 +20,14 @@ test('no double space when a piece already carries one', () => {
 test('icon-font bullets become plain dashes', () => {
   assert.equal(cleanPdfText('Skills\n Flutter\nDart\nend'), 'Skills\n- Flutter\n- Dart\nend');
 });
+
+test('plain text and Markdown files import as they are', async () => {
+  const fs = require('node:fs'); const os = require('node:os'); const path = require('node:path');
+  const { parseDocumentFile } = require('../src/resume');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cue-resume-'));
+  fs.writeFileSync(path.join(dir, 'cv.txt'), '  Smith Abiodun Osagie\nFlutter developer\n');
+  fs.writeFileSync(path.join(dir, 'cv.md'), '# Smith Abiodun Osagie\n');
+  assert.equal(await parseDocumentFile(path.join(dir, 'cv.txt')), 'Smith Abiodun Osagie\nFlutter developer');
+  assert.equal(await parseDocumentFile(path.join(dir, 'cv.md')), '# Smith Abiodun Osagie');
+  await assert.rejects(parseDocumentFile(path.join(dir, 'cv.rtf')), /PDF, DOCX, TXT or Markdown/);
+});

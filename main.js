@@ -9,7 +9,7 @@ const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
-const { nextLength, lengthRule, LABELS: LENGTH_LABELS } = require('./src/answer-length');
+const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -567,6 +567,7 @@ async function runFeature(mode, userText) {
   state.busy = true;
   // An answer that started before Clear must not write the old interview back.
   const memoryGeneration = interviewMemory.generation();
+  let opener = ''; // already shown and possibly said aloud, so kept even if the answer fails
   let streamSettled = false; // drop stray tokens from a stream we've already abandoned
   try {
     const settings = store.getSettings();
@@ -644,12 +645,12 @@ async function runFeature(mode, userText) {
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
-    const opener = openerPromise ? await openerPromise : '';
+    opener = openerPromise ? await openerPromise : '';
     const built = (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
       transcript,
       userText: userText || '',
       priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
-    }) + (OPENER_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
+    }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });
 
@@ -687,6 +688,7 @@ async function runFeature(mode, userText) {
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
   } catch (e) {
+    if (opener) interviewMemory.addAnswer({ mode, text: opener, generation: memoryGeneration });
     recordEvent({ level: 'error', event: 'llm_failed', msg: e && e.message ? e.message : String(e), frame: 'runFeature', context: { mode, provider: store.getSettings().provider } });
     const action = e && e.action ? e.action : null;
     send('llm:error', { message: e && e.message ? e.message : String(e), action });
@@ -983,11 +985,11 @@ ipcMain.on('permissions:continue', async () => {
 });
 
 // -------- shortcuts --------
-// Short, medium, long: applies to the next spoken answer.
+// A global key, so the length changes mid-interview without touching the panel.
 function cycleAnswerLength() {
   const answerLength = nextLength(store.getSettings().answerLength);
   store.setSettings({ answerLength });
-  send('length:changed', { answerLength, label: LENGTH_LABELS[answerLength] });
+  send('length:changed', { answerLength });
 }
 
 function registerShortcuts() {
