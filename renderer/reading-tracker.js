@@ -134,7 +134,39 @@
     return shared;
   }
 
-  const api = { tokenize, locate, isEcho, countShared };
+  // Reading pace: words per minute over the last PACE_WINDOW_MS of the user's
+  // speech while reading an answer. Speech arrives in bursts, so nothing is
+  // judged before PACE_MIN_SPAN_MS and two turns. Warns above PACE_FAST_WPM and
+  // clears only below PACE_OK_WPM, so the hint does not flicker at the edge.
+  const PACE_WINDOW_MS = 15000;
+  const PACE_MIN_SPAN_MS = 8000;
+  const PACE_FAST_WPM = 185;
+  const PACE_OK_WPM = 160;
+  function createPaceMonitor() {
+    let turns = []; // { ts, words }
+    let fast = false;
+    return {
+      add(text, ts) {
+        const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
+        if (words) turns.push({ ts, words });
+      },
+      // { wpm, fast } for now, or null when there is not enough speech to judge.
+      check(now) {
+        turns = turns.filter((t) => now - t.ts <= PACE_WINDOW_MS);
+        if (turns.length < 2) return null;
+        const span = now - turns[0].ts;
+        if (span < PACE_MIN_SPAN_MS) return null;
+        const words = turns.reduce((sum, t) => sum + t.words, 0);
+        const wpm = Math.round(words / (span / 60000));
+        if (wpm > PACE_FAST_WPM) fast = true;
+        else if (wpm < PACE_OK_WPM) fast = false;
+        return { wpm, fast };
+      },
+      reset() { turns = []; fast = false; }
+    };
+  }
+
+  const api = { tokenize, locate, isEcho, countShared, createPaceMonitor };
   if (typeof window !== 'undefined') window.ReadingTracker = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

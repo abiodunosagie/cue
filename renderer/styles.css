@@ -831,6 +831,15 @@ button:focus { outline: none; }
   opacity: 0; transition: opacity 160ms ease;
 }
 #speaker-label.show { opacity: 1; }
+/* Shown while the user reads an answer aloud too fast to sound natural. */
+#pace-hint {
+  position: absolute; top: 5px; left: 50%; transform: translateX(-50%); z-index: 4;
+  font-size: 12px; font-weight: 600; color: #fb923c; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity 160ms ease;
+}
+#pace-hint.show { opacity: 1; }
+/* The sentence (or, while streaming, the paragraph) being read aloud. */
+.ai-text .reading { background: rgba(250, 204, 21, 0.16); border-radius: 4px; box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.16); transition: background 180ms ease, box-shadow 180ms ease; }
 #speaker-label.them { color: #facc15; }
 #speaker-label.you  { color: var(--live); }
 .stt-loading      { color: #facc15; }
@@ -861,6 +870,7 @@ button:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   #panel, .user-bubble, .ai-text .w { animation: none !important; opacity: 1 !important; transform: none !important; }
   #live-dot { animation: none !important; }
+  .ai-text .reading, #pace-hint, #speaker-label { transition: none !important; }
 }
 
 /* ============================ Assistant access ============================ */

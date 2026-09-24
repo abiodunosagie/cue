@@ -131,10 +131,37 @@
     }
   }
 
+  // Wrap each sentence of a finished paragraph in <span class="sent">, so the
+  // one being read aloud can be highlighted. Inline markup (bold, code) moves
+  // into the span whole and the text itself is unchanged, so matching is too.
+  function wrapSentences(block) {
+    const spans = [];
+    let span = document.createElement('span');
+    span.className = 'sent';
+    const close = () => {
+      if (span.textContent.trim()) spans.push(span);
+      else if (spans.length) while (span.firstChild) spans[spans.length - 1].appendChild(span.firstChild);
+      span = document.createElement('span');
+      span.className = 'sent';
+    };
+    for (const node of Array.from(block.childNodes)) {
+      if (node.nodeType !== Node.TEXT_NODE) { span.appendChild(node); continue; }
+      // Keep the space after a sentence with that sentence.
+      const parts = node.textContent.split(/(?<=[.!?]["')\]]?\s+)/);
+      parts.forEach((part) => {
+        span.appendChild(document.createTextNode(part));
+        if (/[.!?]["')\]]?\s+$/.test(part)) close();
+      });
+    }
+    close();
+    block.replaceChildren(...spans);
+  }
+
   function finalizeAi() {
     if (!aiEl) return;
     const raw = aiEl.dataset.raw || '';
     aiEl.innerHTML = renderMarkdown(raw);
+    aiEl.querySelectorAll(':scope > p, :scope > ul > li').forEach(wrapSentences);
     aiEl.dataset.final = '1';
     streamPara = null; splitter = null;
     // Icon only, so the reading tracker (which reads each <pre>'s text) gains no words.
@@ -192,8 +219,37 @@
     let pausedUntil = 0;
     let pendingFrame = 0;
 
+    // The line being read: the sentence when the answer has finished (its
+    // sentences are wrapped), else the whole paragraph while it streams.
+    let highlighted = null;
+    function highlight(found) {
+      const block = blocks[found.index];
+      let target = block;
+      const sentences = block && block.querySelectorAll ? block.querySelectorAll(':scope > .sent') : [];
+      if (sentences.length) {
+        // Place the reading point by the share of the paragraph's words already read.
+        const counts = Array.from(sentences, (s) => Math.max(1, tokenize(s.textContent).length));
+        const total = counts.reduce((a, b) => a + b, 0);
+        let reach = found.progress * total;
+        target = sentences[sentences.length - 1];
+        for (let i = 0; i < sentences.length; i++) {
+          if (reach <= counts[i]) { target = sentences[i]; break; }
+          reach -= counts[i];
+        }
+      }
+      if (target === highlighted) return;
+      if (highlighted) highlighted.classList.remove('reading');
+      if (target && target !== trackedEl) target.classList.add('reading');
+      highlighted = target !== trackedEl ? target : null;
+    }
+    function clearHighlight() {
+      if (highlighted) highlighted.classList.remove('reading');
+      highlighted = null;
+    }
+
     function reset() {
       if (pendingFrame) { cancelAnimationFrame(pendingFrame); pendingFrame = 0; }
+      clearHighlight();
       committed = []; interim = [];
       trackedEl = null; trackedFinal = false; trackedLen = -1; trackedRendered = false; blocks = []; tokens = []; current = -1;
     }
@@ -219,6 +275,7 @@
       if (el !== trackedEl || final !== trackedFinal) {
         trackedEl = el; trackedFinal = final; trackedLen = -1; trackedRendered = false;
         current = -1;
+        clearHighlight();
       }
       if (!final) {
         const len = (el.dataset.raw || '').length;
@@ -253,6 +310,7 @@
       const found = locate(tokens, committed.concat(interim), current);
       if (!found) return note('no-match');
       current = found.index;
+      highlight(found);
       const block = blocks[found.index];
       const viewTop = messages.getBoundingClientRect().top;
       const rect = block.getBoundingClientRect();
@@ -289,6 +347,31 @@
     }
 
     return { reset, update, onSpeech, isReading };
+  })();
+
+  // Reading pace: while the user reads an answer aloud, a small "Slow down"
+  // hint shows when they go fast enough to sound scripted.
+  const paceHint = (() => {
+    const monitor = window.ReadingTracker.createPaceMonitor();
+    let hideTimer = null;
+    function show(fast) {
+      const el = document.getElementById('pace-hint');
+      if (!el) return;
+      el.classList.toggle('show', fast);
+    }
+    return {
+      onSpeech(text) {
+        if (!readingFollow.isReading(text)) return; // answering in their own words: no pace check
+        const now = Date.now();
+        monitor.add(text, now);
+        const result = monitor.check(now);
+        if (result) show(result.fast);
+        // Silence ends the warning: they paused, which is the point.
+        clearTimeout(hideTimer);
+        hideTimer = setTimeout(() => { monitor.reset(); show(false); }, 6000);
+      },
+      reset() { monitor.reset(); show(false); clearTimeout(hideTimer); }
+    };
   })();
 
   // ---- transcript helpers ------------------------------------------------
@@ -1318,6 +1401,7 @@
   });
   cue.on('llm:start', ({ userBubble, small, category }) => {
     readingFollow.reset();
+    paceHint.reset();
     responseCount++;
     if (responseCount > MAX_RESPONSES) {
       const oldest = messages.querySelector('.response-group');
@@ -1387,6 +1471,7 @@
     // the user talking, so it must not feed reading-follow or cancel the answer.
     if (isInterviewerEcho(channel, text)) return;
     if (channel === 'you') readingFollow.onSpeech(text, true);
+    if (channel === 'you') paceHint.onSpeech(text);
     // Auto-fill the input box with Them (interviewer) speech
     if (channel === 'them') {
       cancelSoftClear(); // Interviewer is speaking, cancel any pending clear
