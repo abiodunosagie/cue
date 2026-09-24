@@ -1730,22 +1730,22 @@
     }
   }
 
-  const uploadResumeBtn = document.getElementById('upload-resume-btn');
-  if (uploadResumeBtn) uploadResumeBtn.addEventListener('click', async () => {
-    const res = await cue.pickProfileDocument();
-    if (!res || res.canceled) return;
-    if (res.error) { showStatus('Resume import failed: ' + res.error); return; }
-    $('#resume-text').value = res.text || '';
-    showStatus('Imported ' + res.fileName + ' — press Save to keep it.');
-  });
-  const uploadJdBtn = document.getElementById('upload-jd-btn');
-  if (uploadJdBtn) uploadJdBtn.addEventListener('click', async () => {
-    const res = await cue.pickProfileDocument();
-    if (!res || res.canceled) return;
-    if (res.error) { showStatus('Job description import failed: ' + res.error); return; }
-    $('#job-description').value = res.text || '';
-    showStatus('Imported ' + res.fileName + ' — press Save to keep it.');
-  });
+  // Resume, job description and stories share one import: a file becomes the
+  // textarea's text, and Save keeps it like anything typed.
+  function wireImport(buttonId, textareaId, what) {
+    const btn = document.getElementById(buttonId);
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      const res = await cue.pickProfileDocument();
+      if (!res || res.canceled) return;
+      if (res.error) { showStatus(what + ' import failed: ' + res.error); return; }
+      $('#' + textareaId).value = res.text || '';
+      showStatus('Imported ' + res.fileName + '. Press Save to keep it.');
+    });
+  }
+  wireImport('upload-resume-btn', 'resume-text', 'Resume');
+  wireImport('upload-jd-btn', 'job-description', 'Job description');
+  wireImport('upload-stories-btn', 'star-stories', 'Stories');
 
   function statusText() {
     const k = settings.apiKeys;

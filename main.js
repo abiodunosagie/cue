@@ -953,7 +953,7 @@ ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
 async function pickAndParseDocument() {
   const res = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
-    filters: [{ name: 'Resume / Job description', extensions: ['pdf', 'docx', 'txt', 'md'] }]
+    filters: [{ name: 'Resume, job description or stories', extensions: ['pdf', 'docx', 'txt', 'md'] }]
   });
   if (res.canceled || !res.filePaths.length) return null;
   const filePath = res.filePaths[0];
