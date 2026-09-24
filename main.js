@@ -8,6 +8,7 @@ const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
+const { runSetupChecks } = require('./src/setup-check');
 const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
@@ -843,6 +844,29 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
+// Test my setup: real calls, one after another, each result sent as it lands.
+let setupTestRunning = false;
+ipcMain.handle('setup:test', async () => {
+  if (setupTestRunning) return { busy: true };
+  setupTestRunning = true;
+  try {
+    const settings = () => store.getSettings();
+    return await runSetupChecks({
+      llmFor: (tier) => (tier === 'coding' ? createLLM(settings(), { tier: 'coding' }) : createLLM({ ...settings(), smart: tier === 'smart' })),
+      quickAsk,
+      runOpener,
+      preparedState,
+      mediaStatus: (type) => (isMac ? systemPreferences.getMediaAccessStatus(type) : 'granted'),
+      captureScreen: () => captureMaskedScreen(cueWindowBounds()),
+      detectSystem: DETECT_SYSTEM,
+      elevenLabsKey: () => (settings().apiKeys || {}).elevenlabs || '',
+      practiceVoice: () => settings().practiceVoice,
+      synthesize
+    }, (result) => send('setup:result', result));
+  } finally {
+    setupTestRunning = false;
+  }
+});
 ipcMain.handle('practice:start', () => practice.start());
 ipcMain.handle('practice:next', () => practice.next());
 ipcMain.handle('practice:end', () => practice.end());

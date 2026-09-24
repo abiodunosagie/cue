@@ -1863,6 +1863,35 @@
   if (preparedRunBtn) preparedRunBtn.addEventListener('click', async () => { showPrepared(await cue.preparedRun()); });
   cue.on('prepared:state', showPrepared);
 
+  // ---- test my setup ----
+  const setupResults = document.getElementById('setup-test-results');
+  const setupStatus = document.getElementById('setup-test-status');
+  const SETUP_WORDS = { pass: 'Pass', fail: 'Fail', skip: 'Skipped' };
+  cue.on('setup:result', ({ name, status, detail }) => {
+    const li = document.createElement('li');
+    li.className = status;
+    const word = document.createElement('b');
+    word.textContent = SETUP_WORDS[status] || status;
+    li.appendChild(word);
+    li.appendChild(document.createTextNode(name + (detail ? ': ' + detail : '')));
+    setupResults.appendChild(li);
+  });
+  document.getElementById('setup-test-btn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    await saveSettings(); // test what is typed now, not the last saved values
+    setupResults.replaceChildren();
+    btn.disabled = true;
+    setupStatus.textContent = 'Testing, about 20 seconds…';
+    try {
+      const results = await cue.setupTest();
+      if (results && results.busy) { setupStatus.textContent = 'A test is already running.'; return; }
+      const fails = (results || []).filter((r) => r.status === 'fail').length;
+      setupStatus.textContent = fails ? fails + (fails === 1 ? ' check failed. Fix it before the interview.' : ' checks failed. Fix them before the interview.') : 'Everything cue needs works.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // ---- practice interview ----
   const practiceBar = document.getElementById('practice-bar');
   let practiceAudio = null;
