@@ -303,8 +303,8 @@ const ADAPTIVE_THINKING_MODEL = /^claude-(opus-4-[6-9]|opus-5|sonnet-4-6|sonnet-
 
 // Fast mode is a research preview with its own rate limit. Once a key is
 // refused, skip fast mode for that key instead of paying a wasted round trip on
-// every solve: a 403 (no access) until restart, a 429 (rate limit, which can
-// clear) for ten minutes. Keyed by hash, so no extra copy of a key sits in
+// every solve: a 403, or a 429 saying the limit is 0 (no access), until
+// restart; any other 429 (a rate limit, which can clear) for ten minutes. Keyed by hash, so no extra copy of a key sits in
 // memory, and a new key in Settings gets its own chance.
 const FAST_MODE_RATE_LIMIT_PAUSE_MS = 10 * 60 * 1000;
 const fastModePausedUntil = new Map();
@@ -379,11 +379,13 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
       if (emitted || i === stages.length - 1) throw error;
       const stage = stages[i];
       const fastRefused = !!(stage && stage.fast && error && (error.status === 429 || error.status === 403));
-      if (fastRefused) fastModePausedUntil.set(keyId(apiKey), error.status === 403 ? Infinity : Date.now() + FAST_MODE_RATE_LIMIT_PAUSE_MS);
+      // A 429 that says the limit is 0 means the account has no fast mode at all, like a 403.
+      const noFastMode = fastRefused && (error.status === 403 || /limit of 0 fast mode/i.test(String(error.message || '')));
+      if (fastRefused) fastModePausedUntil.set(keyId(apiKey), noFastMode ? Infinity : Date.now() + FAST_MODE_RATE_LIMIT_PAUSE_MS);
       const reason = (error && (error.status || error.code)) || 'no status';
       const message = hideKey(error && error.message ? error.message : String(error), apiKey).slice(0, 200);
       const next = stages[i + 1];
-      console.log(`[timing] coding stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastRefused ? (error.status === 403 ? ', fast mode off for this key until restart' : ', fast mode paused for 10 minutes') : ''}`);
+      console.log(`[timing] coding stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastRefused ? (noFastMode ? ', fast mode not on this account, off until restart' : ', fast mode paused for 10 minutes') : ''}`);
     }
   }
 }

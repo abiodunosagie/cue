@@ -361,7 +361,13 @@
           <output id="panel-opacity-value" for="panel-opacity">90%</output>
         </div>
 
-        <label class="s-label" style="margin-top:14px;">Coding speed <span class="s-hint">for ⌘H solves on Claude: Fastest starts in seconds, Most careful thinks longer first</span></label>
+        <label class="s-label" style="margin-top:14px;">Quick start <span class="s-hint">for ⌘H: your Smart model writes the first part within seconds, then the Coding model continues below it with the same names</span></label>
+        <div class="s-seg" id="quick-start-seg">
+          <button data-quick-start="on">On</button>
+          <button data-quick-start="off">Off</button>
+        </div>
+
+        <label class="s-label" style="margin-top:14px;">Coding speed <span class="s-hint">for ⌘H solves on Claude: Fastest thinks least before writing, Most careful thinks longest</span></label>
         <div class="s-seg" id="coding-speed-seg">
           <button data-coding-speed="fastest">Fastest</button>
           <button data-coding-speed="balanced">Balanced</button>

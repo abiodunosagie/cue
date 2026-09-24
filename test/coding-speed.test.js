@@ -37,7 +37,7 @@ function fakeSdk(refusals) {
             thinking.push(request.thinking && request.thinking.display);
             retries.push(options.maxRetries);
             const status = refusals[calls.length - 1];
-            if (status) throw Object.assign(new Error('refused'), { status });
+            if (status) throw Object.assign(new Error(typeof status === 'object' ? status.message : 'refused'), { status: typeof status === 'object' ? status.status : status });
             return (async function* () {
               yield { type: 'message_start' };
               yield { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'Planning.' } };
@@ -147,4 +147,16 @@ test('a 429 pauses fast mode for a while; a 403 turns it off', async () => {
 
 test('the thinking summary is only asked of models that take adaptive thinking', () => {
   assert.deepEqual(codingSpeedOptions('claude-opus-4-5', 'fastest'), { effort: 'low' });
+});
+
+test('a 429 saying the fast mode limit is 0 turns fast mode off like a 403', async () => {
+  const realNow = Date.now;
+  try {
+    fakeSdk([{ status: 429, message: "429 This request would exceed your organization's rate limit of 0 fast mode input tokens per minute" }]);
+    await solve({ effort: 'low', summarize: true, fast: true });
+    Date.now = () => realNow() + 24 * 60 * 60 * 1000;
+    assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest', 'k').fast, undefined);
+  } finally {
+    Date.now = realNow;
+  }
 });

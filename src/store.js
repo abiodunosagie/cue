@@ -79,6 +79,7 @@ const DEFAULTS = {
   profiles: {},
   activeProfile: '',
   companyNotes: '',         // facts from the company website (src/company-research.js), per profile
+  codingQuickStart: true,  // Cmd+H: the Smart model writes the first part within seconds, then the Coding model continues
   codingSpeed: 'fastest',   // coding solves: fastest | balanced | careful (src/llm.js CODING_SPEEDS)
   codeArchitecture: 'clean', // how build tasks organise folders: clean | mvvm | simple (src/prompts.js)
   sttWords: '',             // words the speech service should expect (src/vocab.js)

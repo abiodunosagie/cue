@@ -453,9 +453,64 @@ const MODES = {
       const earlier = prior.length
         ? 'Earlier solves in this session, oldest first, for context only:\n\n' + prior.map((p, i) => '--- Solve ' + (i + 1) + ' ---\n' + p).join('\n\n') + '\n\n'
         : '';
-      return earlier + architectureNote(ctx && ctx.architecture) + 'Solve the coding problem shown in the screenshot.';
+      if (ctx && ctx.quickStart === 'plan') return earlier + architectureNote(ctx.architecture) + QUICK_START_REQUEST;
+      const quick = ctx && ctx.quickPlan ? continuationRequest(ctx.quickPlan) : '';
+      return earlier + architectureNote(ctx && ctx.architecture) + quick + 'Solve the coding problem shown in the screenshot.';
+    }
+  },
+
+  // Fix my code (Ctrl+Option+Cmd+F, or typed help with an error): read the
+  // error on screen and give the fixed file at once, against the latest plan.
+  fixCode: {
+    codingFollowUp: true, // see explainCode
+    skipMemory: true,
+    notAnswer: true,      // a fix for the candidate, not something said in the interview
+    needsScreen: true,
+    userBubble: 'Fixing the error on screen',
+    small: false,
+    buildSystem(_contextBlock, aiRules) {
+      return applyRules(
+        'You are cue, fixing an error in a candidate\'s code in the middle of a live coding task. ' + BASE_RULES +
+        'You get the plan cue gave them (when there is one) and a screenshot of their editor now. ' +
+        'Find the error on screen: a red underline, a problems panel, a terminal, test or run output, or the error the candidate describes. ' +
+        'Find its real cause, not just the line it points at. An import or name that cannot be found usually means the file or class was never created: ' +
+        'then the fix is to create it, never only another import line.\n\n' +
+        'Answer in this order:\n' +
+        '**The error:** one plain sentence saying what it means and its cause, naming the file and line.\n' +
+        '**The fix:** each file to change or create: a bold line with its full path, then the whole corrected file in one fenced block tagged with its language, ' +
+        'ready to paste over the old one, then **Say:** one sentence the candidate can say while fixing it.\n' +
+        '**Then:** one plain sentence on what to run or check next.\n\n' +
+        'When no error is visible, say so in one sentence and name where to look (the problems panel or the terminal). ' +
+        'Never invent a problem. Code goes only inside fenced blocks, never in inline backticks. No markdown headings.',
+        aiRules, 'fixCode');
+    },
+    build(ctx) {
+      const plan = (ctx.priorSolves || [])[0] || '';
+      const said = String(ctx.userText || '').trim();
+      return (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : '') +
+        (said ? 'What I see, in my words: ' + said + '\n\n' : '') +
+        'Fix the error on my screen.';
     }
   }
 };
+
+// Quick start: a faster model writes only the first part of a coding answer,
+// so the candidate has something to read and say within seconds. The strong
+// model then continues from it (continuationRequest), keeping its names.
+const QUICK_START_REQUEST =
+  'QUICK START: write only the first part of the format, and keep it short, so the candidate can start within seconds. ' +
+  'A stronger model continues right after you, so stop where this says and never write the rest.\n' +
+  '• SMALL TASK: only **What it asks:** and **The idea:**, then one **Say:** line.\n' +
+  '• BUILD TASK: only **What it asks:** (one sentence), **Folders and files:** (the tree and its Say line) and **Files to create:**. No steps and no code files.\n' +
+  '• DESIGN TASK: only the clarifying questions, then a short outline of the layers with one Say line.\n' +
+  'Solve the coding problem shown in the screenshot.';
+
+function continuationRequest(quickPlan) {
+  return 'The candidate already has this quick start on screen, written by a faster model, and may be reading it aloud:\n' +
+    '<quick_start>\n' + quickPlan + '\n</quick_start>\n\n' +
+    'Continue from where it stops: do not repeat any section it already has. Keep its folder, file and class names exactly, ' +
+    'so what the candidate has read stays true. If something in it is wrong, start with **Correction:** one plain sentence on what to change, then continue. ' +
+    'Then write every remaining section of the format.\n\n';
+}
 
 module.exports = { MODES, formatTranscript, turnsSentByBuild, ARCHITECTURES, DEFAULT_ARCHITECTURE };

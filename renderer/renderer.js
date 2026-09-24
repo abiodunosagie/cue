@@ -203,6 +203,7 @@
 
   function appendToken(t) {
     if (!aiEl) startAi(false);
+    if (aiEl.dataset.section === 'full' && !aiEl.dataset.raw) showToast(isMac ? 'Full solution is here, below the quick start (Ctrl+Option+⌘D scrolls)' : 'Full solution is here, below the quick start (Ctrl+Alt+Shift+D scrolls)', 3200);
     const wait = aiEl.querySelector('.ai-wait');
     if (wait) wait.remove();
     aiEl.dataset.raw += t;
@@ -296,22 +297,25 @@
     const row = document.createElement('div');
     row.className = 'coding-actions';
     const key = (letter) => (isWindows ? 'Ctrl+Shift+' + letter : '⌘⇧' + letter);
-    for (const [label, letter, mode] of [['Explain this code', 'E', 'explainCode'], ['Check my progress', 'C', 'checkProgress']]) {
+    const fixKey = isMac ? 'Ctrl+Option+⌘F' : 'Ctrl+Alt+Shift+F';
+    for (const [label, shortcut, mode] of [['Explain this code', key('E'), 'explainCode'], ['Check my progress', key('C'), 'checkProgress'], ['Fix my code', fixKey, 'fixCode']]) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'coding-action';
-      b.textContent = label + ' (' + key(letter) + ')';
+      b.textContent = label + ' (' + shortcut + ')';
       b.addEventListener('click', () => runMode(mode));
       row.appendChild(b);
     }
     el.appendChild(row);
   }
 
-  // Failsafe: main's stream watchdog (25s between tokens, 45s for coding solves) always
-  // sends llm:done/llm:error, but if a terminal event is ever lost the whole UI stays
-  // frozen. Rearmed on every token, like main's watchdog, so a long answer that is still
-  // streaming never unlocks the UI while main is still busy and would drop the next question.
-  const BUSY_FAILSAFE_MS = 60000;
+  // Failsafe: main's stream watchdog (25s between tokens; for coding solves 45s,
+  // or 120s of silence before the first word) always sends llm:done/llm:error, but
+  // if a terminal event is ever lost the whole UI stays frozen. Rearmed on every
+  // token and thinking line, like main's watchdog, and longer than its longest
+  // limit, so a solve that is still working never unlocks the UI while main is
+  // still busy and would drop the next question.
+  const BUSY_FAILSAFE_MS = 150000;
   let busyFailsafe = null;
   function armBusyFailsafe() {
     clearTimeout(busyFailsafe);
@@ -1006,7 +1010,7 @@
   // Keyboard scrolling of the answers (Ctrl+Option+Cmd with U or D): most of a
   // screen at a time, keeping a line of the old view for context.
   cue.on('code:copy', copyCodeInView);
-  cue.on('llm:thinking', ({ text }) => appendThinking(text));
+  cue.on('llm:thinking', ({ text }) => { if (busy) armBusyFailsafe(); appendThinking(text); });
   cue.on('answer:scroll', ({ direction }) => {
     const step = Math.max(80, messages.clientHeight * 0.8) * (direction === 'up' ? -1 : 1);
     messages.scrollBy({ top: step, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -1606,6 +1610,28 @@
     group.insertBefore(pill, aiEl);
   });
   cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
+  // The quick start is done and the full solution follows in the same answer:
+  // close the quick part (its code and copy buttons render), label the next
+  // part, and show the wait note again while the Coding model thinks.
+  cue.on('llm:section', ({ label }) => {
+    if (!aiEl) return;
+    const group = aiEl.parentNode;
+    const quickEl = aiEl;
+    finalizeAi();
+    quickEl.dataset.quick = '1';
+    const pill = document.createElement('div');
+    pill.className = 'prepared-pill section-pill';
+    pill.textContent = label;
+    group.appendChild(pill);
+    startAi(false, group);
+    if (quickEl.dataset.coding === '1') { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
+    showWaitNote(aiEl);
+    // A coding answer never scrolls on its own, so the full part may start out
+    // of view: say where it is, once now and once when its first words land.
+    aiEl.dataset.section = 'full';
+    showToast('Quick start ready. The full solution comes in below it.', 2600);
+    if (busy) armBusyFailsafe();
+  });
   cue.on('llm:done', () => { const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
     // Keep what already streamed (an opener the user may be saying aloud) and
@@ -1940,6 +1966,9 @@
     document.querySelectorAll('#coding-speed-seg button').forEach((button) => {
       button.classList.toggle('on', button.dataset.codingSpeed === (settings.codingSpeed || 'fastest'));
     });
+    document.querySelectorAll('#quick-start-seg button').forEach((button) => {
+      button.classList.toggle('on', button.dataset.quickStart === (settings.codingQuickStart === false ? 'off' : 'on'));
+    });
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -2253,6 +2282,11 @@
     document.querySelectorAll('#auto-answer-seg button').forEach((candidate) => {
       candidate.classList.toggle('on', candidate === button);
     });
+  }));
+
+  document.querySelectorAll('#quick-start-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.codingQuickStart = button.dataset.quickStart === 'on';
+    document.querySelectorAll('#quick-start-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
   }));
 
   document.querySelectorAll('#coding-speed-seg button').forEach((button) => button.addEventListener('click', () => {

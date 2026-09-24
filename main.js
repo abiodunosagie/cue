@@ -51,7 +51,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, fixCode: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -716,10 +716,22 @@ async function prepareFollowUps(question, answer, generation) {
 // The earlier coding solves a mode builds on: the last two for a new solve,
 // and for explainCode and checkProgress the one being explained or checked
 // (the newest, even after the round).
+// The model for a coding quick start: the Smart model, run as a coding solve
+// (so it gets the coding speed options), or null when there is no separate,
+// ready Smart model or the setting is off. Only Cmd+H solves get one.
+function quickStartLlm(mode, settings, codingLlm) {
+  if (mode !== 'leetcode' || settings.codingQuickStart === false) return null;
+  const smart = createLLM({ ...settings, smart: true });
+  if (!smart.ready || !smart.model || smart.model === codingLlm.model) return null;
+  const models = settings.models || {};
+  const quick = createLLM({ ...settings, models: { ...models, [settings.provider]: { ...(models[settings.provider] || {}), coding: smart.model } } }, { tier: 'coding' });
+  return quick.ready ? quick : null;
+}
+
 function priorSolvesFor(def, mode) {
   if (def.tier === 'coding') return interviewMemory.codingHistory();
   // The whole solve: a progress check needs the plan's later steps, not its first few thousand characters.
-  if (mode === 'explainCode' || mode === 'checkProgress') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
+  if (mode === 'explainCode' || mode === 'checkProgress' || mode === 'fixCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
   return [];
 }
 
@@ -736,7 +748,7 @@ async function runFeature(mode, userText, options = {}) {
   }
   // The candidate typing about an error in the code they are writing: read the
   // editor and the error on screen against the plan, instead of guessing.
-  if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'checkProgress';
+  if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'fixCode';
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -853,46 +865,85 @@ async function runFeature(mode, userText, options = {}) {
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });
 
-    // Watchdog: a provider that stalls mid-stream would otherwise hang the await forever,
-    // leaving state.busy = true and wedging every later question until an app restart.
-    let watchdog = null;
-    let rearm = () => {};
-    let streamedAny = false;
-    let thinkingShown = false;
-    const stalled = new Promise((_res, reject) => {
-      rearm = () => {
+    // One model stream under its own watchdog: a provider that stalls would
+    // otherwise hang the await forever, leaving state.busy = true and wedging
+    // every later question until an app restart. `stage` names it in the log.
+    const runStream = async (streamLlm, streamSystem, userTurn, stage) => {
+      let watchdog = null;
+      let rearm = () => {};
+      let settled = false;
+      let streamedAny = false;
+      let thinkingShown = false;
+      const stalled = new Promise((_res, reject) => {
+        rearm = () => {
+          clearTimeout(watchdog);
+          const limit = def.tier !== 'coding' ? STREAM_INACTIVITY_MS
+            : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_WORD_SILENCE_MS;
+          watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), limit);
+        };
+        rearm();
+      });
+      const live = () => !settled && !streamSettled;
+      try {
+        return await Promise.race([
+          streamLlm.stream({
+            system: streamSystem,
+            turns: [{ role: 'user', text: userTurn }],
+            imageDataUrl,
+            onToken: (t) => {
+              if (!live()) return;
+              if (!streamedAny && stage) console.log(`[timing] ${mode}: ${stage} first word after ${Date.now() - startedAt}ms (${streamLlm.model})`);
+              firstWord(streamLlm.model); streamedAny = true; rearm(); send('llm:token', { text: t });
+            },
+            // Anthropic only: any stream event (thinking included) keeps the watchdog
+            // from killing a request that is working; the thinking summary shows in the wait note.
+            onActivity: () => { if (live()) rearm(); },
+            onThinking: (t) => {
+              if (!live() || streamedAny) return;
+              if (!thinkingShown) { thinkingShown = true; console.log(`[timing] ${mode}: ${stage ? stage + ' ' : ''}thinking started after ${Date.now() - startedAt}ms (${streamLlm.model})`); }
+              send('llm:thinking', { text: t });
+            },
+            onResponse: settings.provider === publik.PUBLIK_PROVIDER ? (res) => publikNoteHeaders(res && res.headers) : undefined
+          }),
+          stalled
+        ]);
+      } finally {
+        settled = true;
         clearTimeout(watchdog);
-        const limit = def.tier !== 'coding' ? STREAM_INACTIVITY_MS
-          : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_WORD_SILENCE_MS;
-        watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), limit);
-      };
-      rearm();
-    });
+      }
+    };
+
+    // Quick start (Cmd+H only): the Smart model writes the first part of the
+    // answer in seconds, then the Coding model continues below it with the same
+    // names, so what the candidate already read or typed stays true.
+    let quickPlan = '';
+    const quick = quickStartLlm(mode, settings, llm);
+    if (quick) {
+      const quickBuilt = def.build({ transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), quickStart: 'plan' });
+      try {
+        quickPlan = (await runStream(quick, system, quickBuilt, 'quick start')).trim();
+      } catch (e) {
+        // The full answer still comes; the quick start is only a head start.
+        console.log(`[timing] ${mode}: quick start failed after ${Date.now() - startedAt}ms (${quick.model}): ${e && e.message ? e.message : String(e)}`);
+      }
+      if (quickPlan) send('llm:section', { label: 'Full solution' });
+    }
+    const fullBuilt = quickPlan
+      ? (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
+        transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), quickPlan
+      })
+      : built;
     let answer = '';
     try {
-      answer = await Promise.race([
-        llm.stream({
-          system,
-          turns: [{ role: 'user', text: built }],
-          imageDataUrl,
-          onToken: (t) => { if (streamSettled) return; firstWord(llm.model); streamedAny = true; rearm(); send('llm:token', { text: t }); },
-          // Anthropic only: any stream event (thinking included) keeps the watchdog
-          // from killing a request that is working; the thinking summary shows in the wait note.
-          onActivity: () => { if (!streamSettled) rearm(); },
-          onThinking: (t) => {
-            if (streamSettled || streamedAny) return;
-            if (!thinkingShown) { thinkingShown = true; console.log(`[timing] ${mode}: thinking started after ${Date.now() - startedAt}ms (${llm.model})`); }
-            send('llm:thinking', { text: t });
-          },
-          onResponse: settings.provider === publik.PUBLIK_PROVIDER ? (res) => publikNoteHeaders(res && res.headers) : undefined
-        }),
-        stalled
-      ]);
-    } finally {
-      streamSettled = true;
-      clearTimeout(watchdog);
+      answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');
+    } catch (e) {
+      // The quick start is on screen and may already be typed: keep it for Check and Explain.
+      if (quickPlan && !def.notAnswer) interviewMemory.addAnswer({ mode, text: quickPlan, generation: memoryGeneration });
+      throw e;
     }
     send('llm:done', {});
+    // Quick start and full solution are one plan to later progress checks.
+    if (quickPlan) answer = quickPlan + '\n\n' + answer;
     if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration });
     // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
     if (LENGTH_MODES.has(mode)) prepareFollowUps(openerQuestion(mode, userText, transcript), (opener ? opener + ' ' : '') + answer, memoryGeneration);
@@ -1282,6 +1333,8 @@ function registerShortcuts() {
   shortcutState.scrollUp = globalShortcut.register(moveMods + 'U', () => send('answer:scroll', { direction: 'up' }));
   shortcutState.scrollDown = globalShortcut.register(moveMods + 'D', () => send('answer:scroll', { direction: 'down' }));
   shortcutState.copyCode = globalShortcut.register(moveMods + 'C', () => send('code:copy'));
+  // F for fix: read the error on screen and give the fixed file at once.
+  shortcutState.fixCode = globalShortcut.register(moveMods + 'F', () => runFeature('fixCode', ''));
   // C for check: what is done on screen, anything wrong, and the next step.
   shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {

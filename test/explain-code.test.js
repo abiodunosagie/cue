@@ -102,3 +102,24 @@ test('a progress check carries what the candidate typed and looks for files neve
 test('a build task writes anything the task names but does not show', () => {
   assert.match(MODES.leetcode.buildSystem('', ''), /names but does not show[\s\S]*small working fake/);
 });
+
+test('a coding quick start asks only for the first part; the full solve continues from it', () => {
+  const quick = MODES.leetcode.build({ priorSolves: [], quickStart: 'plan' });
+  assert.match(quick, /QUICK START/);
+  assert.match(quick, /BUILD TASK: only \*\*What it asks:\*\*.*\*\*Files to create:\*\*\. No steps/);
+  const full = MODES.leetcode.build({ priorSolves: [], quickPlan: '**Files to create:** lib/data/contacts_repository.dart' });
+  assert.match(full, /<quick_start>\n\*\*Files to create:\*\* lib\/data\/contacts_repository\.dart\n<\/quick_start>/);
+  assert.match(full, /do not repeat any section it already has/);
+  assert.doesNotMatch(MODES.leetcode.build({ priorSolves: [] }), /quick_start|QUICK START/);
+});
+
+test('fix my code reads the error on screen against the plan and gives whole files', () => {
+  const def = MODES.fixCode;
+  assert.equal(def.needsScreen, true);
+  assert.equal(def.notAnswer, true);
+  const prompt = def.build({ priorSolves: ['PLAN'], userText: 'it cannot find ContactsRepository' });
+  assert.match(prompt, /The plan cue gave for this task:\n\nPLAN/);
+  assert.match(prompt, /What I see, in my words: it cannot find ContactsRepository/);
+  assert.match(def.buildSystem('', ''), /never created: then the fix is to create it/);
+  assert.match(def.buildSystem('', ''), /the whole corrected file in one fenced block/);
+});
