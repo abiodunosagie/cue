@@ -100,7 +100,8 @@ test('coding answers ask for complete fenced code, never inline code', () => {
 
 test('coding solves see earlier solves from this interview, and design tasks get their own format', () => {
   const plain = MODES.leetcode.build({});
-  assert.equal(plain, 'Solve the coding problem shown in the screenshot.');
+  assert.match(plain, /Solve the coding problem shown in the screenshot\.$/);
+  assert.doesNotMatch(plain, /Earlier solves/);
   const withPrior = MODES.leetcode.build({ priorSolves: ['auth guard in routes.ts'] });
   assert.match(withPrior, /Earlier solves in this session[\s\S]*auth guard in routes\.ts[\s\S]*Solve the coding problem/);
   const system = MODES.leetcode.buildSystem(null);
@@ -172,11 +173,6 @@ test('a small coding task is taught step by step in plain words, with a walk-thr
   assert.doesNotMatch(system, /two-line approach/);
 });
 
-test('a build task starts with every file to create, before the steps', () => {
-  const system = MODES.leetcode.buildSystem('', '');
-  assert.match(system, /BUILD TASK[^•]*\*\*Files to create:\*\* a bulleted list of every file path/);
-});
-
 test('every coding answer says how to run it', () => {
   const system = MODES.leetcode.buildSystem('', '');
   const small = system.slice(system.indexOf('SMALL TASK'), system.indexOf('DESIGN TASK'));
@@ -193,12 +189,25 @@ test('coding Say lines follow each code block and explain what it does and why',
   assert.match(system, /say what those lines do and why/);
 });
 
-test('a build task is ordered so nothing is used before the step that writes it', () => {
+test('a build task shows its folders, then builds file by file with nothing used before it is written', () => {
   const system = MODES.leetcode.buildSystem('', '');
   const build = system.slice(system.indexOf('BUILD TASK'), system.indexOf('**Say:** lines are'));
-  assert.match(build, /in exactly the order the steps below write them/);
-  assert.match(build, /dependency order, bottom up: data models first.*then state.*then screens and widgets, then the wiring/s);
-  assert.match(build, /Never import or use anything that an earlier step has not already written in full/);
-  assert.match(build, /Each step writes ONE whole file, complete with its imports/);
-  assert.match(build, /Never come back later to add to a file/);
+  const order = ['**Folders and files:**', '**Files to create:**', '**Tables:**', 'dependency order, innermost layer first', 'Each step writes ONE whole file', '**Run it:**'];
+  const at = order.map((part) => build.indexOf(part));
+  assert.ok(at.every((i) => i >= 0), 'every part is present');
+  assert.deepEqual([...at].sort((a, b) => a - b), at, 'in this order');
+  assert.match(build, /Never import or use anything an earlier step has not already written/);
+  assert.match(build, /unless the starter code on screen already has a structure/);
+  assert.match(build, /every folder AND every file inside it/);
+  assert.match(build, /folder by folder, a bold line with the folder path/);
+});
+
+test('the chosen architecture is named in the coding request, clean by default', () => {
+  const { ARCHITECTURES } = require('../src/prompts');
+  assert.match(MODES.leetcode.build({}), /Architecture for a build task: Clean Architecture, feature-first.*domain\/.*data\/.*presentation\//s);
+  assert.match(MODES.leetcode.build({ architecture: 'mvvm' }), /MVVM, feature-first/);
+  assert.match(MODES.leetcode.build({ architecture: 'simple' }), /lib\/screens\//);
+  assert.match(MODES.leetcode.build({ architecture: 'bogus' }), /Clean Architecture/);
+  assert.deepEqual(Object.keys(ARCHITECTURES), ['clean', 'mvvm', 'simple']);
+  assert.match(MODES.leetcode.build({}), /any other stack.*keep the same layers/);
 });

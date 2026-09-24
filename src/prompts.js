@@ -70,6 +70,25 @@ const SPOKEN_STYLE_TEXT =
 // Shared by every mode that writes words for the candidate to say.
 const SPOKEN_ANSWER_RULES = INTRO_RULE + '\n' + SPOKEN_STYLE_TEXT;
 
+// How build tasks organise their folders (Settings > Answer style). Named in
+// the coding request, so the system prompt stays the same for every choice.
+const ARCHITECTURES = {
+  clean: 'Clean Architecture, feature-first. lib/core/ holds shared code (errors, network, utils); each feature lives in lib/features/<feature>/ with ' +
+    'domain/ (entities, repository contracts, use cases), data/ (models with fromJson/toJson, data sources, repository implementations) and ' +
+    'presentation/ (state such as providers or blocs, pages, widgets). Dependencies point inward: presentation uses domain, data implements domain, ' +
+    'domain depends on nothing. For a backend, the same layers as modules (controllers, services, repositories, entities, DTOs).',
+  mvvm: 'MVVM, feature-first. Each feature lives in lib/features/<feature>/ with models/, services/ (or repositories/), view_models/, views/ and widgets/; ' +
+    'views watch view models and view models call services.',
+  simple: 'A simple structure: lib/models/, lib/services/, lib/screens/ and lib/widgets/.'
+};
+const DEFAULT_ARCHITECTURE = 'clean';
+
+function architectureNote(name) {
+  const text = ARCHITECTURES[name] || ARCHITECTURES[DEFAULT_ARCHITECTURE];
+  return 'Architecture for a build task: ' + text + ' For any other stack (React Native, Swift, Kotlin, a web app, a NestJS or other backend), keep the same layers ' +
+    'and use that stack\'s usual folder names (for example src/features/<feature>/domain/ in TypeScript).\n\n';
+}
+
 const MODES = {
 
   // ── Assist: one-shot "do the smart thing" ─────────────────────────────────
@@ -363,16 +382,20 @@ const MODES = {
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
-        '• BUILD TASK (several files, "build an app / component / API / feature"): first **Files to create:** a bulleted list of every file path, ' +
-        'each with what it is for in a few words, in exactly the order the steps below write them, so nothing is missed. ' +
-        'Then numbered steps in dependency order, bottom up: data models first, then repositories, services and API clients, then state (providers, blocs, controllers), ' +
-        'then screens and widgets, then the wiring (main, routes, app setup) last. Never import or use anything that an earlier step has not already written in full: ' +
-        'a file must exist with its code before any other file imports it, so after every step the project compiles. ' +
-        'Each step writes ONE whole file, complete with its imports, ready to paste into that empty file: a line **Step N: Write <file path>, what it does and why, in one plain sentence**, ' +
-        'then the file\'s full code in its own fenced block tagged with its language, starting with a comment that names the file. ' +
-        'If a file is long, split its code into consecutive fenced blocks of that same step, each followed by its **Say:** line, so the pieces read top to bottom as one file. ' +
-        'Never come back later to add to a file an earlier step already wrote. ' +
-        'End with **Run it:** the exact commands in a fenced block tagged shell, then one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
+        '• BUILD TASK (several files, "build an app / component / API / feature"). Organise it the way a professional would, so the structure itself shows ' +
+        'experience: use the architecture named in the request below, unless the starter code on screen already has a structure (then follow that exactly). In order:\n' +
+        '  **Folders and files:** the complete project tree in a fenced block tagged text, showing every folder AND every file inside it (nothing left out), ' +
+        'then a **Say:** line explaining in plain words why the code is organised this way.\n' +
+        '  **Files to create:** folder by folder, a bold line with the folder path, then a bullet for each file in it with what it is for in a few words, ' +
+        'numbered in exactly the order the steps below write them.\n' +
+        '  **Tables:** only when the task needs a database: each table with its columns and types, and the SQL or migration in a fenced block, before any code that uses them.\n' +
+        '  Then numbered steps in dependency order, innermost layer first: the pieces nothing else depends on (entities, models, contracts), then the logic that uses them ' +
+        '(use cases, repositories, services, data sources), then state (providers, stores or view models), then screens and widgets, and the wiring (main, routes, setup) last. ' +
+        'Never import or use anything an earlier step has not already written, so each step only depends on files already written.\n' +
+        '  Each step writes ONE whole file, ready to paste into that empty file: a line **Step N: Write the file (its full path), what it does and why, in one plain sentence**, ' +
+        'then the file from top to bottom as consecutive fenced blocks tagged with its language, the first starting with a comment that names the file and holding its imports, ' +
+        'each block one logical piece followed by its **Say:** line; read in order, the blocks are the complete file. Never come back later to add to a file an earlier step wrote.\n' +
+        '  End with **Run it:** the exact commands in a fenced block tagged shell, then one quick way to check it works (a request to send, a test to run, or what to tap).\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking. Put one right after each code block, ' +
         'and keep each code block to one logical piece (a few lines) so its Say line can cover it: say what those lines do and why, in first person and plain words, ' +
         'one to three short sentences, e.g. "First I sort the intervals by their start, so any that overlap end up next to each other." No code inside a Say line.\n\n' +
@@ -385,9 +408,9 @@ const MODES = {
       const earlier = prior.length
         ? 'Earlier solves in this session, oldest first, for context only:\n\n' + prior.map((p, i) => '--- Solve ' + (i + 1) + ' ---\n' + p).join('\n\n') + '\n\n'
         : '';
-      return earlier + 'Solve the coding problem shown in the screenshot.';
+      return earlier + architectureNote(ctx && ctx.architecture) + 'Solve the coding problem shown in the screenshot.';
     }
   }
 };
 
-module.exports = { MODES, formatTranscript, turnsSentByBuild };
+module.exports = { MODES, formatTranscript, turnsSentByBuild, ARCHITECTURES, DEFAULT_ARCHITECTURE };

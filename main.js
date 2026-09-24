@@ -834,6 +834,7 @@ async function runFeature(mode, userText, options = {}) {
       transcript,
       userText: userText || '',
       answers: mode === 'report' ? interviewMemory.answers() : [],
+      architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode)
     }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.

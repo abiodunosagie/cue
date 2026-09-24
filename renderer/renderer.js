@@ -1853,6 +1853,9 @@
     document.querySelectorAll('#watch-screen-seg button').forEach((button) => {
       button.classList.toggle('on', (button.dataset.watchScreen === 'on') === !!settings.watchScreen);
     });
+    document.querySelectorAll('#architecture-seg button').forEach((button) => {
+      button.classList.toggle('on', button.dataset.architecture === (settings.codeArchitecture || 'clean'));
+    });
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -2150,6 +2153,11 @@
     document.querySelectorAll('#auto-answer-seg button').forEach((candidate) => {
       candidate.classList.toggle('on', candidate === button);
     });
+  }));
+
+  document.querySelectorAll('#architecture-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.codeArchitecture = button.dataset.architecture;
+    document.querySelectorAll('#architecture-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
   }));
 
   document.querySelectorAll('#watch-screen-seg button').forEach((button) => button.addEventListener('click', () => {
