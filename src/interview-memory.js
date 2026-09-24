@@ -4,6 +4,7 @@
 // user's own AI provider. Text only: screenshots are never stored.
 
 const fs = require('fs');
+const { writeFileAtomic, removeFileAndTemp } = require('./atomic-file');
 
 const MAX_TURNS = 600;            // ~90 minutes of conversation
 const MAX_ANSWERS = 80;
@@ -40,22 +41,10 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
   let saveTimer = null;
   let dirty = false;
 
-  // Temp file then rename, so a crash mid-write never leaves half a record.
-  // 'wx' refuses to write through anything already sitting at the temp path,
-  // and the chmod holds 0600 whatever the umask. dirty stays set on failure so
-  // the next save, or the flush on quit, tries again.
+  // dirty stays set on failure so the next save, or the flush on quit, tries again.
   function writeNow() {
     if (!file) { dirty = false; return; }
-    const tmp = file + '.tmp';
-    try {
-      try { fs.unlinkSync(tmp); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-      fs.writeFileSync(tmp, JSON.stringify(record), { mode: 0o600, flag: 'wx' });
-      fs.chmodSync(tmp, 0o600);
-      fs.renameSync(tmp, file);
-      dirty = false;
-    } catch {
-      try { fs.unlinkSync(tmp); } catch { /* nothing to tidy */ }
-    }
+    if (writeFileAtomic(file, JSON.stringify(record))) dirty = false;
   }
 
   function flush() {
@@ -107,12 +96,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     dirty = false;
     record = emptyRecord(now());
     if (!file) return { ok: true };
-    // Try both even if one fails: the main file holds the whole interview.
-    let ok = true;
-    for (const f of [file + '.tmp', file]) {
-      try { fs.unlinkSync(f); } catch (e) { if (e.code !== 'ENOENT') ok = false; }
-    }
-    return { ok };
+    return { ok: removeFileAndTemp(file) };
   }
 
   // The interviewer questions older than what the mode's build() already sends

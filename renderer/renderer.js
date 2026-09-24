@@ -1353,6 +1353,15 @@
     });
     setBusy(true);
   });
+  // The answer came from the prepared bank: say so above it.
+  cue.on('llm:tag', ({ label }) => {
+    const group = messages.querySelector('.response-group:last-child');
+    if (!group || !aiEl || aiEl.parentNode !== group) return;
+    const pill = document.createElement('div');
+    pill.className = 'prepared-pill';
+    pill.textContent = label;
+    group.insertBefore(pill, aiEl);
+  });
   cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
   cue.on('llm:done', () => { finalizeAi(); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
@@ -1746,6 +1755,24 @@
   wireImport('upload-resume-btn', 'resume-text', 'Resume');
   wireImport('upload-jd-btn', 'job-description', 'Job description');
   wireImport('upload-stories-btn', 'star-stories', 'Stories');
+
+  // Prepared answers: status line and a manual re-run in Interview Prep.
+  function showPrepared(p) {
+    const el = document.getElementById('prepared-status');
+    const btn = document.getElementById('prepared-run-btn');
+    if (!el || !p) return;
+    btn.disabled = !!p.running || !p.canPrepare;
+    if (p.running) el.textContent = 'Preparing answers…';
+    else if (p.error) el.textContent = p.error;
+    else if (!p.canPrepare) el.textContent = 'Add your resume and the job description first';
+    else if (p.count && p.current) el.textContent = p.count + ' answers ready, made ' + new Date(p.createdAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    else if (p.count) el.textContent = 'Out of date, updating after your profile changed';
+    else el.textContent = 'Not prepared yet';
+  }
+  const preparedRunBtn = document.getElementById('prepared-run-btn');
+  if (preparedRunBtn) preparedRunBtn.addEventListener('click', async () => { showPrepared(await cue.preparedRun()); });
+  cue.on('prepared:state', showPrepared);
+  cue.preparedState().then(showPrepared).catch(() => {});
 
   function statusText() {
     const k = settings.apiKeys;

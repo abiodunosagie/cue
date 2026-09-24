@@ -22,6 +22,8 @@ contextBridge.exposeInMainWorld('cue', {
   setIgnoreMouse: (v) => ipcRenderer.send('mouse:ignore', v),
   clearTranscript: () => ipcRenderer.invoke('transcript:clear'),
   memoryState: () => ipcRenderer.invoke('memory:state'),
+  preparedState: () => ipcRenderer.invoke('prepared:state'),
+  preparedRun: () => ipcRenderer.invoke('prepared:run'),
   openPane: (url) => ipcRenderer.send('open-pane', url),
   publikState: () => ipcRenderer.invoke('publik:state'),
   publikAcceptDisclosure: () => ipcRenderer.invoke('publik:accept-disclosure'),
@@ -41,7 +43,7 @@ contextBridge.exposeInMainWorld('cue', {
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   log: (msg) => ipcRenderer.send('log', msg),
   on: (channel, cb) => {
-    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'whisper:download-progress', 'whisper:models-changed', 'publik:state'];
+    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'llm:tag', 'prepared:state', 'whisper:download-progress', 'whisper:models-changed', 'publik:state'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
   }

@@ -9,7 +9,8 @@ const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
-const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
+const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
+const { createPreparedStore, profileHash, canPrepare, preparePrompt, parseItems, confirmSameQuestion, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -95,6 +96,13 @@ const buffers = { you: [], them: [] };
 // so a restart mid-interview keeps the conversation. Cleared by Clear History.
 const interviewMemory = createInterviewMemory({ file: path.join(app.getPath('userData'), 'cue-interview.json') });
 interviewMemory.load();
+// Answers to the likely questions, made before the interview (cue-prepared.json).
+const preparedStore = createPreparedStore({ file: path.join(app.getPath('userData'), 'cue-prepared.json') });
+preparedStore.load();
+const preparing = { running: false, error: '' };
+const PREPARE_TIMEOUT_MS = 180000;
+const PREPARE_DEBOUNCE_MS = 3000;
+let prepareTimer = null;
 const MAX_TRANSCRIPT_TURNS = MEMORY_MAX_TURNS; // ~90 minutes of conversation
 const transcript = interviewMemory.turns().slice(-MAX_TRANSCRIPT_TURNS); // { channel, text, ts }
 const FLUSH_MS = 900;
@@ -560,6 +568,73 @@ async function setCapturing(active) {
 }
 
 // -------- feature runner --------
+function preparedState() {
+  const settings = store.getSettings();
+  return {
+    ...preparedStore.summary(),
+    current: preparedStore.isCurrent(profileHash(settings)),
+    canPrepare: canPrepare(settings),
+    running: preparing.running,
+    error: preparing.error
+  };
+}
+
+// One Smart call writes the likely questions and their spoken answers, with the
+// same context and rules as a live answer. Skipped when the bank already matches
+// the profile, unless forced from Settings.
+async function prepareAnswers({ force }) {
+  const settings = store.getSettings();
+  const hash = profileHash(settings);
+  if (preparing.running || !canPrepare(settings)) return preparedState();
+  if (!force && preparedStore.isCurrent(hash)) return preparedState();
+  const llm = createLLM({ ...settings, smart: true });
+  if (!llm.ready) return preparedState();
+  preparing.running = true; preparing.error = '';
+  send('prepared:state', preparedState());
+  try {
+    const context = buildInterviewContext(settings, 'answerThis', []);
+    const system = MODES.answerThis.buildSystem(context, settings.aiRules || '');
+    let timer = null;
+    const reply = await Promise.race([
+      llm.stream({ system, turns: [{ role: 'user', text: preparePrompt() }], maxTokens: PREPARE_MAX_TOKENS, onToken: () => {} }),
+      new Promise((_res, reject) => { timer = setTimeout(() => reject(new Error('the model took too long')), PREPARE_TIMEOUT_MS); })
+    ]).finally(() => clearTimeout(timer));
+    const items = parseItems(reply);
+    if (!items.length) throw new Error('the model did not return usable answers');
+    // The profile may have changed while this ran; then this bank is already stale.
+    if (profileHash(store.getSettings()) === hash) preparedStore.replace(hash, items);
+    else schedulePrepare();
+  } catch (e) {
+    preparing.error = 'Could not prepare answers: ' + (e && e.message ? e.message : String(e));
+    recordEvent({ level: 'error', event: 'prepare_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareAnswers', context: { provider: settings.provider } });
+  } finally {
+    preparing.running = false;
+    send('prepared:state', preparedState());
+  }
+  return preparedState();
+}
+
+// Profile edits come in bursts (typing, then Save); prepare once they settle.
+function schedulePrepare() {
+  clearTimeout(prepareTimer);
+  prepareTimer = setTimeout(() => prepareAnswers({ force: false }), PREPARE_DEBOUNCE_MS);
+}
+
+// The prepared answer for a heard question, or null. Only for answerThis at the
+// default length (prepared answers are written at that length) and only from a
+// bank made from the current profile. A close but not near-identical question
+// is confirmed by the Fast model first.
+async function findPreparedAnswer(mode, userText, settings) {
+  if (mode !== 'answerThis' || normalizeLength(settings.answerLength) !== 'medium') return null;
+  if (!preparedStore.isCurrent(profileHash(settings))) return null;
+  const match = preparedStore.match(userText || '');
+  if (!match) return null;
+  if (match.direct) return match.item;
+  const fast = createLLM({ ...settings, smart: false });
+  if (!fast.ready) return null;
+  return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.item.question })) ? match.item : null;
+}
+
 async function runFeature(mode, userText) {
   if (state.busy) return;
   const def = MODES[mode];
@@ -602,6 +677,16 @@ async function runFeature(mode, userText) {
     // acknowledged (e.g. an install provisioned by an earlier release).
     if (settings.provider === publik.PUBLIK_PROVIDER && settings.apiKeys.publik && !settings.publik.cardShown) {
       send('llm:error', { message: 'publik API is set up. Take a look at the card, then ask again.', action: { kind: 'card' } });
+      return;
+    }
+
+    // A prepared answer is shown at once, with no model wait and no opener.
+    const prepared = await findPreparedAnswer(mode, userText, settings);
+    if (prepared) {
+      send('llm:tag', { label: 'Prepared' });
+      for (const chunk of prepared.answer.match(/\S+\s*/g) || []) send('llm:token', { text: chunk });
+      send('llm:done', {});
+      interviewMemory.addAnswer({ mode, text: prepared.answer, generation: memoryGeneration });
       return;
     }
 
@@ -703,7 +788,14 @@ async function runFeature(mode, userText) {
 // Redact on the way out, strip on the way in: the publik key never enters the
 // renderer, and the renderer's whole-object Save can never clobber it.
 ipcMain.handle('settings:get', () => store.redactForRenderer(store.getSettings()));
-ipcMain.handle('settings:set', (_e, patch) => { sttDisabled = false; return store.redactForRenderer(store.setSettings(store.stripRendererPatch(patch))); });
+ipcMain.handle('settings:set', (_e, patch) => {
+  sttDisabled = false;
+  const saved = store.setSettings(store.stripRendererPatch(patch));
+  if (!preparedStore.isCurrent(profileHash(saved))) schedulePrepare();
+  return store.redactForRenderer(saved);
+});
+ipcMain.handle('prepared:state', () => preparedState());
+ipcMain.handle('prepared:run', () => prepareAnswers({ force: true }));
 
 // -------- publik API --------
 // Contract: ~/publik-api-research/CONTRACT.md. The key is minted only after
@@ -1179,6 +1271,8 @@ function launchApp() {
 
   createWindow();
   registerShortcuts();
+  // Build the prepared answers if the profile changed since the last run.
+  prepareAnswers({ force: false });
 }
 
 // -------- lifecycle --------

@@ -793,6 +793,12 @@ button:focus { outline: none; }
 .response-sep::before { left: 0; }
 .response-sep::after { right: 0; }
 /* Category pill (R3) */
+/* Marks an answer shown from the prepared bank rather than written live. */
+.s-upload-btn:disabled { opacity: 0.45; cursor: default; }
+.prepared-pill {
+  align-self: flex-start;
+  color: var(--live); font-size: 12px; font-weight: 600; margin: 8px 0 0;
+}
 .category-pill {
   align-self: flex-start;
   color: rgba(255,255,255,0.38); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
