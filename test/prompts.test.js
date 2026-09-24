@@ -168,3 +168,8 @@ test('a small coding task is taught step by step in plain words, with a walk-thr
   assert.match(system, /new to this kind of problem/);
   assert.doesNotMatch(system, /two-line approach/);
 });
+
+test('a build task starts with every file to create, before the steps', () => {
+  const system = MODES.leetcode.buildSystem('', '');
+  assert.match(system, /BUILD TASK[^•]*\*\*Files to create:\*\* a bulleted list of every file path in build order/);
+});

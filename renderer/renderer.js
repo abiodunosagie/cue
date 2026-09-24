@@ -119,9 +119,29 @@
     return streamPara;
   }
 
+  // Once an answer contains code, it is shown as rendered markdown while it
+  // streams (refreshed once a frame), so code reads as code from its first
+  // line instead of as raw text until the answer ends. An open code fence is
+  // closed for the preview only.
+  let markdownFrame = 0;
+  function renderStreamingMarkdown() {
+    markdownFrame = 0;
+    if (!aiEl || aiEl.dataset.md !== '1') return;
+    const raw = aiEl.dataset.raw || '';
+    const openFence = ((raw.match(/```/g) || []).length % 2) === 1;
+    aiEl.innerHTML = renderMarkdown(openFence ? raw + '\n```' : raw);
+    streamPara = null;
+    if (caretEl) (aiEl.lastElementChild && aiEl.lastElementChild.tagName !== 'PRE' ? aiEl.lastElementChild : aiEl).appendChild(caretEl);
+  }
+
   function appendToken(t) {
     if (!aiEl) startAi(false);
     aiEl.dataset.raw += t;
+    if (aiEl.dataset.md === '1' || aiEl.dataset.raw.includes('```')) {
+      aiEl.dataset.md = '1';
+      if (!markdownFrame) markdownFrame = requestAnimationFrame(renderStreamingMarkdown);
+      return;
+    }
     for (const piece of splitter.push(t)) {
       if (piece.break) { streamPara = null; continue; }
       const span = document.createElement('span');
@@ -161,6 +181,7 @@
   function finalizeAi() {
     if (!aiEl) return;
     const raw = aiEl.dataset.raw || '';
+    if (markdownFrame) { cancelAnimationFrame(markdownFrame); markdownFrame = 0; }
     aiEl.innerHTML = renderMarkdown(raw);
     aiEl.querySelectorAll(':scope > p, :scope > ul > li').forEach(wrapSentences);
     aiEl.dataset.final = '1';
@@ -282,7 +303,7 @@
         const len = (el.dataset.raw || '').length;
         if (len !== trackedLen) {
           trackedLen = len;
-          blocks = Array.from(el.querySelectorAll(':scope > .w-para'));
+          blocks = Array.from(el.querySelectorAll(el.dataset.md === '1' ? ':scope > p, :scope > ul > li, :scope > pre' : ':scope > .w-para'));
           tokens = blocks.map((b) => tokenize(b.textContent));
         }
         if (!blocks.length) return false;
@@ -440,6 +461,10 @@
   const MAX_QUESTION_HISTORY = 10;
 
   // ---- Question completeness detection ----
+  const QUESTION_SETTLE_MS = 600;
+  const STATEMENT_SETTLE_MS = 1100;
+  let heardAt = 0;
+
   function isLikelyCompleteQuestion(text) {
     const trimmed = (text || '').trim();
     
@@ -607,8 +632,13 @@
     updateQuestionReadyState();
     updateSendButtonState(); // FIX #9: Update send button state
 
-    // Reset the idle timer — after 2s of silence, check if question is complete
+    // Wait for the interviewer to stop, then check the question is complete. A
+    // question mark from the transcriber means they finished: answer fast. A
+    // complete-looking question without one gets a little longer, in case they
+    // are still going. (This used to be a flat 1.8s, the biggest fixed delay.)
     clearTimeout(questionFinalizeTimer);
+    const settleMs = /\?\s*$/.test(input.value.trim()) ? QUESTION_SETTLE_MS : STATEMENT_SETTLE_MS;
+    heardAt = Date.now();
     questionFinalizeTimer = setTimeout(function finalizeQuestion() {
       if (!isLikelyCompleteQuestion(input.value)) return;
       // If the user edited the heard question, leave sending to them (Enter).
@@ -618,14 +648,14 @@
         // New interviewer words or the user answering clear this timer; setBusy's
         // failsafe bounds it if an answer never finishes.
         if (busy) { questionFinalizeTimer = setTimeout(finalizeQuestion, 700); return; }
-        if (inputFromSTT) send();
+        if (inputFromSTT) { cue.log(`[timing] auto-answer sent ${Date.now() - heardAt}ms after the last words`); send(); }
         return;
       }
       composer.classList.add('stt-ready');
       updateSendButtonState(); // FIX #9: Update send button when ready
       // Subtle notification that question is ready
       showToast('Press Enter to answer', 2500);
-    }, 1800);
+    }, settleMs);
 
     // After 8s of no new words, save to history and keep stable
     clearTimeout(sttFillTimer);

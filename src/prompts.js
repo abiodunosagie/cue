@@ -326,7 +326,8 @@ const MODES = {
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
-        '• BUILD TASK (several files, "build an app / component / API / feature"): numbered steps the candidate types one at a time, in the order they would really build it. ' +
+        '• BUILD TASK (several files, "build an app / component / API / feature"): first **Files to create:** a bulleted list of every file path in build order, ' +
+        'each with what it is for in a few words, so nothing is missed; then numbered steps the candidate types one at a time, in the order they would really build it. ' +
         'Each step is a line **Step N: what to build and why, in one plain sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
         'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
         'End with how to run it or test it.\n\n' +

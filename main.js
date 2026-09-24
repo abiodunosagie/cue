@@ -715,6 +715,14 @@ async function runFeature(mode, userText, options = {}) {
   state.busy = true;
   // An answer that started before Clear must not write the old interview back.
   const memoryGeneration = interviewMemory.generation();
+  // Timing, for the log: how long until the first word shows, and from where.
+  const startedAt = Date.now();
+  let firstShown = false;
+  const firstWord = (source) => {
+    if (firstShown) return;
+    firstShown = true;
+    console.log(`[timing] ${mode}: first word after ${Date.now() - startedAt}ms (${source})`);
+  };
   let opener = ''; // already shown and possibly said aloud, so kept even if the answer fails
   let streamSettled = false; // drop stray tokens from a stream we've already abandoned
   try {
@@ -756,6 +764,7 @@ async function runFeature(mode, userText, options = {}) {
     // A prepared answer is shown at once, with no model wait and no opener.
     const prepared = await findPreparedAnswer(mode, userText, settings);
     if (prepared) {
+      firstWord('prepared answer');
       send('llm:tag', { label: 'Prepared' });
       for (const chunk of prepared.answer.match(/\S+\s*/g) || []) send('llm:token', { text: chunk });
       send('llm:done', {});
@@ -772,7 +781,7 @@ async function runFeature(mode, userText, options = {}) {
     if (question) {
       const fast = createLLM({ ...settings, smart: false });
       if (fast.ready && fast.model !== llm.model) {
-        openerPromise = runOpener({ llm: fast, question, onToken: (t) => send('llm:token', { text: t }) });
+        openerPromise = runOpener({ llm: fast, question, onToken: (t) => { firstWord('instant first line'); send('llm:token', { text: t }); } });
       }
     }
 
@@ -833,7 +842,7 @@ async function runFeature(mode, userText, options = {}) {
           system,
           turns: [{ role: 'user', text: built }],
           imageDataUrl,
-          onToken: (t) => { if (streamSettled) return; rearm(); send('llm:token', { text: t }); },
+          onToken: (t) => { if (streamSettled) return; firstWord(llm.model); rearm(); send('llm:token', { text: t }); },
           onResponse: settings.provider === publik.PUBLIK_PROVIDER ? (res) => publikNoteHeaders(res && res.headers) : undefined
         }),
         stalled
