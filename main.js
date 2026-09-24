@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, desktopCapturer, shell, dialog, systemPreferences } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, desktopCapturer, shell, dialog, systemPreferences, clipboard } = require('electron');
 const path = require('path');
 const os = require('os');
 const store = require('./src/store');
@@ -883,6 +883,9 @@ ipcMain.handle('whisper:model-import', async (_event, modelId) => {
   send('whisper:models-changed', { modelId });
   return result;
 });
+// Copy buttons on code blocks. In main because the page's own clipboard API
+// refuses an inactive window, and cue's overlay is usually inactive when clicked.
+ipcMain.handle('clipboard:write', (_e, text) => { clipboard.writeText(String(text || '')); return true; });
 ipcMain.handle('platform:info', () => ({
   platform: process.platform,
   winBuild: WIN_BUILD,

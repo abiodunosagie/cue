@@ -62,6 +62,23 @@
     if (out) out.textContent = Math.round(alpha * 100) + '%';
   }
 
+  // Copy a code block exactly as the model wrote it, so nothing is retyped by hand.
+  messages.addEventListener('click', async (e) => {
+    const b = e.target.closest('.copy-code');
+    if (!b) return;
+    const code = b.parentElement.querySelector('code');
+    try {
+      await cue.copyText(code ? code.textContent.replace(/\n$/, '') : '');
+    } catch (err) {
+      showToast('Could not copy', 1600);
+      return;
+    }
+    b.innerHTML = icon('check', { size: 14 });
+    b.classList.add('done');
+    setTimeout(() => { b.innerHTML = icon('copy', { size: 14 }); b.classList.remove('done'); }, 1400);
+    showToast('Copied', 1200);
+  });
+
   function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; readingFollow.reset(); }
 
   function addUserBubble(text) {
@@ -99,6 +116,16 @@
     if (!aiEl) return;
     const raw = aiEl.dataset.raw || '';
     aiEl.innerHTML = renderMarkdown(raw);
+    // Icon only, so the reading tracker (which reads each <pre>'s text) gains no words.
+    aiEl.querySelectorAll('pre').forEach((pre) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'copy-code';
+      b.title = 'Copy code';
+      b.setAttribute('aria-label', 'Copy code');
+      b.innerHTML = icon('copy', { size: 14 });
+      pre.appendChild(b);
+    });
     aiEl = null; caretEl = null;
   }
 
