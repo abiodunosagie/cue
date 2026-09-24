@@ -10,6 +10,7 @@
   const quitButton = $('#quit-btn');
   quitButton.addEventListener('click', () => cue.quit());
   quitButton.title = isMac ? 'Quit cue (⌘⇧X)' : 'Quit cue (Ctrl+Shift+X)';
+  $('#hide-btn').title = isMac ? 'Hide or show the answers (⌘⇧H)' : 'Hide or show the answers (Ctrl+Shift+H)';
 
   // ---- paint icons -------------------------------------------------------
   $('#logo-btn').innerHTML = icon('logo', { size: 18 });
