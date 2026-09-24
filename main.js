@@ -17,7 +17,8 @@ const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
-const { createPreparedStore, profileHash, canPrepare, parseItems, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
+const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
+const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
@@ -108,6 +109,8 @@ interviewMemory.load();
 const preparedStore = createPreparedStore({ file: path.join(app.getPath('userData'), 'cue-prepared.json') });
 preparedStore.load();
 const preparing = { running: false, error: '' };
+// Answers to the likely follow-ups of this interview's last few answers (src/follow-ups.js).
+const followUps = createFollowUpBank();
 const PREPARE_TIMEOUT_MS = 180000;
 const PREPARE_DEBOUNCE_MS = 3000;
 let prepareTimer = null;
@@ -198,9 +201,10 @@ if (fs.existsSync(PRACTICE_MARKER)) {
   try { fs.unlinkSync(PRACTICE_MARKER); } catch { /* best effort */ }
 }
 
-// Forget the current interview: the live transcript and the file on disk.
+// Forget the current interview: the live transcript, its follow-ups and the file on disk.
 function clearInterview() {
   transcript.splice(0, transcript.length);
+  followUps.clear();
   return interviewMemory.clear();
 }
 
@@ -676,12 +680,33 @@ function schedulePrepare() {
 // is confirmed by the Fast model first.
 async function findPreparedAnswer(mode, userText, settings) {
   if (mode !== 'answerThis' || normalizeLength(settings.answerLength) !== 'medium') return null;
-  const match = preparedStore.match(userText || '', profileHash(settings));
+  // The job's prepared bank and this interview's follow-ups: the closer match wins.
+  const fromBank = preparedStore.match(userText || '', profileHash(settings));
+  const fromFollowUps = findMatch(followUps.items(), userText || '');
+  const match = !fromBank ? fromFollowUps : !fromFollowUps ? fromBank : (fromFollowUps.score > fromBank.score ? fromFollowUps : fromBank);
   if (!match) return null;
   if (match.direct) return match.item;
   const fast = createLLM({ ...settings, smart: false });
   if (!fast.ready) return null;
   return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.item.question })) ? match.item : null;
+}
+
+// In the background after a spoken answer: the two likely follow-ups and their
+// answers, with the same context and rules as a live answer. Dropped if the
+// interview was cleared meanwhile; a failure only means no follow-ups this time.
+async function prepareFollowUps(question, answer, generation) {
+  if (!question || !answer) return;
+  const settings = store.getSettings();
+  const llm = createLLM({ ...settings, smart: true });
+  if (!llm.ready) return;
+  try {
+    const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', transcript), settings.aiRules || '');
+    const reply = await quickAsk({ llm, system, text: followUpPrompt(question, answer), maxTokens: FOLLOW_UP_MAX_TOKENS, timeoutMs: FOLLOW_UP_TIMEOUT_MS });
+    const items = parseItems(reply);
+    if (items.length && generation === interviewMemory.generation()) followUps.add(items);
+  } catch (e) {
+    recordEvent({ level: 'warn', event: 'follow_ups_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareFollowUps', context: {} });
+  }
 }
 
 // options.imageDataUrl: a screenshot already taken (the screen watcher's, with
@@ -738,6 +763,7 @@ async function runFeature(mode, userText, options = {}) {
       for (const chunk of prepared.answer.match(/\S+\s*/g) || []) send('llm:token', { text: chunk });
       send('llm:done', {});
       interviewMemory.addAnswer({ mode, text: prepared.answer, generation: memoryGeneration });
+      prepareFollowUps(userText, prepared.answer, memoryGeneration);
       return;
     }
 
@@ -820,6 +846,8 @@ async function runFeature(mode, userText, options = {}) {
     }
     send('llm:done', {});
     if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration });
+    // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
+    if (LENGTH_MODES.has(mode)) prepareFollowUps(openerQuestion(mode, userText, transcript), (opener ? opener + ' ' : '') + answer, memoryGeneration);
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
