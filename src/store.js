@@ -74,6 +74,7 @@ const DEFAULTS = {
   aiRules: '',
   panelOpacity: PanelOpacity.DEFAULT,
   answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)
+  sttWords: '',             // words the speech service should expect (src/vocab.js)
   practiceVoice: 'george',  // ElevenLabs voice for practice interviews (src/practice.js VOICES)
   // Answer questions that appear on screen while listening (src/screen-watch.js).
   // Off by default on macOS for the same reason as meetingAudio: each capture shows

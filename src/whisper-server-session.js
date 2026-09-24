@@ -28,9 +28,13 @@ async function findFreeLoopbackPort() {
   return address.port;
 }
 
-function buildMultipartBody(wav) {
+function buildMultipartBody(wav, prompt = '') {
   const boundary = `cue-${crypto.randomBytes(16).toString('hex')}`;
+  // prompt: the words to expect (src/vocab.js). CR/LF are removed so it cannot
+  // break out of its form field.
+  const safePrompt = String(prompt || '').replace(/[\r\n]+/g, ' ');
   const fields = [
+    ...(safePrompt ? [`--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\n${safePrompt}\r\n`] : []),
     `--${boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="temperature"\r\n\r\n0.0\r\n`,
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`
@@ -54,6 +58,7 @@ class WhisperServerSession {
     language = 'auto',
     threads = 0,
     tinydiarize = false,
+    prompt = '',
     fetchImpl = global.fetch,
     spawnImpl = spawn,
     findPort = findFreeLoopbackPort,
@@ -72,6 +77,7 @@ class WhisperServerSession {
     this.language = language;
     this.threads = Number.isInteger(threads) && threads > 0 ? threads : 0;
     this.tinydiarize = tinydiarize;
+    this.prompt = prompt;
     this.fetchImpl = fetchImpl;
     this.spawnImpl = spawnImpl;
     this.findPort = findPort;
@@ -124,7 +130,7 @@ class WhisperServerSession {
   async transcribe(pcm) {
     if (!this.child || !this.endpoint) throw new Error('Local Whisper is not running.');
     const wav = pcmToWav(Buffer.from(pcm), 16000, 1);
-    const multipart = buildMultipartBody(wav);
+    const multipart = buildMultipartBody(wav, this.prompt);
     const abortController = new AbortController();
     const timeout = setTimeout(() => abortController.abort(), INFERENCE_TIMEOUT_MS);
     this.inferenceControllers.add(abortController);

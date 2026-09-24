@@ -2,12 +2,8 @@
 // no audio API — we transcribe with whatever audio-capable key is available, and
 // fall back across providers. Returns { text, provider } or { text:'', error }.
 const { pcmToWav } = require('./wav');
+const { buildVocabPrompt } = require('./vocab');
 const { formatProviderErrorMessage, isQuotaError, isRateLimitError, CURRENT_GEMINI_DEFAULT } = require('./llm');
-
-const BASE_VOCAB = 'CI/CD, Docker, Kubernetes, Terraform, Jenkins, AWS, Azure, GCP, ' +
-  'CodeCommit, CodePipeline, CodeBuild, CodeDeploy, DevOps, SRE, microservices, deployment, ' +
-  'pipeline, container, orchestration, Ansible, Prometheus, Grafana, Helm, EKS, ECS, Lambda, ' +
-  'S3, EC2, IAM, GitHub Actions, GitLab, Kafka, PostgreSQL, Redis, MongoDB, REST API, gRPC';
 
 function looksLikeHallucination(raw) {
   const trimmed = (raw || '').trim();
@@ -21,14 +17,6 @@ function looksLikeHallucination(raw) {
   return artifacts.has(t);
 }
 
-function buildVocabPrompt(settings) {
-  const s = settings || {};
-  const text = (s.resumeText || '') + ' ' + (s.jobDescription || '');
-  const proper = Array.from(new Set(text.match(/\b([A-Z][a-zA-Z0-9+.#]{2,}|[A-Z]{2,6})\b/g) || []));
-  let prompt = BASE_VOCAB + (proper.length ? ', ' + proper.slice(0, 60).join(', ') : '');
-  if (prompt.length > 850) prompt = prompt.slice(0, 850);
-  return prompt;
-}
 
 async function transcribeOpenAI(apiKey, wav, model, baseURL, prompt) {
   const OpenAI = require('openai');

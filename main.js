@@ -10,6 +10,7 @@ const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
 const { runSetupChecks } = require('./src/setup-check');
 const { createSTT } = require('./src/stt');
+const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
@@ -248,7 +249,8 @@ async function startLocalWhisper(settings) {
         modelPath,
         language: model.englishOnly ? 'en' : (localSettings.language || 'auto'),
         threads: Number(localSettings.threads) || 0,
-        tinydiarize: model.tinydiarize
+        tinydiarize: model.tinydiarize,
+        prompt: buildVocabPrompt(settings)
       },
       onTranscript: publishTranscript,
       onSpeechState: (channel, speaking, durationMs) => {

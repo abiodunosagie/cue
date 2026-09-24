@@ -4,6 +4,7 @@
 // This module manages a persistent WebSocket connection for real-time transcription
 // with sub-200ms latency, interim results, and automatic reconnection.
 
+const { buildVocabTerms } = require('./vocab');
 const { looksLikeHallucination } = require('./stt');
 const { pcmToWav } = require('./wav');
 const { CURRENT_GEMINI_DEFAULT } = require('./llm');
@@ -221,6 +222,7 @@ class DeepgramStreamingSTT {
   constructor(apiKey, options = {}) {
     this.apiKey = apiKey;
     this.model = options.model || 'nova-3';
+    this.keyterms = options.keyterms || []; // src/vocab.js, sent as repeated keyterm params
     this.ws = null;
     this.connected = false;
     this.onTranscript = options.onTranscript || (() => {});
@@ -234,26 +236,31 @@ class DeepgramStreamingSTT {
     this._committed = ''; // is_final segments not yet closed out by speech_final
   }
 
+  _listenUrl() {
+    const params = new URLSearchParams({
+      model: this.model,
+      language: 'en',
+      smart_format: 'true',
+      interim_results: 'true',
+      utterance_end_ms: '1000',
+      vad_events: 'true',
+      encoding: 'linear16',
+      sample_rate: '16000',
+      channels: '1',
+      endpointing: '300',
+      punctuate: 'true'
+    });
+    // Key terms (nova-3): the words this user says that Deepgram would otherwise mishear.
+    for (const term of this.keyterms) params.append('keyterm', term);
+    return `wss://api.deepgram.com/v1/listen?${params.toString()}`;
+  }
+
   async connect() {
     if (this.ws && this.connected) return;
 
     try {
       const WebSocket = require('ws');
-      const params = new URLSearchParams({
-        model: this.model,
-        language: 'en',
-        smart_format: 'true',
-        interim_results: 'true',
-        utterance_end_ms: '1000',
-        vad_events: 'true',
-        encoding: 'linear16',
-        sample_rate: '16000',
-        channels: '1',
-        endpointing: '300',
-        punctuate: 'true'
-      });
-
-      const url = `wss://api.deepgram.com/v1/listen?${params.toString()}`;
+      const url = this._listenUrl();
 
       this.ws = new WebSocket(url, {
         headers: { 'Authorization': `Token ${this.apiKey}` }
@@ -417,6 +424,7 @@ function createStreamingSTT(settings, channel, callbacks) {
   if ((selectedProvider === 'auto' || selectedProvider === 'deepgram') && keys.deepgram) {
     const stt = new DeepgramStreamingSTT(keys.deepgram, {
       model: 'nova-3',
+      keyterms: buildVocabTerms(settings),
       onTranscript: (text) => onTranscript(channel, text),
       onInterim: (text) => onInterim(channel, text),
       onError,

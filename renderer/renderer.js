@@ -1740,6 +1740,7 @@
     $('#key-gemini').value = settings.apiKeys.gemini || '';
     $('#key-deepgram').value = settings.apiKeys.deepgram || '';
     $('#key-elevenlabs').value = settings.apiKeys.elevenlabs || '';
+    $('#stt-words').value = settings.sttWords || '';
     $('#practice-voice').value = settings.practiceVoice || 'george';
     $('#key-custom').value = settings.apiKeys.custom || '';
     $('#base-url').value = settings.baseUrl || '';
@@ -2152,6 +2153,7 @@
     settings.apiKeys.gemini = $('#key-gemini').value.trim();
     settings.apiKeys.deepgram = $('#key-deepgram').value.trim();
     settings.apiKeys.elevenlabs = $('#key-elevenlabs').value.trim();
+    settings.sttWords = $('#stt-words').value.trim();
     settings.practiceVoice = $('#practice-voice').value || 'george';
     settings.apiKeys.custom = $('#key-custom').value.trim();
     settings.baseUrl = $('#base-url').value.trim();

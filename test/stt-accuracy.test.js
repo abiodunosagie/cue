@@ -15,10 +15,10 @@ test('looksLikeHallucination keeps real speech', () => {
   });
 });
 
-test('buildVocabPrompt seeds base vocab and resume proper nouns, capped', () => {
+test('buildVocabPrompt carries the resume names, not a fixed word list, capped', () => {
   const p = buildVocabPrompt({ resumeText: 'Optum EKS Terraform', jobDescription: 'AWS SRE' });
-  assert.ok(p.includes('Kubernetes'));
   assert.ok(p.includes('Optum'));
+  assert.ok(!p.includes('Kubernetes'));
   assert.ok(p.length <= 850);
   assert.ok(buildVocabPrompt(undefined).length > 0);
   assert.ok(buildVocabPrompt({ resumeText: 'Xyzzy '.repeat(4000) }).length <= 850);
