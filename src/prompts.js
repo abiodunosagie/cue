@@ -160,6 +160,30 @@ const MODES = {
     }
   },
 
+  // ── Buy time: a natural stall when a question catches the candidate off guard ──
+  buyTime: {
+    tier: 'fast',        // always the Fast model: this has to be on screen in a second
+    skipMemory: true,    // needs only the last question, and is not an answer to remember
+    notAnswer: true,
+    contextTurns: 4, // turns build() sends
+    needsScreen: false,
+    userBubble: 'Buying time',
+    small: false,
+    buildSystem(_contextBlock, aiRules) {
+      return applyRules(
+        'You help a candidate who needs a few seconds to think during a live interview. ' + BASE_RULES +
+        'Write two short lines the candidate says out loud, in first person, in plain calm words:\n' +
+        '1. A natural line that buys time without sounding stuck, tied to the question (never "Great question").\n' +
+        '2. One clarifying question that is genuinely useful and narrows what the interviewer wants.\n' +
+        'Under 30 words in total. No labels, no quotes, no preamble. Put each line on its own line.',
+        aiRules, 'buyTime');
+    },
+    build(ctx) {
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
+      return 'Recent conversation:\n' + (t || '(none)') + '\n\nGive me the two lines to say now.';
+    }
+  },
+
   // ── Recap ──────────────────────────────────────────────────────────────────
   recap: {
     contextTurns: 0, // 0 = the whole transcript; recap gets no memory digest

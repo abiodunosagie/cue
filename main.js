@@ -46,7 +46,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -774,7 +774,7 @@ async function runFeature(mode, userText, options = {}) {
     // The digest skips the turns build() already sends, so nothing goes twice.
     // It is heard speech, so it rides in the user turn, fenced as data, never in
     // the system prompt where an interviewer's words could read as instructions.
-    const memoryBlock = mode === 'recap' || def.tier === 'coding'
+    const memoryBlock = mode === 'recap' || def.tier === 'coding' || def.skipMemory
       ? ''
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
@@ -817,7 +817,7 @@ async function runFeature(mode, userText, options = {}) {
       clearTimeout(watchdog);
     }
     send('llm:done', {});
-    interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration });
+    if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration });
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
@@ -1166,6 +1166,7 @@ function registerShortcuts() {
   shortcutState.hide = globalShortcut.register('CommandOrControl+Shift+/', () => send('hide:toggle', {}));
   shortcutState.quit = globalShortcut.register('CommandOrControl+Shift+X', () => app.quit());
   shortcutState.length = globalShortcut.register('CommandOrControl+Shift+.', cycleAnswerLength);
+  shortcutState.buyTime = globalShortcut.register('CommandOrControl+Shift+B', () => runFeature('buyTime', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {
     if (!wasRegistered) {
       recordEvent({ level: 'warn', event: 'shortcut_unavailable', msg: 'another application holds the ' + name + ' shortcut', frame: 'registerShortcuts', context: { shortcut: name } });

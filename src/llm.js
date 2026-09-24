@@ -400,7 +400,8 @@ async function streamOllama({ apiKey, model, system, turns, imageDataUrl, maxTok
 // Answer budgets per tier. A coding answer holds whole files and build steps.
 const MAX_TOKENS = { fast: 700, smart: 1400, coding: 8192 };
 
-// tier: 'coding' for coding solves; otherwise the Smart toggle picks fast/smart.
+// tier: 'coding' for coding solves, 'fast' to force the Fast model (buying time must
+// be instant); otherwise the Smart toggle picks fast/smart.
 // A provider with no coding model set uses the user's smart model, then their fast
 // model, so a setup that works for spoken answers also works for coding.
 function createLLM(settings, { tier: requestedTier } = {}) {
@@ -409,7 +410,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
   let apiKey = keys[provider];
   let baseURL = '';
   let configurationError = '';
-  const tier = requestedTier === 'coding' ? 'coding' : (settings.smart ? 'smart' : 'fast');
+  const tier = requestedTier === 'coding' || requestedTier === 'fast' ? requestedTier : (settings.smart ? 'smart' : 'fast');
   const models = settings.models || {};
   const providerModels = models[provider] || {};
   let model = tier === 'coding'

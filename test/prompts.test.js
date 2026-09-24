@@ -120,3 +120,18 @@ test('contextTurns matches exactly what each mode build() sends', () => {
     if (sent < 40) assert.doesNotMatch(built, new RegExp('turn-' + (40 - sent - 1) + '-end'), mode + ' sends nothing older');
   }
 });
+
+test('buy time always runs on the Fast model, skips memory, and is not stored as an answer', () => {
+  const { createLLM } = require('../src/llm');
+  const def = MODES.buyTime;
+  assert.equal(def.tier, 'fast');
+  assert.equal(def.skipMemory, true);
+  assert.equal(def.notAnswer, true);
+  const settings = { provider: 'anthropic', apiKeys: { anthropic: 'k' }, smart: true, models: { anthropic: { fast: 'fast-model', smart: 'smart-model' } } };
+  assert.equal(createLLM(settings, { tier: def.tier }).model, 'fast-model');
+  assert.equal(createLLM(settings).model, 'smart-model');
+  const system = def.buildSystem('RESUME CONTEXT', '');
+  assert.doesNotMatch(system, /RESUME CONTEXT/);
+  assert.match(system, /clarifying question/);
+  assert.match(def.build({ transcript: [{ channel: 'them', text: 'Design a rate limiter.' }] }), /Them: Design a rate limiter\./);
+});
