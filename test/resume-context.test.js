@@ -156,3 +156,10 @@ test('buildInterviewContext: the job description is not cut to a few hundred cha
   assert.ok(jd.length > 600, 'longer than the old 600-character cut');
   assert.match(ctx, /END-OF-JD/);
 });
+
+test('seven full STAR stories reach a behavioral answer uncut', () => {
+  const { buildInterviewContext } = require('../src/interview-context');
+  const stories = Array.from({ length: 7 }, (_, i) => 'Story ' + (i + 1) + ': ' + 'x'.repeat(480)).join('\n\n');
+  const ctx = buildInterviewContext({ starStories: stories }, 'answerThis', [{ channel: 'them', text: 'Tell me about a time you had a conflict with a teammate' }]);
+  assert.match(ctx, /Story 7: x{480}/);
+});
