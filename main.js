@@ -7,7 +7,7 @@ const { captureScreenshot } = require('./src/screen');
 const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
-const { MODES } = require('./src/prompts');
+const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -563,6 +563,8 @@ async function runFeature(mode, userText) {
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
+  // An answer that started before Clear must not write the old interview back.
+  const memoryGeneration = interviewMemory.generation();
   let streamSettled = false; // drop stray tokens from a stream we've already abandoned
   try {
     const settings = store.getSettings();
@@ -620,10 +622,15 @@ async function runFeature(mode, userText) {
     const settingsForPrompt = store.getSettings();
     // Recap already sends the whole transcript; coding memory goes in build() so
     // the coding system prompt stays free of personal context.
-    const memoryBlock = mode === 'recap' || def.tier === 'coding' ? '' : interviewMemory.digest();
-    const contextBlock = [buildInterviewContext(settingsForPrompt, mode, transcript), memoryBlock].filter(Boolean).join('\n\n') || null;
+    // The digest skips the turns build() already sends, so nothing goes twice.
+    // It is heard speech, so it rides in the user turn, fenced as data, never in
+    // the system prompt where an interviewer's words could read as instructions.
+    const memoryBlock = mode === 'recap' || def.tier === 'coding'
+      ? ''
+      : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
+    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
-    const built = def.build({
+    const built = (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
       transcript,
       userText: userText || '',
       priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
@@ -658,7 +665,7 @@ async function runFeature(mode, userText) {
       clearTimeout(watchdog);
     }
     send('llm:done', {});
-    interviewMemory.addAnswer({ mode, text: answer });
+    interviewMemory.addAnswer({ mode, text: answer, generation: memoryGeneration });
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
@@ -908,8 +915,7 @@ ipcMain.handle('platform:info', () => ({
 }));
 ipcMain.handle('transcript:clear', () => {
   transcript.splice(0, transcript.length);
-  interviewMemory.clear();
-  return { ok: true };
+  return interviewMemory.clear();
 });
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
@@ -1183,6 +1189,8 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  // Writes are batched; save the last second of the interview before exit.
+  interviewMemory.flush();
   // Best effort, deliberately not blocking the quit: the library also removes
   // the instance file from a `process.on('exit')` handler, and a file left
   // behind is harmless anyway because readers check whether the PID is alive.

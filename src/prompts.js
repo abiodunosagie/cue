@@ -10,6 +10,26 @@ function formatTranscript(turns, limit) {
   return recent.map((t) => (t.channel === 'them' ? 'Them: ' : 'You: ') + t.text).join('\n');
 }
 
+// The heard question is also the newest interviewer turn(s); answerThis leaves
+// those out of the context so the model sees it once, as the thing to answer.
+function withoutHeardQuestion(transcript, question) {
+  const q = question || '';
+  const turns = (transcript || []).slice();
+  while (turns.length && turns[turns.length - 1].channel === 'them' && q.includes(turns[turns.length - 1].text.trim())) turns.pop();
+  return turns;
+}
+
+// How many of the newest transcript turns a mode's build() already puts in the
+// prompt, so the interview memory digest does not send them a second time.
+function turnsSentByBuild(mode, ctx) {
+  const def = MODES[mode];
+  const transcript = (ctx && ctx.transcript) || [];
+  if (!def || !Number.isInteger(def.contextTurns)) return 0;
+  if (def.contextTurns === 0) return transcript.length;
+  const dropped = mode === 'answerThis' ? transcript.length - withoutHeardQuestion(transcript, ctx.userText).length : 0;
+  return Math.min(transcript.length, dropped + def.contextTurns);
+}
+
 function buildSystem(base, contextBlock) {
   if (!contextBlock) return base;
   return contextBlock + '\n\n' + base;
@@ -54,6 +74,7 @@ const MODES = {
 
   // ── Assist: one-shot "do the smart thing" ─────────────────────────────────
   assist: {
+    contextTurns: 14, // turns build() sends; the memory digest skips these
     needsScreen: true,
     userBubble: null,
     small: false,
@@ -79,13 +100,14 @@ const MODES = {
       ), aiRules, 'assist');
     },
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 14);
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
       return 'Recent conversation:\n' + (t || '(none)') + '\n\nRespond with exactly what I should say right now.';
     }
   },
 
   // ── Say: what to say next ──────────────────────────────────────────────────
   say: {
+    contextTurns: 16, // turns build() sends; the memory digest skips these
     needsScreen: false,
     userBubble: 'What should I say?',
     small: false,
@@ -110,7 +132,7 @@ const MODES = {
       ), aiRules, 'say');
     },
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 16);
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
       return 'Interview conversation so far:\n' + (t || '(listening not started yet)') +
         '\n\nWhat should I say next?';
     }
@@ -118,6 +140,7 @@ const MODES = {
 
   // ── Follow-up questions ────────────────────────────────────────────────────
   followup: {
+    contextTurns: 20, // turns build() sends; the memory digest skips these
     needsScreen: false,
     userBubble: 'Follow-up questions',
     small: true,
@@ -132,13 +155,14 @@ const MODES = {
       ), aiRules, 'followup');
     },
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 20);
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
       return 'Conversation so far:\n' + (t || '(none)') + '\n\nSuggest follow-up questions for the interviewer.';
     }
   },
 
   // ── Recap ──────────────────────────────────────────────────────────────────
   recap: {
+    contextTurns: 0, // 0 = the whole transcript; recap gets no memory digest
     needsScreen: false,
     userBubble: 'Recap',
     small: true,
@@ -152,13 +176,14 @@ const MODES = {
       ), aiRules, 'recap');
     },
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 0);
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
       return 'Full interview transcript:\n' + (t || '(nothing captured yet)') + '\n\nRecap this interview.';
     }
   },
 
   // ── Ask: free-form question ────────────────────────────────────────────────
   ask: {
+    contextTurns: 12, // turns build() sends; the memory digest skips these
     needsScreen: true,
     userBubble: null,
     small: false,
@@ -174,13 +199,14 @@ const MODES = {
       ), aiRules, 'ask');
     },
     build(ctx) {
-      const t = formatTranscript(ctx.transcript, 12);
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
       return (t ? 'Recent conversation:\n' + t + '\n\n' : '') + 'Question: ' + ctx.userText;
     }
   },
 
   // ── Answer This: answer one specific transcript question ─────────────────
   answerThis: {
+    contextTurns: 8, // turns build() sends besides the heard question; the memory digest skips these
     needsScreen: false,
     userBubble: null,   // bubble set dynamically from the question text
     small: false,
@@ -207,12 +233,7 @@ const MODES = {
     build(ctx) {
       // A short window of conversation, so follow-ups ("tell me more about that")
       // make sense; the question itself is what gets answered.
-      // The heard question is also the newest interviewer turn(s); leave those
-      // out of the context so the model sees it once, as the thing to answer.
-      const question = ctx.userText || '';
-      const turns = (ctx.transcript || []).slice();
-      while (turns.length && turns[turns.length - 1].channel === 'them' && question.includes(turns[turns.length - 1].text.trim())) turns.pop();
-      const t = formatTranscript(turns, 8);
+      const t = formatTranscript(withoutHeardQuestion(ctx.transcript, ctx.userText), this.contextTurns);
       return (t ? 'Recent conversation, for context only:\n' + t + '\n\n' : '') +
         'Answer this interview question:\n\n"' + (ctx.userText || '(no question provided)') + '"\n\nGive the answer the candidate should say out loud.';
     }
@@ -259,4 +280,4 @@ const MODES = {
   }
 };
 
-module.exports = { MODES, formatTranscript };
+module.exports = { MODES, formatTranscript, turnsSentByBuild };

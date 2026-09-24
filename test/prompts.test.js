@@ -107,3 +107,16 @@ test('coding solves see earlier solves from this interview, and design tasks get
   assert.match(system, /DESIGN TASK/);
   assert.match(system, /which file to open next/);
 });
+
+test('contextTurns matches exactly what each mode build() sends', () => {
+  const { turnsSentByBuild } = require('../src/prompts');
+  const transcript = Array.from({ length: 40 }, (_, i) => ({ channel: i % 2 ? 'you' : 'them', text: 'turn-' + i + '-end' }));
+  for (const [mode, def] of Object.entries(MODES)) {
+    if (!Number.isInteger(def.contextTurns)) continue;
+    const ctx = { transcript, userText: 'a question not in the transcript' };
+    const built = def.build(ctx);
+    const sent = turnsSentByBuild(mode, ctx);
+    assert.match(built, new RegExp('turn-' + (40 - sent) + '-end'), mode + ' sends its oldest counted turn');
+    if (sent < 40) assert.doesNotMatch(built, new RegExp('turn-' + (40 - sent - 1) + '-end'), mode + ' sends nothing older');
+  }
+});

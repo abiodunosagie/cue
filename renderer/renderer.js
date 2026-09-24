@@ -745,7 +745,7 @@
       // Save current input to history before clearing (for undo)
       saveToQuestionHistory(input.value);
       
-      await cue.clearTranscript();
+      const res = await cue.clearTranscript();
       clearMessages();
       // Also clear the floating interim bar
       if (interimEl) { interimEl.textContent = ''; interimEl.classList.remove('show'); }
@@ -756,8 +756,9 @@
       clearTranscriptSidebar(); // clear the history sidebar too
       hardClearSTTFill(); // clear the input box too
       
-      // Irreversible: the memory file is deleted, so no undo hint here.
-      showToast('Interview memory cleared', 3500);
+      // Irreversible: the memory file is deleted, so no undo hint here. cue has
+      // already forgotten it either way; only the disk copy can fail to go.
+      showToast(res && res.ok ? 'Interview memory cleared' : 'Interview memory could not be deleted from this computer. Try again.', 3500);
     });
   }
 
@@ -1022,7 +1023,9 @@
     closeSidebarBtn.addEventListener('click', hideSidebar);
   }
 
-  function appendTranscriptHistoryTurn(channel, text, isInterim) {
+  // merge false: always a row of its own, and later speech never joins it
+  // (restored turns are whole saved turns, not fragments of a live sentence).
+  function appendTranscriptHistoryTurn(channel, text, isInterim, { merge = true } = {}) {
     const list = document.getElementById('ts-list');
     if (!list) return;
 
@@ -1049,7 +1052,7 @@
       // Remove interim row
       if (tsSidebarInterimEl) { tsSidebarInterimEl.remove(); tsSidebarInterimEl = null; }
 
-      const existingRow = tsLastRow[channel];
+      const existingRow = merge ? tsLastRow[channel] : null;
       const useExisting = existingRow && existingRow.isConnected;
 
       if (useExisting) {
@@ -1074,8 +1077,10 @@
         row.appendChild(chLabel);
         row.appendChild(txt);
         list.appendChild(row);
-        tsLastRow[channel] = row;
+        if (merge) tsLastRow[channel] = row;
       }
+
+      if (!merge) { list.scrollTop = list.scrollHeight; return; }
 
       // Reset silence timer
       clearTimeout(tsRowTimer[channel]);
@@ -1301,9 +1306,10 @@
   // history list. Written straight to the list: replaying it as live speech
   // would refill the input and could auto-answer an old question.
   async function restoreInterviewMemory() {
-    const memory = await cue.memoryState();
-    if (!memory || !memory.turnCount) return;
-    memory.turns.forEach((t) => appendTranscriptHistoryTurn(t.channel, t.text, false));
+    let memory = null;
+    try { memory = await cue.memoryState(); } catch { return; } // boot must go on without it
+    if (!memory || !memory.turnCount || !Array.isArray(memory.turns)) return;
+    memory.turns.forEach((t) => appendTranscriptHistoryTurn(t.channel, t.text, false, { merge: false }));
     const since = new Date(memory.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     showStatus(`Continuing the interview from ${since}. Clear interview memory in History to start fresh.`);
   }
