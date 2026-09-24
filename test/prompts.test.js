@@ -151,3 +151,11 @@ test('the interview report uses the whole interview and the suggested answers, n
   assert.match(system, /no em dashes/);
   assert.match(system, /Never describe a specific conversation/);
 });
+
+test('an API key inside a provider error is hidden before the message is shown', () => {
+  const { hideKey } = require('../src/llm');
+  const key = 'sk-test-SECRET1234567890';
+  assert.equal(hideKey('GET https://x/v1?key=' + key + ' failed, key ' + key, key), 'GET https://x/v1?key=[key hidden] failed, key [key hidden]');
+  assert.equal(hideKey('Connection error.', key), 'Connection error.');
+  assert.equal(hideKey('short key abc', 'abc'), 'short key abc');   // too short to be a real key: left alone
+});

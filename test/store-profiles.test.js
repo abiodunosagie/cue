@@ -38,8 +38,9 @@ test('the renderer cannot overwrite profiles; a deleted profile does not come ba
   store.setSettings(patch);
   assert.equal(store.getSettings().activeProfile, 'Globex');
   assert.equal(store.getSettings().profiles.Evil, undefined);
-  store.setProfileState(Profiles.remove(store.getSettings(), 'My profile'));
+  store.setProfileState(Profiles.removeCurrent(store.getSettings()));
   const onDisk = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.deepEqual(Object.keys(onDisk.profiles), ['Globex']);
-  assert.equal(onDisk.jobDescription, 'Globex JD');
+  assert.deepEqual(Object.keys(onDisk.profiles), ['My profile']);
+  assert.equal(onDisk.activeProfile, 'My profile');
+  assert.equal(onDisk.jobDescription, 'A');
 });

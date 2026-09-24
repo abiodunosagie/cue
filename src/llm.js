@@ -404,6 +404,14 @@ const MAX_TOKENS = { fast: 700, smart: 1400, coding: 8192 };
 // be instant); otherwise the Smart toggle picks fast/smart.
 // A provider with no coding model set uses the user's smart model, then their fast
 // model, so a setup that works for spoken answers also works for coding.
+// Some SDKs put the request URL, key and all, in their error text; error
+// messages are shown in the app, so the key never goes with them.
+function hideKey(message, apiKey) {
+  const text = String(message || '');
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.length < 8) return text;
+  return text.split(apiKey).join('[key hidden]');
+}
+
 function createLLM(settings, { tier: requestedTier } = {}) {
   const provider = settings.provider;
   const keys = settings.apiKeys || {};
@@ -484,7 +492,9 @@ function createLLM(settings, { tier: requestedTier } = {}) {
         // publik branches return an Error carrying `.action`; the string
         // branches keep working unchanged.
         const wrapped = formatProviderErrorMessage(error, provider, model);
-        throw wrapped instanceof Error ? wrapped : new Error(wrapped);
+        const out = wrapped instanceof Error ? wrapped : new Error(wrapped);
+        out.message = hideKey(out.message, apiKey);
+        throw out;
       }
     }
   };
@@ -492,6 +502,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 
 module.exports = {
   createLLM,
+  hideKey,
   formatProviderErrorMessage,
   isQuotaError,
   CURRENT_GEMINI_DEFAULT,

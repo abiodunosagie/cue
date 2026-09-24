@@ -34,3 +34,11 @@ test('local Whisper gets the prompt as a form field that cannot break the form',
   assert.match(body, /name="prompt"\r\n\r\nRiverpod, GoRouter X-Evil: 1\r\n/);
   assert.doesNotMatch(buildMultipartBody(Buffer.from('wav')).body.toString(), /name="prompt"/);
 });
+
+test('the Whisper prompt carries the resume names, not a fixed word list, and stays within budget', () => {
+  const p = buildVocabPrompt({ resumeText: 'Optum EKS Terraform', jobDescription: 'AWS SRE' });
+  assert.ok(p.includes('Optum'));
+  assert.ok(!p.includes('Kubernetes'));
+  assert.ok(buildVocabPrompt(undefined).length > 0);
+  assert.ok(buildVocabPrompt({ resumeText: 'Xyzzy '.repeat(4000) }).length <= 850);
+});

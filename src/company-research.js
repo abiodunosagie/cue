@@ -4,7 +4,12 @@
 // answers, so questions about the company get prepared too. The page text is
 // data for the model, never instructions.
 
+const dns = require('dns');
+const net = require('net');
+
 const FETCH_TIMEOUT_MS = 15000;
+const RESEARCH_TIMEOUT_MS = 60000;
+const MAX_REDIRECTS = 5;
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_TEXT_CHARS = 6000;
 const MAX_NOTES_CHARS = 1500;
@@ -33,7 +38,7 @@ function htmlToText(html) {
     .replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi, (m, e) => {
       if (e[0] === '#') {
         const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : ' ';
+        return Number.isInteger(code) && code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : ' ';
       }
       return ENTITIES[e.toLowerCase()] || ' ';
     })
@@ -42,20 +47,58 @@ function htmlToText(html) {
     .slice(0, MAX_TEXT_CHARS);
 }
 
-// The page as text, reading at most MAX_PAGE_BYTES, within FETCH_TIMEOUT_MS.
-async function fetchPageText({ url, fetchImpl = fetch, timeoutMs = FETCH_TIMEOUT_MS, maxBytes = MAX_PAGE_BYTES }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+// Addresses that are this machine, the local network or a cloud metadata
+// service: a company website is never there, so the main process never fetches them.
+function isPrivateAddress(ip) {
+  const v4 = net.isIPv4(ip) ? ip : (/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip) || [])[1];
+  if (v4) {
+    const [a, b] = v4.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 198 && (b === 18 || b === 19)) || a >= 224;
+  }
+  const v6 = ip.toLowerCase();
+  return v6 === '::' || v6 === '::1' || /^f[cd]/.test(v6) || /^fe[89ab]/.test(v6) || /^ff/.test(v6);
+}
+
+// Every address the host name resolves to must be public.
+async function assertPublicHost(hostname, lookup = dns.promises.lookup) {
+  const host = hostname.replace(/^\[|\]$/g, '');
+  let addresses;
   try {
+    addresses = net.isIP(host) ? [{ address: host }] : await lookup(host, { all: true, verbatim: true });
+  } catch {
+    throw new Error('Could not find that website.');
+  }
+  if (!addresses.length || addresses.some((a) => isPrivateAddress(a.address))) throw new Error('That address is not a public website.');
+}
+
+// Fetch following redirects by hand, so every hop is checked before it is requested.
+async function fetchPublic(url, { fetchImpl, lookup, signal }) {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertPublicHost(new URL(current).hostname, lookup);
     let res;
     try {
-      res = await fetchImpl(url, { signal: controller.signal, redirect: 'follow', headers: { Accept: 'text/html,text/plain' } });
+      res = await fetchImpl(current, { signal, redirect: 'manual', headers: { Accept: 'text/html,text/plain' } });
     } catch (e) {
       throw new Error(e && e.name === 'AbortError' ? 'The website took too long to answer.' : 'Could not reach that website.');
     }
+    const location = res.status >= 300 && res.status < 400 && res.headers && res.headers.get && res.headers.get('location');
+    if (!location) return res;
+    current = normalizeUrl(new URL(location, current).toString());
+  }
+  throw new Error('That website redirects too many times.');
+}
+
+// The page as text, reading at most MAX_PAGE_BYTES, within FETCH_TIMEOUT_MS.
+async function fetchPageText({ url, fetchImpl = fetch, lookup, timeoutMs = FETCH_TIMEOUT_MS, maxBytes = MAX_PAGE_BYTES }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetchPublic(url, { fetchImpl, lookup, signal: controller.signal });
     if (!res.ok) throw new Error('The website answered with an error (HTTP ' + res.status + ').');
     const type = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-    if (type && !/text\/html|text\/plain|application\/xhtml/i.test(type)) throw new Error('That address is not a web page.');
+    if (!/text\/html|text\/plain|application\/xhtml/i.test(type)) throw new Error('That address is not a web page.');
     const reader = res.body && res.body.getReader ? res.body.getReader() : null;
     let html = '';
     if (reader) {
@@ -106,4 +149,14 @@ function parseResearch(reply) {
   return { notes, whyCompany };
 }
 
-module.exports = { normalizeUrl, htmlToText, fetchPageText, researchPrompt, parseResearch, RESEARCH_SYSTEM, RESEARCH_MAX_TOKENS };
+// The whole research step: fetch, ask the Smart model, parse. Resolves
+// { url, notes, whyCompany } or rejects with a message fit to show.
+async function research({ rawUrl, llm, quickAsk, background, fetchImpl, lookup }) {
+  const url = normalizeUrl(rawUrl);
+  if (!llm.ready) throw new Error('Set up the Smart model in Settings > Keys first.');
+  const page = await fetchPageText({ url, fetchImpl, lookup });
+  const reply = await quickAsk({ llm, system: RESEARCH_SYSTEM, text: researchPrompt(page, url, background), maxTokens: RESEARCH_MAX_TOKENS, timeoutMs: RESEARCH_TIMEOUT_MS });
+  return { url, ...parseResearch(reply) };
+}
+
+module.exports = { normalizeUrl, htmlToText, fetchPageText, researchPrompt, parseResearch, research, isPrivateAddress };

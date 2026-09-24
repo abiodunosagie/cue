@@ -28,12 +28,13 @@ const SYNONYMS = { application: 'app', program: 'app', codebase: 'project', repo
 // Room for about 20 questions with 3 or 4 phrasings and a spoken answer each.
 const PREPARE_MAX_TOKENS = 8000;
 
-// Everything an answer is built from. A change to any of it makes the bank stale.
-const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules'];
+// Everything a prepared answer is built from (not the same list as the fields a
+// job profile carries, src/profiles.js). A change to any of it makes the bank stale.
+const BANK_INPUTS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules'];
 
 function profileHash(settings) {
   const h = crypto.createHash('sha256');
-  for (const k of PROFILE_FIELDS) h.update(k + '\0' + String((settings && settings[k]) || '') + '\0');
+  for (const k of BANK_INPUTS) h.update(k + '\0' + String((settings && settings[k]) || '') + '\0');
   return h.digest('hex');
 }
 

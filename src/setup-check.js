@@ -17,7 +17,7 @@ function buildChecks(d) {
   return [
     { name: 'Fast model', run: () => reply('fast') },
     { name: 'Smart model', run: () => reply('smart') },
-    { name: 'Coding model (⌘H)', run: () => reply('coding') },
+    { name: 'Coding model (' + d.codingShortcut + ')', run: () => reply('coding') },
     {
       name: 'Instant first line',
       run: async () => {
@@ -47,7 +47,7 @@ function buildChecks(d) {
     {
       name: 'Screen permission',
       run: async () => (d.mediaStatus('screen') === 'granted'
-        ? { status: 'pass', detail: 'Granted. Needed for Assist, ⌘H and screen watch.' }
+        ? { status: 'pass', detail: 'Granted. Needed for Assist, ' + d.codingShortcut + ' and screen watch.' }
         : { status: 'fail', detail: 'Allow cue in System Settings > Privacy & Security > Screen & System Audio Recording.' })
     },
     {
@@ -95,4 +95,4 @@ async function runSetupChecks(deps, onResult) {
   return results;
 }
 
-module.exports = { runSetupChecks, SAMPLE_QUESTION };
+module.exports = { runSetupChecks };

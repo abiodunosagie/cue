@@ -14,6 +14,7 @@ function deps(over = {}) {
     detectSystem: 'detect',
     elevenLabsKey: () => 'k',
     practiceVoice: () => 'george',
+    codingShortcut: '⌘H',
     synthesize: async () => Buffer.from('mp3'),
     ...over
   };

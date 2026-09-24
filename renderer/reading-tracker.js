@@ -154,9 +154,11 @@
       check(now) {
         turns = turns.filter((t) => now - t.ts <= PACE_WINDOW_MS);
         if (turns.length < 2) return null;
+        // A turn is stamped when it ends, so the span starts where the first
+        // turn ended: only the words spoken after that point belong in it.
         const span = now - turns[0].ts;
         if (span < PACE_MIN_SPAN_MS) return null;
-        const words = turns.reduce((sum, t) => sum + t.words, 0);
+        const words = turns.slice(1).reduce((sum, t) => sum + t.words, 0);
         const wpm = Math.round(words / (span / 60000));
         if (wpm > PACE_FAST_WPM) fast = true;
         else if (wpm < PACE_OK_WPM) fast = false;

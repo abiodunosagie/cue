@@ -18,17 +18,23 @@ function snapshot(settings) {
   return out;
 }
 
-// Settings from before profiles: the flat fields become the first profile.
-// Returns null when nothing needs to change.
-function migrate(settings) {
-  const profiles = settings && settings.profiles && typeof settings.profiles === 'object' ? settings.profiles : {};
-  if (settings && settings.activeProfile && profiles[settings.activeProfile]) return null;
-  const name = Object.keys(profiles)[0] || DEFAULT_NAME;
-  return { profiles: { ...profiles, [name]: profiles[name] || snapshot(settings) }, activeProfile: name };
-}
-
 function cleanName(name) {
   return String(name || '').replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+}
+
+// Own keys only: a name like "__proto__" or "constructor" must not match
+// something inherited from Object.
+const has = (profiles, name) => Object.prototype.hasOwnProperty.call(profiles || {}, name);
+
+// Settings from before profiles, or an active profile that is missing from the
+// list: the flat fields are what the user sees and edits, so they become the
+// active profile (under its own name when it has one). Returns null when
+// nothing needs to change.
+function migrate(settings) {
+  const profiles = settings && settings.profiles && typeof settings.profiles === 'object' ? settings.profiles : {};
+  if (settings && settings.activeProfile && has(profiles, settings.activeProfile)) return null;
+  const name = cleanName(settings && settings.activeProfile) || (has(profiles, DEFAULT_NAME) ? DEFAULT_NAME + ' (current)' : DEFAULT_NAME);
+  return { profiles: { ...profiles, [name]: snapshot(settings) }, activeProfile: name };
 }
 
 // The profiles with the active one brought up to date from the flat fields.
@@ -38,7 +44,7 @@ function saved(settings) {
 
 function switchTo(settings, name) {
   const profiles = saved(settings);
-  if (!profiles[name]) throw new Error('There is no profile called ' + name + '.');
+  if (!has(profiles, name)) throw new Error('There is no profile called ' + name + '.');
   return { profiles, activeProfile: name, fields: { ...snapshot({}), ...profiles[name] } };
 }
 
@@ -46,19 +52,12 @@ function create(settings, rawName) {
   const name = cleanName(rawName);
   if (!name) throw new Error('Give the new profile a name, for example the company.');
   const profiles = saved(settings);
-  if (profiles[name]) throw new Error('A profile called ' + name + ' already exists.');
+  if (has(profiles, name)) throw new Error('A profile called ' + name + ' already exists.');
+  if (name === '__proto__') throw new Error('Choose another name for the profile.');
   if (Object.keys(profiles).length >= MAX_PROFILES) throw new Error('Delete an old profile first; cue keeps up to ' + MAX_PROFILES + '.');
   const fields = snapshot(settings);
   for (const k of JOB_FIELDS) fields[k] = '';
   return { profiles: { ...profiles, [name]: fields }, activeProfile: name, fields };
-}
-
-function remove(settings, name) {
-  if (name === settings.activeProfile) throw new Error('Switch to another profile before deleting this one.');
-  const profiles = saved(settings);
-  if (!profiles[name]) throw new Error('There is no profile called ' + name + '.');
-  delete profiles[name];
-  return { profiles, activeProfile: settings.activeProfile, fields: snapshot(settings) };
 }
 
 // Delete the profile in use: switch to another one first, then remove it.
@@ -76,4 +75,4 @@ function names(settings) {
   return Object.keys((settings && settings.profiles) || {});
 }
 
-module.exports = { migrate, switchTo, create, remove, removeCurrent, names, snapshot, PROFILE_FIELDS, JOB_FIELDS, DEFAULT_NAME };
+module.exports = { migrate, switchTo, create, removeCurrent, names, snapshot, PROFILE_FIELDS, JOB_FIELDS, DEFAULT_NAME };

@@ -219,7 +219,8 @@ const MODES = {
 
   // ── Recap ──────────────────────────────────────────────────────────────────
   recap: {
-    contextTurns: 0, // 0 = the whole transcript; recap gets no memory digest
+    skipMemory: true,    // it already sends the whole transcript
+    contextTurns: 0, // 0 = the whole transcript
     needsScreen: false,
     userBubble: 'Recap',
     small: true,

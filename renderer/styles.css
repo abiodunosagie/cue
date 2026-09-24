@@ -811,7 +811,7 @@ button:focus { outline: none; }
 .setup-results b { font-weight: 600; margin-right: 6px; }
 .setup-results .pass b { color: var(--live); }
 .setup-results .fail b { color: #f87171; }
-.setup-results .skip b { color: rgba(255,255,255,0.5); }
+.setup-results .skip b { color: rgba(255,255,255,0.62); }
 /* A status line that wraps: an error must be readable in full, not cut to an ellipsis. */
 .s-status { flex: 1; min-width: 0; color: rgba(255,255,255,0.6); font-size: 12.5px; line-height: 1.4; }
 .s-upload-btn:disabled { opacity: 0.45; cursor: default; }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { looksLikeHallucination, buildVocabPrompt } = require('../src/stt');
+const { looksLikeHallucination } = require('../src/stt');
 const { DeepgramStreamingSTT } = require('../src/stt-streaming');
 
 test('looksLikeHallucination drops Whisper silence artifacts', () => {
@@ -13,15 +13,6 @@ test('looksLikeHallucination keeps real speech', () => {
   ['Tell me about your experience with Kubernetes.', 'You know, I led the migration.'].forEach((s) => {
     assert.equal(looksLikeHallucination(s), false, JSON.stringify(s));
   });
-});
-
-test('buildVocabPrompt carries the resume names, not a fixed word list, capped', () => {
-  const p = buildVocabPrompt({ resumeText: 'Optum EKS Terraform', jobDescription: 'AWS SRE' });
-  assert.ok(p.includes('Optum'));
-  assert.ok(!p.includes('Kubernetes'));
-  assert.ok(p.length <= 850);
-  assert.ok(buildVocabPrompt(undefined).length > 0);
-  assert.ok(buildVocabPrompt({ resumeText: 'Xyzzy '.repeat(4000) }).length <= 850);
 });
 
 test('Deepgram accumulates is_final segments into one turn at speech_final', () => {

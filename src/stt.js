@@ -17,7 +17,6 @@ function looksLikeHallucination(raw) {
   return artifacts.has(t);
 }
 
-
 async function transcribeOpenAI(apiKey, wav, model, baseURL, prompt) {
   const OpenAI = require('openai');
   const toFile = OpenAI.toFile || require('openai/uploads').toFile;
@@ -112,4 +111,4 @@ function createSTT(settings) {
   };
 }
 
-module.exports = { createSTT, looksLikeHallucination, buildVocabPrompt };
+module.exports = { createSTT, looksLikeHallucination };

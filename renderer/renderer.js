@@ -1882,13 +1882,29 @@
   }
   // Every change saves what is typed first, then main moves the fields and
   // sends the whole settings back, so the form always shows the active profile.
+  // One change at a time, and only after the typed edits are saved: if saving
+  // fails, switching would store the old values into the profile being left.
+  let profileBusy = false;
+  function setProfileControls(disabled) {
+    ['#profile-select', '#profile-new-btn', '#profile-delete-btn'].forEach((id) => { $(id).disabled = disabled; });
+  }
   async function changeProfile(call, done) {
-    await saveSettings();
-    const res = await call();
-    if (!res || res.error || !res.settings) { showStatus((res && res.error) || 'The profile could not be changed.'); fillProfiles(); return; }
-    settings = res.settings;
-    fillSettings();
-    if (done) showToast(done, 1800);
+    if (profileBusy) return false;
+    profileBusy = true;
+    setProfileControls(true);
+    try {
+      if (!(await saveSettings())) { fillProfiles(); showToast('Fix the error in Settings first, then change profile.', 3000); return false; }
+      const res = await call();
+      if (!res || res.error || !res.settings) { showStatus((res && res.error) || 'The profile could not be changed.'); return false; }
+      settings = res.settings;
+      fillSettings();
+      if (done) showToast(done, 1800);
+      return true;
+    } finally {
+      profileBusy = false;
+      setProfileControls(false);
+      fillProfiles(); // restores the right Delete state and the active selection
+    }
   }
   $('#profile-select').addEventListener('change', (e) => {
     const name = e.target.value;
@@ -1896,18 +1912,19 @@
   });
   $('#profile-new-btn').addEventListener('click', () => {
     const name = $('#profile-new-name').value;
-    void changeProfile(() => cue.profileCreate(name), 'Created ' + name.trim()).then(() => { $('#profile-new-name').value = ''; });
+    // The name stays in the box if creating failed, so it can be corrected.
+    void changeProfile(() => cue.profileCreate(name), 'Created ' + name.trim()).then((ok) => { if (ok) $('#profile-new-name').value = ''; });
   });
   // Deleting loses that job's material, so it takes a second click within 3s.
-  let deleteArmed = null;
+  let deleteArmedTimer = null;
   $('#profile-delete-btn').addEventListener('click', (e) => {
     const btn = e.currentTarget;
-    if (!deleteArmed) {
+    if (!deleteArmedTimer) {
       btn.textContent = 'Click again to delete ' + settings.activeProfile;
-      deleteArmed = setTimeout(() => { deleteArmed = null; btn.textContent = 'Delete this profile'; }, 3000);
+      deleteArmedTimer = setTimeout(() => { deleteArmedTimer = null; btn.textContent = 'Delete this profile'; }, 3000);
       return;
     }
-    clearTimeout(deleteArmed); deleteArmed = null;
+    clearTimeout(deleteArmedTimer); deleteArmedTimer = null;
     btn.textContent = 'Delete this profile';
     const name = settings.activeProfile;
     void changeProfile(() => cue.profileDeleteCurrent(), 'Deleted ' + name);

@@ -8,9 +8,8 @@ const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
-const { runSetupChecks } = require('./src/setup-check');
-const Profiles = require('./src/profiles');
-const CompanyResearch = require('./src/company-research');
+const { registerSetupIpc } = require('./src/ipc/setup');
+const { registerProfileIpc } = require('./src/ipc/profiles');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
@@ -635,6 +634,14 @@ function preparedState() {
 // One Smart call writes the likely questions and their spoken answers, with the
 // same context and rules as a live answer. Skipped when the bank already matches
 // the profile, unless forced from Settings.
+// Questions with spoken answers, written with the candidate's context in the
+// system prompt exactly as for a live answer, so they follow the same voice,
+// length and no-invented-stories rules. Used for the prepared bank and follow-ups.
+async function askForItems({ llm, settings, turns, prompt, maxTokens, timeoutMs }) {
+  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns), settings.aiRules || '');
+  return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
+}
+
 async function prepareAnswers({ force }) {
   const settings = store.getSettings();
   const hash = profileHash(settings);
@@ -645,16 +652,7 @@ async function prepareAnswers({ force }) {
   preparing.running = true; preparing.error = '';
   send('prepared:state', preparedState());
   try {
-    // The candidate's context goes in the system prompt exactly as for a live
-    // answer, so prepared answers follow the same voice, length and story rules.
-    const context = buildInterviewContext(settings, 'answerThis', []);
-    const system = MODES.answerThis.buildSystem(context, settings.aiRules || '');
-    let timer = null;
-    const reply = await Promise.race([
-      llm.stream({ system, turns: [{ role: 'user', text: PREPARE_INSTRUCTIONS }], maxTokens: PREPARE_MAX_TOKENS, onToken: () => {} }),
-      new Promise((_res, reject) => { timer = setTimeout(() => reject(new Error('the model took too long')), PREPARE_TIMEOUT_MS); })
-    ]).finally(() => clearTimeout(timer));
-    const items = parseItems(reply);
+    const items = await askForItems({ llm, settings, turns: [], prompt: PREPARE_INSTRUCTIONS, maxTokens: PREPARE_MAX_TOKENS, timeoutMs: PREPARE_TIMEOUT_MS });
     if (!items.length) throw new Error('the model did not return usable answers');
     // The profile may have changed while this ran; then this bank is already stale.
     if (profileHash(store.getSettings()) === hash) preparedStore.replace(hash, items);
@@ -701,9 +699,7 @@ async function prepareFollowUps(question, answer, generation) {
   const llm = createLLM({ ...settings, smart: true });
   if (!llm.ready) return;
   try {
-    const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', transcript), settings.aiRules || '');
-    const reply = await quickAsk({ llm, system, text: followUpPrompt(question, answer), maxTokens: FOLLOW_UP_MAX_TOKENS, timeoutMs: FOLLOW_UP_TIMEOUT_MS });
-    const items = parseItems(reply);
+    const items = await askForItems({ llm, settings, turns: transcript, prompt: followUpPrompt(question, answer), maxTokens: FOLLOW_UP_MAX_TOKENS, timeoutMs: FOLLOW_UP_TIMEOUT_MS });
     if (items.length && generation === interviewMemory.generation()) followUps.add(items);
   } catch (e) {
     recordEvent({ level: 'warn', event: 'follow_ups_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareFollowUps', context: {} });
@@ -798,12 +794,12 @@ async function runFeature(mode, userText, options = {}) {
     }
 
     const settingsForPrompt = store.getSettings();
-    // Recap already sends the whole transcript; coding memory goes in build() so
-    // the coding system prompt stays free of personal context.
+    // Modes that read the whole interview themselves skip the digest; coding memory
+    // goes in build() so the coding system prompt stays free of personal context.
     // The digest skips the turns build() already sends, so nothing goes twice.
     // It is heard speech, so it rides in the user turn, fenced as data, never in
     // the system prompt where an interviewer's words could read as instructions.
-    const memoryBlock = mode === 'recap' || def.tier === 'coding' || def.skipMemory
+    const memoryBlock = def.tier === 'coding' || def.skipMemory
       ? ''
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
@@ -876,46 +872,12 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
-// Job profiles: every change goes through src/profiles.js and store.setProfileState.
-// The new profile's prepared answers are reused if cached, else built shortly.
-function applyProfileChange(change) {
-  try {
-    const saved = store.setProfileState(change(store.getSettings()));
-    if (!preparedStore.isCurrent(profileHash(saved))) schedulePrepare();
-    send('prepared:state', preparedState());
-    return { settings: store.redactForRenderer(saved) };
-  } catch (e) {
-    return { error: e && e.message ? e.message : String(e) };
-  }
-}
-// Company research: read the website, return notes and a Why-this-company draft
-// for the renderer to put in the form (saved with Done, like an import).
-const RESEARCH_TIMEOUT_MS = 60000;
-ipcMain.handle('company:research', async (_e, rawUrl) => {
-  try {
-    const url = CompanyResearch.normalizeUrl(rawUrl);
-    const settings = store.getSettings();
-    const llm = createLLM({ ...settings, smart: true });
-    if (!llm.ready) return { error: 'Set up the Smart model in Settings > Keys first.' };
-    const page = await CompanyResearch.fetchPageText({ url });
-    const background = [settings.resumeText, settings.starStories].filter(Boolean).join('\n\n');
-    const reply = await quickAsk({ llm, system: CompanyResearch.RESEARCH_SYSTEM, text: CompanyResearch.researchPrompt(page, url, background), maxTokens: CompanyResearch.RESEARCH_MAX_TOKENS, timeoutMs: RESEARCH_TIMEOUT_MS });
-    return { url, ...CompanyResearch.parseResearch(reply) };
-  } catch (e) {
-    return { error: e && e.message ? e.message : String(e) };
-  }
-});
-ipcMain.handle('profile:switch', (_e, name) => applyProfileChange((s) => Profiles.switchTo(s, String(name || ''))));
-ipcMain.handle('profile:create', (_e, name) => applyProfileChange((s) => Profiles.create(s, String(name || ''))));
-ipcMain.handle('profile:delete-current', () => applyProfileChange((s) => Profiles.removeCurrent(s)));
-// Test my setup: real calls, one after another, each result sent as it lands.
-let setupTestRunning = false;
-ipcMain.handle('setup:test', async () => {
-  if (setupTestRunning) return { busy: true };
-  setupTestRunning = true;
-  try {
+registerSetupIpc({
+  ipcMain,
+  send,
+  deps: () => {
     const settings = () => store.getSettings();
-    return await runSetupChecks({
+    return {
       llmFor: (tier) => (tier === 'coding' ? createLLM(settings(), { tier: 'coding' }) : createLLM({ ...settings(), smart: tier === 'smart' })),
       quickAsk,
       runOpener,
@@ -925,10 +887,20 @@ ipcMain.handle('setup:test', async () => {
       detectSystem: DETECT_SYSTEM,
       elevenLabsKey: () => (settings().apiKeys || {}).elevenlabs || '',
       practiceVoice: () => settings().practiceVoice,
+      codingShortcut: isMac ? '⌘H' : 'Ctrl+H',
       synthesize
-    }, (result) => send('setup:result', result));
-  } finally {
-    setupTestRunning = false;
+    };
+  }
+});
+// A new profile's prepared answers are reused if cached, else built shortly.
+registerProfileIpc({
+  ipcMain,
+  store,
+  createLLM,
+  quickAsk,
+  onProfileChanged: (saved) => {
+    if (!preparedStore.isCurrent(profileHash(saved))) schedulePrepare();
+    send('prepared:state', preparedState());
   }
 });
 ipcMain.handle('practice:start', () => practice.start());

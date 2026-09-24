@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { migrate, switchTo, create, remove, removeCurrent, names } = require('../src/profiles');
+const { migrate, switchTo, create, removeCurrent, names } = require('../src/profiles');
 
 const flat = { resumeText: 'CV', jobDescription: 'JD Acme', starStories: 'S', whyCompany: 'Acme mission', whyLeaving: 'Growth', workStyle: 'W', salaryTarget: '90k', questionsToAsk: 'Q', aiRules: 'keep', profiles: {}, activeProfile: '' };
 const apply = (s, r) => ({ ...s, ...r.fields, profiles: r.profiles, activeProfile: r.activeProfile });
@@ -37,12 +37,19 @@ test('switching saves what was typed into the profile being left and loads the o
   assert.throws(() => switchTo(s, 'Nope'), /no profile called Nope/);
 });
 
-test('the active profile cannot be deleted; another can', () => {
-  let s = apply(flat, { ...migrate(flat), fields: {} });
-  s = apply(s, create(s, 'Globex'));
-  assert.throws(() => remove(s, 'Globex'), /Switch to another profile/);
-  const r = remove(s, 'My profile');
-  assert.deepEqual(names({ profiles: r.profiles }), ['Globex']);
+test('an active profile missing from the list keeps the fields the user sees, not old stored ones', () => {
+  const s = { ...flat, resumeText: 'NEW CV typed just now', profiles: { 'Old Co': { resumeText: 'STALE' } }, activeProfile: 'Gone' };
+  const m = migrate(s);
+  assert.equal(m.activeProfile, 'Gone');
+  assert.equal(m.profiles.Gone.resumeText, 'NEW CV typed just now');
+  assert.equal(m.profiles['Old Co'].resumeText, 'STALE');
+});
+
+test('names that exist on every object are not mistaken for profiles', () => {
+  const s = apply(flat, { ...migrate(flat), fields: {} });
+  assert.throws(() => create(s, '__proto__'), /Choose another name/);
+  assert.equal(create(s, 'constructor').activeProfile, 'constructor');
+  assert.throws(() => switchTo(s, 'toString'), /no profile called toString/);
 });
 
 test('deleting the profile in use switches to another first, and the last one cannot go', () => {
