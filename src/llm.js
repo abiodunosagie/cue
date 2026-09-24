@@ -341,8 +341,10 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     return full;
   };
   // Try the fastest options first, then effort alone (fast mode can be off for
-  // the account or have hit its own rate limit), then the plain request. A
-  // refusal only counts before any word arrived; after that it is a real error.
+  // the account or have hit its own rate limit), then the plain request. Any
+  // failure before the first word moves to the next stage, which stands in for
+  // the SDK retries those stages skip (an overload 529 or a network blip too).
+  // After a word arrived, or on the last stage, the error is real.
   const stages = [];
   if (speedOptions) {
     stages.push(speedOptions);
@@ -353,11 +355,10 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     try {
       return await run(stages[i], i < stages.length - 1);
     } catch (error) {
-      const status = error && error.status;
-      const refused = status === 400 || status === 403 || status === 404 || status === 429;
-      if (emitted || !refused || i === stages.length - 1) throw error;
+      if (emitted || i === stages.length - 1) throw error;
+      const reason = (error && (error.status || error.code)) || 'no status';
       const next = stages[i + 1];
-      console.log(`[timing] coding speed options refused (${status}); retrying ${next ? 'with effort ' + next.effort + ' only' : 'at normal speed'}`);
+      console.log(`[timing] coding speed stage failed (${reason}); retrying ${next ? 'with effort ' + next.effort + ' only' : 'at normal speed'}`);
     }
   }
 }

@@ -63,10 +63,21 @@ test('when effort is refused too, the plain request runs', async () => {
   assert.deepEqual(calls[2], { effort: undefined, speed: undefined, beta: undefined });
 });
 
-test('an error that is not a refusal is not retried', async () => {
+test('an overload before the first word moves to the next stage', async () => {
+  const calls = fakeSdk([529]);
+  assert.equal(await solve({ effort: 'low', fast: true }), 'ok');
+  assert.equal(calls.length, 2);
+  fakeSdk([529, 529]);
+  assert.equal(await solve({ effort: 'low', fast: true }), 'ok');
+  assert.deepEqual(retries, [0, 0, undefined]);
+});
+
+test('a failure on the last stage is the real error', async () => {
   const calls = fakeSdk([500]);
-  await assert.rejects(solve({ effort: 'low', fast: true }), /refused/);
+  await assert.rejects(solve(null), /refused/);
   assert.equal(calls.length, 1);
+  fakeSdk([500, 500, 500]);
+  await assert.rejects(solve({ effort: 'low', fast: true }), /refused/);
 });
 
 test('stages with a fallback skip SDK retries; the last stage keeps them', async () => {
