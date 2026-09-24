@@ -228,7 +228,10 @@ const MODES = {
         'Read the screen carefully: judge only what is visible, and say which file you are looking at.\n\n' +
         'Answer in this order:\n' +
         '**Where you are:** one or two plain sentences: which steps of the plan look done, based on the screen, and which step they are on.\n' +
-        '**Issues:** every real problem in the visible code that would stop it compiling or working (a typo, a missing or wrong import, a wrong name, ' +
+        'When an error is visible (a red underline, a problems panel, a terminal or run output) or the candidate describes one, find its real cause first. ' +
+        'An import or name that cannot be found usually means the file or class was never created: then the fix is to create it, with the whole file in a fenced block ' +
+        'and its full path, never only another import line.\n' +
+        '**Issues:** every real problem in the visible code that would stop it compiling or working (a typo, a missing or wrong import, a wrong name, a file that was never created, ' +
         'a missing bracket, a logic slip, code that does not match the plan), each as one plain sentence naming the line, then the corrected lines in a fenced block ' +
         'tagged with the language, then **Say:** one sentence the candidate can say while fixing it. When there is nothing wrong, write "None, it looks right." and nothing else here.\n' +
         '**Next:** the next step of the plan to write, exactly as the plan gives it (its heading, its code blocks and their Say lines), adjusted to fit what is on screen. ' +
@@ -238,7 +241,9 @@ const MODES = {
     },
     build(ctx) {
       const plan = (ctx.priorSolves || [])[0] || '';
+      const said = String(ctx.userText || '').trim();
       return (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : 'There is no earlier plan: judge the code on screen on its own.\n\n') +
+        (said ? 'What I am stuck on, in my words: ' + said + '\n\n' : '') +
         'Check my progress on screen: what is done, anything wrong, and what I write next.';
     }
   },
@@ -428,6 +433,9 @@ const MODES = {
         '  Then numbered steps in dependency order, innermost layer first: the pieces nothing else depends on (entities, models, contracts), then the logic that uses them ' +
         '(use cases, repositories, services, data sources), then state (providers, stores or view models), then screens and widgets, and the wiring (main, routes, setup) last. ' +
         'Never import or use anything an earlier step has not already written, so each step only depends on files already written.\n' +
+        '  Anything the task names but does not show (a class, repository, service or API it calls, like "load from ItemsRepository.fetch()") is NOT in the candidate\'s project: ' +
+        'write it in its own step like any other file, as a small working fake with exactly the named methods and types (sample data, a short delay for a network call), ' +
+        'and say in that step that it stands in for the real one and to skip it if the project already has that file. Every import must point to a file a step writes or to a package the Run it step installs.\n' +
         '  Each step writes ONE whole file, ready to paste into that empty file: a line **Step N: Write the file (its full path), what it does and why, in one plain sentence**, ' +
         'then the file from top to bottom as consecutive fenced blocks tagged with its language, the first starting with a comment that names the file and holding its imports, ' +
         'each block one logical piece followed by its **Say:** line; read in order, the blocks are the complete file. Never come back later to add to a file an earlier step wrote.\n' +

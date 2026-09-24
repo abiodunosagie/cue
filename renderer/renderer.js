@@ -11,6 +11,8 @@
   quitButton.addEventListener('click', () => cue.quit());
   quitButton.title = isMac ? 'Quit cue (⌘⇧X)' : 'Quit cue (Ctrl+Shift+X)';
   $('#hide-btn').title = isMac ? 'Hide or show the answers (⌘⇧H)' : 'Hide or show the answers (Ctrl+Shift+H)';
+  // The key shows on the button itself: a tooltip never appears on a window that is not focused.
+  $('#hide-kbd').textContent = isMac ? '⌘⇧H' : 'Ctrl+Shift+H';
   // Keyboard moves keep the mouse pointer still, which matters when the screen is shared.
   $('.drag-pill').title = isMac
     ? 'Drag to move. Without the mouse: Ctrl+Option+⌘ with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view'
@@ -42,8 +44,6 @@
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
   let caretEl = null;
-  // How long a coding solve may be silent before the "working" note shows.
-  const SLOW_START_NOTE_MS = 5000;
   // While an answer streams, its text is grouped into .w-para blocks split where
   // the final markdown will split it (window.StreamBlocks), so reading follow can
   // track the user from the first sentence. finalizeAi swaps in the rendered markdown.
@@ -161,6 +161,43 @@
     const last = aiEl.lastElementChild;
     const home = !last || last.tagName === 'PRE' ? aiEl : last.classList.contains('step-pair') ? (last.lastElementChild || aiEl) : last;
     if (caretEl) home.appendChild(caretEl);
+  }
+
+  // The coding model thinks before its first word. Until that word, show how
+  // long it has been working and the newest line of its thinking summary, so a
+  // long wait is visibly alive. The first word removes the note.
+  function showWaitNote(target) {
+    const wait = document.createElement('div');
+    wait.className = 'ai-wait';
+    const head = document.createElement('div');
+    head.className = 'ai-wait-head';
+    const thought = document.createElement('div');
+    thought.className = 'ai-wait-thought';
+    wait.append(head, thought);
+    target.insertBefore(wait, caretEl && caretEl.parentNode === target ? caretEl : null);
+    const started = Date.now();
+    const tick = () => {
+      // Stop once the note is gone: first word, finish, error or Clear. (parentNode,
+      // not isConnected: the answer is added to the page just after this runs.)
+      if (!wait.parentNode || target !== aiEl) { clearInterval(timer); return; }
+      head.textContent = 'Working on the solution, ' + Math.round((Date.now() - started) / 1000) + 's';
+    };
+    const timer = setInterval(tick, 1000);
+    tick();
+  }
+
+  // The newest complete line of the thinking summary, without markdown marks.
+  function latestThought(summary) {
+    const lines = summary.split('\n').map((l) => l.replace(/[*_#`]/g, '').trim()).filter(Boolean);
+    const line = lines.length > 1 && !/[.!?:]$/.test(lines[lines.length - 1]) ? lines[lines.length - 2] : lines[lines.length - 1];
+    return line ? (line.length > 160 ? line.slice(0, 157) + '...' : line) : '';
+  }
+
+  function appendThinking(t) {
+    const wait = aiEl && aiEl.querySelector('.ai-wait');
+    if (!wait) return;
+    wait.dataset.summary = (wait.dataset.summary || '') + t;
+    wait.querySelector('.ai-wait-thought').textContent = latestThought(wait.dataset.summary);
   }
 
   function appendToken(t) {
@@ -968,6 +1005,7 @@
   // Keyboard scrolling of the answers (Ctrl+Option+Cmd with U or D): most of a
   // screen at a time, keeping a line of the old view for context.
   cue.on('code:copy', copyCodeInView);
+  cue.on('llm:thinking', ({ text }) => appendThinking(text));
   cue.on('answer:scroll', ({ direction }) => {
     const step = Math.max(80, messages.clientHeight * 0.8) * (direction === 'up' ? -1 : 1);
     messages.scrollBy({ top: step, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
@@ -1546,19 +1584,7 @@
     if (coding) { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
     // The coding model can be slow to start: if no word has come after a few
     // seconds, say so, so it does not look frozen. A fast start never shows it.
-    if (slowStart) {
-      const target = aiEl;
-      setTimeout(() => {
-        // Still the answer being streamed (not finished, failed or cleared), with no word yet.
-        if (target !== aiEl || !target.isConnected || target.dataset.raw) return;
-        const wait = document.createElement('span');
-        wait.className = 'ai-wait';
-        // Matches the first-word limit in main.js: two minutes on Most careful, one otherwise.
-        const limit = settings && settings.codingSpeed === 'careful' ? 'two minutes' : 'a minute';
-        wait.textContent = 'Working on the solution. The first words can take up to ' + limit + '.';
-        target.insertBefore(wait, caretEl && caretEl.parentNode === target ? caretEl : null);
-      }, SLOW_START_NOTE_MS);
-    }
+    if (slowStart) showWaitNote(aiEl);
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
     // push the toolbar out of the window. requestAnimationFrame lets layout settle.

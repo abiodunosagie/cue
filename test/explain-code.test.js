@@ -77,3 +77,25 @@ test('a long coding plan is kept whole, so a progress check sees its later steps
   m.addAnswer({ mode: 'answerThis', text: 'y'.repeat(9000) });
   assert.equal(m.answers()[1].text.length, 6000);   // spoken answers keep their normal cap
 });
+
+test('typed help with an error is recognised; ordinary questions are not', () => {
+  const { isFixRequest } = require('../renderer/spoken-question');
+  for (const q of ['it cannot find ContactsRepository', 'I added the import and it did not work', 'help me figure out this error', 'fix this', 'what is wrong here']) {
+    assert.equal(isFixRequest(q), true, q);
+  }
+  for (const q of ['Tell me about yourself', 'how do I run it', 'why use a map', 'What is your biggest strength?']) {
+    assert.equal(isFixRequest(q), false, q);
+  }
+});
+
+test('a progress check carries what the candidate typed and looks for files never created', () => {
+  const def = MODES.checkProgress;
+  const prompt = def.build({ priorSolves: ['PLAN'], userText: 'it cannot find ContactsRepository' });
+  assert.match(prompt, /What I am stuck on, in my words: it cannot find ContactsRepository/);
+  assert.doesNotMatch(def.build({ priorSolves: ['PLAN'], userText: '' }), /stuck on/);
+  assert.match(def.buildSystem('', ''), /never created: then the fix is to create it/);
+});
+
+test('a build task writes anything the task names but does not show', () => {
+  assert.match(MODES.leetcode.buildSystem('', ''), /names but does not show[\s\S]*small working fake/);
+});

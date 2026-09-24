@@ -32,7 +32,22 @@
     return t.trim().length >= 8 && EXPLAIN_PATTERNS.some((p) => p.test(t));
   }
 
-  const api = { modeForSpokenQuestion, isExplainRequest };
+  // The candidate asking for help with their own code during a coding task:
+  // an error, something not found or not working. Answered by reading the
+  // editor on screen (checkProgress), never guessed from the words alone.
+  const FIX_PATTERNS = [
+    /\b(error|errors|exception|crash(es|ed|ing)?|stack ?trace|red (line|underline|squiggle)s?)\b/i,
+    /\b(can(no|')?t|could ?n[o']t|does ?n[o']?t|did ?n[o']?t|is ?n[o']?t|not) (find|found|resolve|import|compile|build|run|work)(s|ing)?\b/i,
+    /\b(not (found|defined|working|compiling)|undefined|undeclared)\b/i,
+    /\b(fix|debug)\b.{0,30}\b(it|this|that|my|the (code|error|issue|problem|bug))\b/i,
+    /\bwhat('s| is) wrong\b/i
+  ];
+  function isFixRequest(text) {
+    const t = String(text || '');
+    return t.trim().length >= 6 && FIX_PATTERNS.some((p) => p.test(t));
+  }
+
+  const api = { modeForSpokenQuestion, isExplainRequest, isFixRequest };
   if (typeof window !== 'undefined') window.SpokenQuestion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

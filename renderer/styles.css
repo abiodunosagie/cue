@@ -108,6 +108,7 @@ html, body {
 .tb-hide:hover { background: rgba(255,255,255,0.08); }
 .tb-hide .chev { width: 14px; height: 14px; display: inline-flex; color: rgba(255,255,255,0.9); }
 .tb-hide.collapsed .chev { transform: rotate(180deg); }
+.tb-hide .tb-kbd { font-size: 11px; color: rgba(255,255,255,0.6); }
 /* Scoped under #toolbar: the generic `#toolbar button` rule would otherwise
    win on specificity and keep these white, which hid the listening state. */
 #toolbar .tb-stop { width: 28px; height: 28px; border-radius: var(--r-8); color: var(--ic); }
@@ -226,7 +227,9 @@ button:focus { outline: none; }
 /* Coding answers: each code block beside its Say line. The answer is a size
    container, so a narrow panel (history open) stacks them instead. */
 .ai-text { container-type: inline-size; }
-.ai-text .ai-wait { color: rgba(255,255,255,0.6); font-size: 15px; margin-right: 6px; }
+.ai-text .ai-wait { color: rgba(255,255,255,0.7); font-size: 15px; margin-bottom: 6px; }
+.ai-text .ai-wait-thought { color: rgba(255,255,255,0.55); font-size: 14px; font-style: italic; margin-top: 2px; }
+.ai-text .ai-wait-thought:empty { display: none; }
 .ai-text .coding-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .ai-text .coding-action {
   margin-top: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);

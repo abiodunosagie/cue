@@ -299,17 +299,25 @@ const CODING_SPEEDS = {
 const EFFORT_MODEL = /^claude-(opus-4-[5-9]|opus-5|sonnet-4-6|sonnet-5|fable-5|mythos-5)/;
 const FAST_MODE_MODEL = /^claude-(opus-4-8|opus-5)/;
 
+// Fast mode is a research preview with its own rate limit; an account without
+// it refuses every request. Once refused, skip it for the rest of the session
+// instead of paying a wasted round trip on every solve.
+let fastModeRefused = false;
+
 // The extra request fields for a coding solve on this model, or null.
+// summarize: stream a short summary of the thinking (the same models take it),
+// so the wait shows progress and the watchdog sees a live stream instead of
+// minutes of silence before the first word.
 function codingSpeedOptions(model, speed) {
   const choice = CODING_SPEEDS[speed] || CODING_SPEEDS.fastest;
   const m = String(model || '');
   const out = {};
-  if (EFFORT_MODEL.test(m)) out.effort = choice.effort;
-  if (choice.fast && FAST_MODE_MODEL.test(m)) out.fast = true;
+  if (EFFORT_MODEL.test(m)) { out.effort = choice.effort; out.summarize = true; }
+  if (choice.fast && FAST_MODE_MODEL.test(m) && !fastModeRefused) out.fast = true;
   return Object.keys(out).length ? out : null;
 }
 
-async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, speedOptions }) {
+async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, onActivity, onThinking, speedOptions }) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
   const messages = turns.map((t, i) => {
@@ -324,6 +332,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     return { role: t.role, content: t.text };
   });
   const body = { model, max_tokens: maxTokens, system, messages, stream: true };
+  const startedAt = Date.now();
   let emitted = false;
   // A stage with a fallback after it gets no SDK retries: a 429 on fast mode
   // would otherwise wait out retry-after (up to a minute) inside the SDK and
@@ -333,10 +342,15 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     const headers = {};
     if (extra && extra.effort) request.output_config = { effort: extra.effort };
     if (extra && extra.fast) { request.speed = 'fast'; headers['anthropic-beta'] = 'fast-mode-2026-02-01'; }
+    if (extra && extra.summarize) request.thinking = { type: 'adaptive', display: 'summarized' };
     const stream = await client.messages.create(request, hasFallback ? { headers, maxRetries: 0 } : { headers });
     let full = '';
     for await (const ev of stream) {
-      if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { emitted = true; full += ev.delta.text; onToken(ev.delta.text); }
+      // Any event proves the stream is alive, thinking included.
+      if (onActivity) onActivity();
+      const d = ev.type === 'content_block_delta' && ev.delta;
+      if (d && d.type === 'text_delta') { emitted = true; full += d.text; onToken(d.text); }
+      else if (d && d.type === 'thinking_delta' && d.thinking && onThinking) onThinking(d.thinking);
     }
     return full;
   };
@@ -348,7 +362,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   const stages = [];
   if (speedOptions) {
     stages.push(speedOptions);
-    if (speedOptions.fast && speedOptions.effort) stages.push({ effort: speedOptions.effort });
+    if (speedOptions.fast && speedOptions.effort) stages.push({ effort: speedOptions.effort, summarize: speedOptions.summarize });
   }
   stages.push(null);
   for (let i = 0; ; i++) {
@@ -356,9 +370,12 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
       return await run(stages[i], i < stages.length - 1);
     } catch (error) {
       if (emitted || i === stages.length - 1) throw error;
+      const stage = stages[i];
+      if (stage && stage.fast && error && (error.status === 429 || error.status === 403)) fastModeRefused = true;
       const reason = (error && (error.status || error.code)) || 'no status';
+      const message = hideKey(error && error.message ? error.message : String(error), apiKey).slice(0, 200);
       const next = stages[i + 1];
-      console.log(`[timing] coding speed stage failed (${reason}); retrying ${next ? 'with effort ' + next.effort + ' only' : 'at normal speed'}`);
+      console.log(`[timing] coding stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastModeRefused ? ', fast mode off for this session' : ''}`);
     }
   }
 }
@@ -560,6 +577,7 @@ module.exports = {
   createLLM,
   hideKey,
   codingSpeedOptions,
+  resetFastModeForTests: () => { fastModeRefused = false; },
   streamAnthropic,
   formatProviderErrorMessage,
   isQuotaError,

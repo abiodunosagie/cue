@@ -52,7 +52,7 @@ contextBridge.exposeInMainWorld('cue', {
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   log: (msg) => ipcRenderer.send('log', msg),
   on: (channel, cb) => {
-    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'answer:scroll', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state'];
+    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'answer:scroll', 'llm:thinking', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
   }

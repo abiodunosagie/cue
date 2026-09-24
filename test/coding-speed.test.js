@@ -1,16 +1,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { codingSpeedOptions } = require('../src/llm');
+const { codingSpeedOptions, resetFastModeForTests } = require('../src/llm');
+
+test.beforeEach(() => resetFastModeForTests());
 
 test('Fastest uses low effort and fast mode on Opus 5.5', () => {
-  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'fastest'), { effort: 'low', fast: true });
-  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', undefined), { effort: 'low', fast: true });
-  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'balanced'), { effort: 'medium', fast: true });
-  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'careful'), { effort: 'high' });
+  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'fastest'), { effort: 'low', summarize: true, fast: true });
+  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', undefined), { effort: 'low', summarize: true, fast: true });
+  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'balanced'), { effort: 'medium', summarize: true, fast: true });
+  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'careful'), { effort: 'high', summarize: true });
 });
 
 test('only models that support them get effort or fast mode', () => {
-  assert.deepEqual(codingSpeedOptions('claude-sonnet-5', 'fastest'), { effort: 'low' });   // no fast mode
+  assert.deepEqual(codingSpeedOptions('claude-sonnet-5', 'fastest'), { effort: 'low', summarize: true });   // no fast mode
   assert.equal(codingSpeedOptions('claude-haiku-4-5', 'fastest'), null);                  // neither
   assert.equal(codingSpeedOptions('claude-sonnet-4-5-20250929', 'fastest'), null);
   assert.equal(codingSpeedOptions('gpt-5', 'fastest'), null);
@@ -19,9 +21,11 @@ test('only models that support them get effort or fast mode', () => {
 // A stand-in for the Anthropic SDK: refuses requests until `refuseUntil`
 // requests were made, and records what each request asked for.
 const retries = [];
+const thinking = [];
 function fakeSdk(refusals) {
   const calls = [];
   retries.length = 0;
+  thinking.length = 0;
   const path = require.resolve('@anthropic-ai/sdk');
   require.cache[path] = {
     id: path, filename: path, loaded: true,
@@ -30,10 +34,15 @@ function fakeSdk(refusals) {
         this.messages = {
           create: async (request, options) => {
             calls.push({ effort: request.output_config && request.output_config.effort, speed: request.speed, beta: options.headers['anthropic-beta'] });
+            thinking.push(request.thinking && request.thinking.display);
             retries.push(options.maxRetries);
             const status = refusals[calls.length - 1];
             if (status) throw Object.assign(new Error('refused'), { status });
-            return (async function* () { yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }; })();
+            return (async function* () {
+              yield { type: 'message_start' };
+              yield { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'Planning.' } };
+              yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } };
+            })();
           }
         };
       }
@@ -84,4 +93,34 @@ test('stages with a fallback skip SDK retries; the last stage keeps them', async
   fakeSdk([429, 429]);
   await solve({ effort: 'low', fast: true });
   assert.deepEqual(retries, [0, 0, undefined]);
+});
+
+test('a fast mode refusal turns fast mode off for the session', async () => {
+  fakeSdk([429]);
+  await solve({ effort: 'low', summarize: true, fast: true });
+  assert.deepEqual(codingSpeedOptions('claude-opus-5-5', 'fastest'), { effort: 'low', summarize: true });
+});
+
+test('an overload does not turn fast mode off', async () => {
+  fakeSdk([529]);
+  await solve({ effort: 'low', summarize: true, fast: true });
+  assert.equal(codingSpeedOptions('claude-opus-5-5', 'fastest').fast, true);
+});
+
+test('summarized thinking is kept when fast mode drops, and the plain request has none', async () => {
+  fakeSdk([429, 400]);
+  await solve({ effort: 'low', summarize: true, fast: true });
+  assert.deepEqual(thinking, ['summarized', 'summarized', undefined]);
+});
+
+test('every stream event counts as activity and thinking text is passed on', async () => {
+  fakeSdk([]);
+  const { streamAnthropic } = require('../src/llm');
+  let activity = 0;
+  const thoughts = [];
+  const text = await streamAnthropic({ apiKey: 'k', model: 'claude-opus-5-5', system: 's', turns: [{ role: 'user', text: 'q' }], maxTokens: 10,
+    onToken: () => {}, onActivity: () => { activity++; }, onThinking: (t) => thoughts.push(t), speedOptions: { effort: 'low', summarize: true } });
+  assert.equal(text, 'ok');
+  assert.equal(activity, 3);
+  assert.deepEqual(thoughts, ['Planning.']);
 });

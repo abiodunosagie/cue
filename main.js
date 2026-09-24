@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
-const { isExplainRequest } = require('./renderer/spoken-question');
+const { isExplainRequest, isFixRequest } = require('./renderer/spoken-question');
 const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
 const { nudge } = require('./src/window-move');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
@@ -120,13 +120,13 @@ const MAX_TRANSCRIPT_TURNS = MEMORY_MAX_TURNS; // ~90 minutes of conversation
 const transcript = interviewMemory.turns().slice(-MAX_TRANSCRIPT_TURNS); // { channel, text, ts }
 const FLUSH_MS = 900;
 const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy can't wedge forever
-// Once words flow, the longest the coding model may pause between them.
+// The coding tier's watchdog counts any stream event as alive, thinking
+// included (the thinking summary streams while the model works), so these are
+// gaps of total silence, not deadlines. Once words flow, the longest pause
+// between events; before the first word, a longer one, because the plain
+// fallback request thinks with no events at all.
 const CODING_STREAM_INACTIVITY_MS = 45000;
-// The coding model reads a screenshot and a long format before its first word,
-// so the first word gets longer than the gap between words. Most careful (high
-// effort, no fast mode) thinks the longest; the fast settings, or their plain
-// fallback (measured 35s), fit in a minute.
-const CODING_FIRST_TOKEN_MS = { careful: 120000, other: 60000 };
+const CODING_FIRST_WORD_SILENCE_MS = 90000;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.12); // ~0.12s
 const RMS_GATE = 180;
 let flushTimer = null;
@@ -734,6 +734,9 @@ async function runFeature(mode, userText, options = {}) {
     const heard = userText || openerQuestion(mode, '', transcript);
     if (isExplainRequest(heard)) { mode = 'explainCode'; userText = heard; }
   }
+  // The candidate typing about an error in the code they are writing: read the
+  // editor and the error on screen against the plan, instead of guessing.
+  if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'checkProgress';
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -855,12 +858,12 @@ async function runFeature(mode, userText, options = {}) {
     let watchdog = null;
     let rearm = () => {};
     let streamedAny = false;
+    let thinkingShown = false;
     const stalled = new Promise((_res, reject) => {
       rearm = () => {
         clearTimeout(watchdog);
         const limit = def.tier !== 'coding' ? STREAM_INACTIVITY_MS
-          : streamedAny ? CODING_STREAM_INACTIVITY_MS
-          : settingsForPrompt.codingSpeed === 'careful' ? CODING_FIRST_TOKEN_MS.careful : CODING_FIRST_TOKEN_MS.other;
+          : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_WORD_SILENCE_MS;
         watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), limit);
       };
       rearm();
@@ -873,6 +876,14 @@ async function runFeature(mode, userText, options = {}) {
           turns: [{ role: 'user', text: built }],
           imageDataUrl,
           onToken: (t) => { if (streamSettled) return; firstWord(llm.model); streamedAny = true; rearm(); send('llm:token', { text: t }); },
+          // Anthropic only: any stream event (thinking included) keeps the watchdog
+          // from killing a request that is working; the thinking summary shows in the wait note.
+          onActivity: () => { if (!streamSettled) rearm(); },
+          onThinking: (t) => {
+            if (streamSettled || streamedAny) return;
+            if (!thinkingShown) { thinkingShown = true; console.log(`[timing] ${mode}: thinking started after ${Date.now() - startedAt}ms (${llm.model})`); }
+            send('llm:thinking', { text: t });
+          },
           onResponse: settings.provider === publik.PUBLIK_PROVIDER ? (res) => publikNoteHeaders(res && res.headers) : undefined
         }),
         stalled
