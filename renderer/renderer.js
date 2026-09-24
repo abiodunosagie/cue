@@ -762,6 +762,29 @@
     await cue.settingsSet({ smart: settings.smart });
   });
 
+  // Answer length: short, medium, long. Same order as src/answer-length.js; the
+  // global shortcut cycles it in main and reports back with length:changed.
+  const LENGTH_ORDER = ['short', 'medium', 'long'];
+  const lengthBtn = $('#length-toggle');
+  function showLength(value, announce) {
+    const v = LENGTH_ORDER.includes(value) ? value : 'medium';
+    const label = v.charAt(0).toUpperCase() + v.slice(1);
+    lengthBtn.querySelector('span').textContent = label;
+    lengthBtn.classList.toggle('on', v !== 'medium');
+    lengthBtn.title = 'Answer length: ' + label + (isWindows ? ' (Ctrl+Shift+.)' : ' (⌘⇧.)');
+    if (announce) showToast(label + ' answers', 1400);
+  }
+  lengthBtn.addEventListener('click', async () => {
+    if (!settings) return;
+    settings.answerLength = LENGTH_ORDER[(LENGTH_ORDER.indexOf(settings.answerLength) + 1) % LENGTH_ORDER.length];
+    showLength(settings.answerLength, true);
+    await cue.settingsSet({ answerLength: settings.answerLength });
+  });
+  cue.on('length:changed', ({ answerLength }) => {
+    if (settings) settings.answerLength = answerLength;
+    showLength(answerLength, true);
+  });
+
   // Hide / collapse
   function toggleHide() {
     const collapsed = $('#panel').classList.toggle('collapsed');
@@ -2222,6 +2245,7 @@
     }
 
     smartBtn.classList.toggle('on', !!settings.smart);
+    showLength(settings.answerLength, false);
     showExample();
     await restoreInterviewMemory();
     syncPlaceholder();

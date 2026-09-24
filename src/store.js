@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
 const { normalizeBaseUrl } = require('./openai-compatible');
+const { normalizeLength } = require('./answer-length');
 const PanelOpacity = require('../renderer/panel-opacity');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');
@@ -72,6 +73,7 @@ const DEFAULTS = {
   // strict for coding problems).
   aiRules: '',
   panelOpacity: PanelOpacity.DEFAULT,
+  answerLength: 'medium',   // short | medium | long spoken answers (src/answer-length.js)
   // Window position
   windowX: null,
   windowY: null,
@@ -127,6 +129,7 @@ function load() {
   try { data = deepMerge(DEFAULTS, JSON.parse(fs.readFileSync(FILE, 'utf8'))); }
   catch { data = deepMerge(DEFAULTS, {}); }
   data.panelOpacity = PanelOpacity.normalize(data.panelOpacity);
+  data.answerLength = normalizeLength(data.answerLength);
 
 
   return data;
@@ -189,6 +192,7 @@ module.exports = {
     const nextSettings = deepMerge(data, patch || {});
     nextSettings.baseUrl = normalizeBaseUrl(nextSettings.baseUrl);
     nextSettings.panelOpacity = PanelOpacity.normalize(nextSettings.panelOpacity);
+    nextSettings.answerLength = normalizeLength(nextSettings.answerLength);
     data = nextSettings;
     save();
     return data;

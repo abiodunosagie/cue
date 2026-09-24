@@ -740,7 +740,7 @@ button:focus { outline: none; }
    buttons fit, and let them wrap onto a second line if they still do not. */
 #panel-wrap.sidebar-open .shortcut-hint,
 #panel-wrap.sidebar-open .act .ic,
-#panel-wrap.sidebar-open .smart-pill span:last-child { display: none; }
+#panel-wrap.sidebar-open .smart-pill:not(.length-pill) span:last-child { display: none; }
 #panel-wrap.sidebar-open #placeholder { -webkit-mask-image: linear-gradient(to right, #000 85%, transparent); mask-image: linear-gradient(to right, #000 85%, transparent); }
 /* Short window: give the answer the room the profile chips would take. */
 @media (max-height: 480px) { .prep-status { display: none; } }

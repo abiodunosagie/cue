@@ -9,6 +9,7 @@ const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
+const { nextLength, lengthRule, LABELS: LENGTH_LABELS } = require('./src/answer-length');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -38,7 +39,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -648,7 +649,7 @@ async function runFeature(mode, userText) {
       transcript,
       userText: userText || '',
       priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
-    }) + continuationNote(opener);
+    }) + (OPENER_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });
 
@@ -982,12 +983,20 @@ ipcMain.on('permissions:continue', async () => {
 });
 
 // -------- shortcuts --------
+// Short, medium, long: applies to the next spoken answer.
+function cycleAnswerLength() {
+  const answerLength = nextLength(store.getSettings().answerLength);
+  store.setSettings({ answerLength });
+  send('length:changed', { answerLength, label: LENGTH_LABELS[answerLength] });
+}
+
 function registerShortcuts() {
   shortcutState.assist = globalShortcut.register('CommandOrControl+Return', () => runFeature('assist', ''));
   shortcutState.say = globalShortcut.register('CommandOrControl+Shift+Return', () => runFeature('say', ''));
   shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => runFeature('leetcode', ''));
   shortcutState.hide = globalShortcut.register('CommandOrControl+Shift+/', () => send('hide:toggle', {}));
   shortcutState.quit = globalShortcut.register('CommandOrControl+Shift+X', () => app.quit());
+  shortcutState.length = globalShortcut.register('CommandOrControl+Shift+.', cycleAnswerLength);
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {
     if (!wasRegistered) {
       recordEvent({ level: 'warn', event: 'shortcut_unavailable', msg: 'another application holds the ' + name + ' shortcut', frame: 'registerShortcuts', context: { shortcut: name } });
