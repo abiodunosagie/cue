@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
+const { isExplainRequest } = require('./renderer/spoken-question');
 const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
@@ -49,7 +50,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -710,6 +711,12 @@ async function prepareFollowUps(question, answer, generation) {
 // cue's own panel blacked out), used instead of a fresh capture.
 async function runFeature(mode, userText, options = {}) {
   if (state.busy) return;
+  // A question about the code just written ("walk me through your code", "why
+  // a map here?") is answered from that code, not from the resume.
+  if ((mode === 'answerThis' || mode === 'assist') && interviewMemory.recentCodingSolve()) {
+    const heard = mode === 'answerThis' ? userText : openerQuestion('say', '', transcript);
+    if (isExplainRequest(heard)) { mode = 'explainCode'; userText = heard; }
+  }
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -818,7 +825,8 @@ async function runFeature(mode, userText, options = {}) {
       transcript,
       userText: userText || '',
       answers: mode === 'report' ? interviewMemory.answers() : [],
-      priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
+      priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory()
+        : mode === 'explainCode' ? [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''] : []
     }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });
@@ -1215,6 +1223,8 @@ function registerShortcuts() {
   shortcutState.quit = globalShortcut.register('CommandOrControl+Shift+X', () => app.quit());
   shortcutState.length = globalShortcut.register('CommandOrControl+Shift+.', cycleAnswerLength);
   shortcutState.buyTime = globalShortcut.register('CommandOrControl+Shift+B', () => runFeature('buyTime', ''));
+  // E for explain: the words to walk the interviewer through the code just written.
+  shortcutState.explainCode = globalShortcut.register('CommandOrControl+Shift+E', () => runFeature('explainCode', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {
     if (!wasRegistered) {
       recordEvent({ level: 'warn', event: 'shortcut_unavailable', msg: 'another application holds the ' + name + ' shortcut', frame: 'registerShortcuts', context: { shortcut: name } });

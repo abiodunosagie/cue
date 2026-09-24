@@ -217,6 +217,15 @@
       b.innerHTML = icon('copy', { size: 14 });
       pre.appendChild(b);
     });
+    // Under a finished coding solve: one click for the words to explain it.
+    if (aiEl.dataset.coding === '1' && !aiEl.dataset.error) {
+      const explain = document.createElement('button');
+      explain.type = 'button';
+      explain.className = 'explain-code';
+      explain.textContent = isWindows ? 'Explain this code (Ctrl+Shift+E)' : 'Explain this code (⌘⇧E)';
+      explain.addEventListener('click', () => runMode('explainCode'));
+      aiEl.appendChild(explain);
+    }
     aiEl = null; caretEl = null;
   }
 
@@ -1487,7 +1496,7 @@
     startAi(small, group);
     // A coding answer is worked through step by step, not read aloud: no
     // highlight and no automatic scrolling; the user scrolls it.
-    if (coding) aiEl.dataset.noFollow = '1';
+    if (coding) { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
     // push the toolbar out of the window. requestAnimationFrame lets layout settle.

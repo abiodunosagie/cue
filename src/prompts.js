@@ -160,6 +160,37 @@ const MODES = {
     }
   },
 
+  // ── Explain the code: walk the interviewer through the candidate's own solution ──
+  explainCode: {
+    skipMemory: true,    // it gets the solution itself; interview history adds nothing here
+    contextTurns: 6, // turns build() sends
+    needsScreen: true,   // the editor now: the code as actually typed, maybe partial
+    userBubble: 'Explaining your code',
+    small: false,
+    buildSystem(_contextBlock, aiRules) {
+      return applyRules(
+        'You are cue, helping a candidate in a live coding interview explain their own code out loud to the interviewer. ' + BASE_RULES +
+        'You get the solution cue gave them earlier in this interview and a screenshot of their editor now. When the two differ, the editor wins: ' +
+        'explain the code as it is on screen, which may be only partly typed.\n\n' +
+        'Answer in this order:\n' +
+        '**Say this:** what the candidate says first, 3 to 6 short plain sentences in first person to the interviewer. If the interviewer asked something ' +
+        'specific (why a choice, the complexity, an edge case, a test, a change), answer exactly that; otherwise explain the approach, why it works, and its time and space cost.\n' +
+        'Then walk through the code in order: for each small logical piece (a few lines), those lines in a fenced block tagged with the language, copied exactly, ' +
+        'then **Say:** one to three plain sentences on what those lines do and why. Walk through only the pieces the question needs, or the whole solution when asked to explain it all.\n\n' +
+        'Use only what is in the code: never invent tests that were run, results or numbers. Plain words; when a technical term is needed, say in a few words what it does. ' +
+        'Code goes only inside fenced blocks, never in inline backticks. No markdown headings.',
+        aiRules, 'explainCode');
+    },
+    build(ctx) {
+      const solve = (ctx.priorSolves || [])[0] || '';
+      const t = formatTranscript(ctx.transcript || [], this.contextTurns);
+      const asked = String(ctx.userText || '').trim();
+      return (solve ? 'The solution cue gave earlier in this interview:\n\n' + solve + '\n\n' : '') +
+        (t ? 'Recent conversation:\n' + t + '\n\n' : '') +
+        (asked ? 'The interviewer asked: "' + asked + '"\n\nHelp me answer that about my code.' : 'Help me explain my code from the start.');
+    }
+  },
+
   // ── Buy time: a natural stall when a question catches the candidate off guard ──
   buyTime: {
     tier: 'fast',        // always the Fast model: this has to be on screen in a second

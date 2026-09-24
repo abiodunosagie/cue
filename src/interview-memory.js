@@ -127,8 +127,19 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     return record.answers.filter((a) => a.mode === 'leetcode').slice(-count).map((a) => a.text.slice(0, maxChars));
   }
 
+  // The newest coding solve, when it is among the last few answers: explaining
+  // "your code" only makes sense while the coding round is still going.
+  function recentCodingSolve({ withinAnswers = 4, maxChars = CODING_HISTORY_CHARS * 2 } = {}) {
+    const recent = record.answers.slice(-withinAnswers);
+    for (let i = recent.length - 1; i >= 0; i--) {
+      if (recent[i].mode === 'leetcode') return recent[i].text.slice(0, maxChars);
+    }
+    return '';
+  }
+
   return {
     load,
+    recentCodingSolve,
     addTurn,
     addAnswer,
     clear,

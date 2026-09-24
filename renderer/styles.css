@@ -226,6 +226,11 @@ button:focus { outline: none; }
 /* Coding answers: each code block beside its Say line. The answer is a size
    container, so a narrow panel (history open) stacks them instead. */
 .ai-text { container-type: inline-size; }
+.ai-text .explain-code {
+  margin-top: 6px; padding: 8px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.06); color: #fff; font: 600 14px var(--font); cursor: pointer;
+}
+.ai-text .explain-code:hover { background: rgba(255,255,255,0.12); }
 .ai-text .step-pair { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; align-items: start; margin: 12px 0; }
 .ai-text .step-pair > pre { margin: 0; }
 /* In the narrower column, long lines wrap instead of hiding behind a scroll. */
