@@ -17,4 +17,4 @@ function nudge(bounds, workArea, direction, step = STEP_PX) {
   };
 }
 
-module.exports = { nudge, STEP_PX };
+module.exports = { nudge };

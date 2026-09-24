@@ -325,12 +325,15 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   });
   const body = { model, max_tokens: maxTokens, system, messages, stream: true };
   let emitted = false;
-  const run = async (extra) => {
+  // A stage with a fallback after it gets no SDK retries: a 429 on fast mode
+  // would otherwise wait out retry-after (up to a minute) inside the SDK and
+  // eat the first-word limit before the next stage could run.
+  const run = async (extra, hasFallback) => {
     const request = { ...body };
     const headers = {};
     if (extra && extra.effort) request.output_config = { effort: extra.effort };
     if (extra && extra.fast) { request.speed = 'fast'; headers['anthropic-beta'] = 'fast-mode-2026-02-01'; }
-    const stream = await client.messages.create(request, { headers });
+    const stream = await client.messages.create(request, hasFallback ? { headers, maxRetries: 0 } : { headers });
     let full = '';
     for await (const ev of stream) {
       if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { emitted = true; full += ev.delta.text; onToken(ev.delta.text); }
@@ -348,7 +351,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
   stages.push(null);
   for (let i = 0; ; i++) {
     try {
-      return await run(stages[i]);
+      return await run(stages[i], i < stages.length - 1);
     } catch (error) {
       const status = error && error.status;
       const refused = status === 400 || status === 403 || status === 404 || status === 429;

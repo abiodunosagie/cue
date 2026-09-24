@@ -51,7 +51,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, moveWindow: false, scrollAnswer: false, copyCode: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -120,7 +120,7 @@ const MAX_TRANSCRIPT_TURNS = MEMORY_MAX_TURNS; // ~90 minutes of conversation
 const transcript = interviewMemory.turns().slice(-MAX_TRANSCRIPT_TURNS); // { channel, text, ts }
 const FLUSH_MS = 900;
 const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy can't wedge forever
-// The strongest model reading a screenshot can take ~10s to its first token.
+// Once words flow, the longest the coding model may pause between them.
 const CODING_STREAM_INACTIVITY_MS = 45000;
 // The coding model reads a screenshot and a long format before its first word,
 // so the first word gets longer than the gap between words. Most careful (high
@@ -1262,16 +1262,15 @@ function registerShortcuts() {
   // Move cue without the mouse: in a screen share the pointer always shows, and
   // dragging an invisible window makes it wander for no visible reason.
   const moveMods = isMac ? 'Control+Alt+Command+' : 'Control+Alt+Shift+';
-  let moveOk = true;
+  // One entry per key, so a report names the exact key another app holds.
   for (const [key, dir] of [['Left', 'left'], ['Right', 'right'], ['Up', 'up'], ['Down', 'down']]) {
-    moveOk = globalShortcut.register(moveMods + key, () => nudgeWindow(dir)) && moveOk;
+    shortcutState['move' + key] = globalShortcut.register(moveMods + key, () => nudgeWindow(dir));
   }
-  // Scroll the answer from the keyboard too: U up, D down. With these and the
-  // other keys, the pointer never has to leave the IDE.
-  shortcutState.scrollAnswer = globalShortcut.register(moveMods + 'U', () => send('answer:scroll', { direction: 'up' }))
-    && globalShortcut.register(moveMods + 'D', () => send('answer:scroll', { direction: 'down' }));
+  // Scroll the answer from the keyboard too: U up, D down; C copies the code in
+  // view. With these, the pointer never has to leave the IDE.
+  shortcutState.scrollUp = globalShortcut.register(moveMods + 'U', () => send('answer:scroll', { direction: 'up' }));
+  shortcutState.scrollDown = globalShortcut.register(moveMods + 'D', () => send('answer:scroll', { direction: 'down' }));
   shortcutState.copyCode = globalShortcut.register(moveMods + 'C', () => send('code:copy'));
-  shortcutState.moveWindow = moveOk;
   // C for check: what is done on screen, anything wrong, and the next step.
   shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {

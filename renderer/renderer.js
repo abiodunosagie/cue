@@ -106,7 +106,9 @@
   function copyCodeInView() {
     const top = messages.getBoundingClientRect().top;
     const pre = [...messages.querySelectorAll('pre')].find((p) => p.getBoundingClientRect().bottom > top + 8);
-    if (pre) copyCodeBlock(pre);
+    // A block in the answer still streaming may be half written: copy it only when done.
+    if (pre && aiEl && aiEl.contains(pre)) showToast('Still writing this code', 1400);
+    else if (pre) copyCodeBlock(pre);
     else showToast('No code on screen', 1400);
   }
 
@@ -1551,7 +1553,9 @@
         if (target !== aiEl || !target.isConnected || target.dataset.raw) return;
         const wait = document.createElement('span');
         wait.className = 'ai-wait';
-        wait.textContent = 'Working on the solution. The first words can take up to a minute.';
+        // Matches the first-word limit in main.js: two minutes on Most careful, one otherwise.
+        const limit = settings && settings.codingSpeed === 'careful' ? 'two minutes' : 'a minute';
+        wait.textContent = 'Working on the solution. The first words can take up to ' + limit + '.';
         target.insertBefore(wait, caretEl && caretEl.parentNode === target ? caretEl : null);
       }, SLOW_START_NOTE_MS);
     }

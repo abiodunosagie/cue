@@ -18,8 +18,10 @@ test('only models that support them get effort or fast mode', () => {
 
 // A stand-in for the Anthropic SDK: refuses requests until `refuseUntil`
 // requests were made, and records what each request asked for.
+const retries = [];
 function fakeSdk(refusals) {
   const calls = [];
+  retries.length = 0;
   const path = require.resolve('@anthropic-ai/sdk');
   require.cache[path] = {
     id: path, filename: path, loaded: true,
@@ -28,6 +30,7 @@ function fakeSdk(refusals) {
         this.messages = {
           create: async (request, options) => {
             calls.push({ effort: request.output_config && request.output_config.effort, speed: request.speed, beta: options.headers['anthropic-beta'] });
+            retries.push(options.maxRetries);
             const status = refusals[calls.length - 1];
             if (status) throw Object.assign(new Error('refused'), { status });
             return (async function* () { yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }; })();
@@ -64,4 +67,10 @@ test('an error that is not a refusal is not retried', async () => {
   const calls = fakeSdk([500]);
   await assert.rejects(solve({ effort: 'low', fast: true }), /refused/);
   assert.equal(calls.length, 1);
+});
+
+test('stages with a fallback skip SDK retries; the last stage keeps them', async () => {
+  fakeSdk([429, 429]);
+  await solve({ effort: 'low', fast: true });
+  assert.deepEqual(retries, [0, 0, undefined]);
 });
