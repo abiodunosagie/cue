@@ -756,8 +756,8 @@
       clearTranscriptSidebar(); // clear the history sidebar too
       hardClearSTTFill(); // clear the input box too
       
-      const undoHint = isWindows ? 'Ctrl+Z to undo' : '⌘Z to undo';
-      showToast(`Transcript cleared · ${undoHint}`, 3500);
+      // Irreversible: the memory file is deleted, so no undo hint here.
+      showToast('Interview memory cleared', 3500);
     });
   }
 
@@ -1297,6 +1297,17 @@
     }
   });
   let statusTimer = null;
+  // After a restart mid-interview, show the remembered conversation in the
+  // history list. Written straight to the list: replaying it as live speech
+  // would refill the input and could auto-answer an old question.
+  async function restoreInterviewMemory() {
+    const memory = await cue.memoryState();
+    if (!memory || !memory.turnCount) return;
+    memory.turns.forEach((t) => appendTranscriptHistoryTurn(t.channel, t.text, false));
+    const since = new Date(memory.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    showStatus(`Continuing the interview from ${since}. Clear interview memory in History to start fresh.`);
+  }
+
   function showStatus(message, button) {
     let el = document.getElementById('cue-status');
     if (!el) {
@@ -2157,6 +2168,7 @@
 
     smartBtn.classList.toggle('on', !!settings.smart);
     showExample();
+    await restoreInterviewMemory();
     syncPlaceholder();
     updateHistoryBadge(); // FIX #3: Initialize badge on boot
     updateSendButtonState(); // Initialize send button state

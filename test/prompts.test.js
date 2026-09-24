@@ -97,3 +97,13 @@ test('coding answers ask for complete fenced code, never inline code', () => {
   assert.match(assist, /CODING TASK ON SCREEN.*fenced code block.*never in inline backticks/);
   assert.equal(MODES.leetcode.tier, 'coding');
 });
+
+test('coding solves see earlier solves from this interview, and design tasks get their own format', () => {
+  const plain = MODES.leetcode.build({});
+  assert.equal(plain, 'Solve the coding problem shown in the screenshot.');
+  const withPrior = MODES.leetcode.build({ priorSolves: ['auth guard in routes.ts'] });
+  assert.match(withPrior, /Earlier solves in this session[\s\S]*auth guard in routes\.ts[\s\S]*Solve the coding problem/);
+  const system = MODES.leetcode.buildSystem(null);
+  assert.match(system, /DESIGN TASK/);
+  assert.match(system, /which file to open next/);
+});

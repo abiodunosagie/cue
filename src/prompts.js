@@ -236,15 +236,26 @@ const MODES = {
         'Pick the format by the size of the task:\n' +
         '• SMALL TASK (one function, one file, an algorithm problem): a one-line restatement, a two-line approach, the complete file to paste in ONE fenced code block ' +
         'tagged with its language, one **Say:** line, then time and space complexity.\n' +
+        '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
+        'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
+        'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
         '• BUILD TASK (several files, "build an app / component / API / feature"): numbered steps the candidate types one at a time, in the order they would really build it. ' +
         'Each step is a line **Step N: what and why, in one short sentence**, then that step\'s code in its own fenced block tagged with its language, ' +
         'starting with a comment that names the file, then one **Say:** line. One idea per step, one file per step at most. ' +
         'End with how to run it or test it.\n\n' +
         '**Say:** lines are what the candidate says out loud while typing, so the interviewer hears their thinking: first person, plain words, ' +
         'one or two short sentences, e.g. "First I will render the name when it is there, and fall back to a friendly default." No code inside a Say line.\n\n' +
+        'If the task depends on files you cannot see, say which file to open next and why, then solve what is visible. ' +
+        'When earlier solves from this session are given, build on them: keep names and decisions consistent and do not repeat code already written.\n\n' +
         'Code goes only inside fenced blocks, never in inline backticks. No markdown headings. Keep prose tight.';
     },
-    build() { return 'Solve the coding problem shown in the screenshot.'; }
+    build(ctx) {
+      const prior = (ctx && ctx.priorSolves) || [];
+      const earlier = prior.length
+        ? 'Earlier solves in this session, oldest first, for context only:\n\n' + prior.map((p, i) => '--- Solve ' + (i + 1) + ' ---\n' + p).join('\n\n') + '\n\n'
+        : '';
+      return earlier + 'Solve the coding problem shown in the screenshot.';
+    }
   }
 };
 

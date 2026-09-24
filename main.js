@@ -30,6 +30,7 @@ const { WhisperModelManager } = require('./src/whisper-model-manager');
 const { requireWhisperModel } = require('./src/whisper-model-catalog');
 const { locateWhisperRuntime } = require('./src/whisper-runtime');
 const { LocalWhisperTranscriber } = require('./src/local-whisper-transcriber');
+const { createInterviewMemory, MAX_TURNS: MEMORY_MAX_TURNS } = require('./src/interview-memory');
 
 let win = null;
 // Which global shortcuts cue actually holds. `globalShortcut.register` returns
@@ -88,8 +89,12 @@ let appLaunched = false;
 const state = { capturing: false, busy: false, transcribing: { you: false, them: false } };
 let sttDisabled = false; // set when the key can't reach any speech model (stops retry spam)
 const buffers = { you: [], them: [] };
-const transcript = []; // { channel, text, ts } — capped at MAX_TRANSCRIPT_TURNS
-const MAX_TRANSCRIPT_TURNS = 200; // ~30–40 minutes of conversation at normal pace
+// The whole current interview on disk (cue-interview.json next to cue-data.json),
+// so a restart mid-interview keeps the conversation. Cleared by Clear History.
+const interviewMemory = createInterviewMemory({ file: path.join(app.getPath('userData'), 'cue-interview.json') });
+interviewMemory.load();
+const MAX_TRANSCRIPT_TURNS = MEMORY_MAX_TURNS; // ~90 minutes of conversation
+const transcript = interviewMemory.turns().slice(-MAX_TRANSCRIPT_TURNS); // { channel, text, ts }
 const FLUSH_MS = 900;
 const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy can't wedge forever
 // The strongest model reading a screenshot can take ~10s to its first token.
@@ -145,6 +150,7 @@ function pushTranscript(turn) {
   if (isMicEcho(turn)) return;
   transcript.push(turn);
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
+  interviewMemory.addTurn(turn);
 }
 
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
@@ -612,9 +618,16 @@ async function runFeature(mode, userText) {
     }
 
     const settingsForPrompt = store.getSettings();
-    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
+    // Recap already sends the whole transcript; coding memory goes in build() so
+    // the coding system prompt stays free of personal context.
+    const memoryBlock = mode === 'recap' || def.tier === 'coding' ? '' : interviewMemory.digest();
+    const contextBlock = [buildInterviewContext(settingsForPrompt, mode, transcript), memoryBlock].filter(Boolean).join('\n\n') || null;
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
-    const built = def.build({ transcript, userText: userText || '' });
+    const built = def.build({
+      transcript,
+      userText: userText || '',
+      priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory() : []
+    });
 
     // Watchdog: a provider that stalls mid-stream would otherwise hang the await forever,
     // leaving state.busy = true and wedging every later question until an app restart.
@@ -628,8 +641,9 @@ async function runFeature(mode, userText) {
       };
       rearm();
     });
+    let answer = '';
     try {
-      await Promise.race([
+      answer = await Promise.race([
         llm.stream({
           system,
           turns: [{ role: 'user', text: built }],
@@ -644,6 +658,7 @@ async function runFeature(mode, userText) {
       clearTimeout(watchdog);
     }
     send('llm:done', {});
+    interviewMemory.addAnswer({ mode, text: answer });
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
@@ -893,8 +908,12 @@ ipcMain.handle('platform:info', () => ({
 }));
 ipcMain.handle('transcript:clear', () => {
   transcript.splice(0, transcript.length);
+  interviewMemory.clear();
   return { ok: true };
 });
+// Boot: refill the history list from memory. Deliberately not replayed through
+// 'transcript' events, which would refill the input and could auto-answer an old question.
+ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
 ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text));
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('them', arrayBuffer); });
