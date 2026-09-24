@@ -286,7 +286,30 @@ async function streamAzure({ apiKey, model, system, turns, imageDataUrl, maxToke
   return full;
 }
 
-async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken }) {
+// Coding speed (Settings > Answer style). Opus 5.5 always thinks before its
+// first word, and that thinking is hidden, so a solve looked frozen for about
+// 35s. Lower effort means less thinking; fast mode runs the same model up to
+// 2.5x faster (Claude API only, twice the price).
+const CODING_SPEEDS = {
+  fastest: { effort: 'low', fast: true },
+  balanced: { effort: 'medium', fast: true },
+  careful: { effort: 'high', fast: false }
+};
+// Models that take output_config.effort, and the ones with fast mode.
+const EFFORT_MODEL = /^claude-(opus-4-[5-9]|opus-5|sonnet-4-6|sonnet-5|fable-5|mythos-5)/;
+const FAST_MODE_MODEL = /^claude-(opus-4-8|opus-5)/;
+
+// The extra request fields for a coding solve on this model, or null.
+function codingSpeedOptions(model, speed) {
+  const choice = CODING_SPEEDS[speed] || CODING_SPEEDS.fastest;
+  const m = String(model || '');
+  const out = {};
+  if (EFFORT_MODEL.test(m)) out.effort = choice.effort;
+  if (choice.fast && FAST_MODE_MODEL.test(m)) out.fast = true;
+  return Object.keys(out).length ? out : null;
+}
+
+async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken, speedOptions }) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
   const messages = turns.map((t, i) => {
@@ -300,12 +323,40 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, max
     }
     return { role: t.role, content: t.text };
   });
-  const stream = await client.messages.create({ model, max_tokens: maxTokens, system, messages, stream: true });
-  let full = '';
-  for await (const ev of stream) {
-    if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { full += ev.delta.text; onToken(ev.delta.text); }
+  const body = { model, max_tokens: maxTokens, system, messages, stream: true };
+  let emitted = false;
+  const run = async (extra) => {
+    const request = { ...body };
+    const headers = {};
+    if (extra && extra.effort) request.output_config = { effort: extra.effort };
+    if (extra && extra.fast) { request.speed = 'fast'; headers['anthropic-beta'] = 'fast-mode-2026-02-01'; }
+    const stream = await client.messages.create(request, { headers });
+    let full = '';
+    for await (const ev of stream) {
+      if (ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta') { emitted = true; full += ev.delta.text; onToken(ev.delta.text); }
+    }
+    return full;
+  };
+  // Try the fastest options first, then effort alone (fast mode can be off for
+  // the account or have hit its own rate limit), then the plain request. A
+  // refusal only counts before any word arrived; after that it is a real error.
+  const stages = [];
+  if (speedOptions) {
+    stages.push(speedOptions);
+    if (speedOptions.fast && speedOptions.effort) stages.push({ effort: speedOptions.effort });
   }
-  return full;
+  stages.push(null);
+  for (let i = 0; ; i++) {
+    try {
+      return await run(stages[i]);
+    } catch (error) {
+      const status = error && error.status;
+      const refused = status === 400 || status === 403 || status === 404 || status === 429;
+      if (emitted || !refused || i === stages.length - 1) throw error;
+      const next = stages[i + 1];
+      console.log(`[timing] coding speed options refused (${status}); retrying ${next ? 'with effort ' + next.effort + ' only' : 'at normal speed'}`);
+    }
+  }
 }
 
 async function streamGemini({ apiKey, model, system, turns, imageDataUrl, maxTokens, onToken }) {
@@ -469,6 +520,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 
   const ready = !configurationError && !!model;
   const maxTokens = MAX_TOKENS[tier];
+  const speedOptions = tier === 'coding' && provider === 'anthropic' ? codingSpeedOptions(model, settings.codingSpeed) : null;
 
   return {
     provider, model, apiKey, baseURL,
@@ -476,7 +528,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
     configurationError,
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
-      const args = { apiKey, baseURL, endpoint, model, maxTokens, ...params, turns: sanitizeTurns(params.turns) };
+      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, ...params, turns: sanitizeTurns(params.turns) };
       try {
         if (provider === 'openai') return await streamOpenAI(args);
         if (provider === CUSTOM_PROVIDER) return await streamOpenAI(args);
@@ -503,6 +555,8 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 module.exports = {
   createLLM,
   hideKey,
+  codingSpeedOptions,
+  streamAnthropic,
   formatProviderErrorMessage,
   isQuotaError,
   CURRENT_GEMINI_DEFAULT,

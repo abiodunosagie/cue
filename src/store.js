@@ -79,6 +79,7 @@ const DEFAULTS = {
   profiles: {},
   activeProfile: '',
   companyNotes: '',         // facts from the company website (src/company-research.js), per profile
+  codingSpeed: 'fastest',   // coding solves: fastest | balanced | careful (src/llm.js CODING_SPEEDS)
   codeArchitecture: 'clean', // how build tasks organise folders: clean | mvvm | simple (src/prompts.js)
   sttWords: '',             // words the speech service should expect (src/vocab.js)
   practiceVoice: 'george',  // ElevenLabs voice for practice interviews (src/practice.js VOICES)

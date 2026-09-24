@@ -12,7 +12,9 @@
   quitButton.title = isMac ? 'Quit cue (⌘⇧X)' : 'Quit cue (Ctrl+Shift+X)';
   $('#hide-btn').title = isMac ? 'Hide or show the answers (⌘⇧H)' : 'Hide or show the answers (Ctrl+Shift+H)';
   // Keyboard moves keep the mouse pointer still, which matters when the screen is shared.
-  $('.drag-pill').title = isMac ? 'Drag to move, or Ctrl+Option+⌘ with the arrow keys to move without the mouse' : 'Drag to move, or Ctrl+Alt+Shift with the arrow keys to move without the mouse';
+  $('.drag-pill').title = isMac
+    ? 'Drag to move. Without the mouse: Ctrl+Option+⌘ with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view'
+    : 'Drag to move. Without the mouse: Ctrl+Alt+Shift with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view';
 
   // ---- paint icons -------------------------------------------------------
   $('#logo-btn').innerHTML = icon('logo', { size: 18 });
@@ -40,6 +42,8 @@
   let busy = false;
   let aiEl = null;       // current streaming <div class="ai-text">
   let caretEl = null;
+  // How long a coding solve may be silent before the "working" note shows.
+  const SLOW_START_NOTE_MS = 5000;
   // While an answer streams, its text is grouped into .w-para blocks split where
   // the final markdown will split it (window.StreamBlocks), so reading follow can
   // track the user from the first sentence. finalizeAi swaps in the rendered markdown.
@@ -71,11 +75,16 @@
   }
 
   // Copy a code block exactly as the model wrote it, so nothing is retyped by hand.
-  messages.addEventListener('click', async (e) => {
+  messages.addEventListener('click', (e) => {
     const b = e.target.closest('.copy-code');
-    if (!b) return;
     // renderMarkdown always emits <pre><code>, the only place these buttons go.
-    const code = b.parentElement.querySelector('code');
+    if (b) copyCodeBlock(b.parentElement);
+  });
+
+  async function copyCodeBlock(pre) {
+    const code = pre.querySelector('code');
+    const b = pre.querySelector('.copy-code');
+    if (!code) return;
     try {
       await cue.copyText(code.textContent.replace(/\n$/, ''));
     } catch (err) {
@@ -83,12 +92,23 @@
       showToast('Could not copy', 1600);
       return;
     }
-    b.innerHTML = icon('check', { size: 14 });
-    b.classList.add('done');
-    clearTimeout(b._revert);
-    b._revert = setTimeout(() => { b.innerHTML = icon('copy', { size: 14 }); b.classList.remove('done'); }, 1400);
+    if (b) {
+      b.innerHTML = icon('check', { size: 14 });
+      b.classList.add('done');
+      clearTimeout(b._revert);
+      b._revert = setTimeout(() => { b.innerHTML = icon('copy', { size: 14 }); b.classList.remove('done'); }, 1400);
+    }
     showToast('Copied', 1200);
-  });
+  }
+
+  // The copy key (Ctrl+Option+Cmd+C): copy the topmost code block in view, so
+  // working down a step-by-step answer never needs the mouse.
+  function copyCodeInView() {
+    const top = messages.getBoundingClientRect().top;
+    const pre = [...messages.querySelectorAll('pre')].find((p) => p.getBoundingClientRect().bottom > top + 8);
+    if (pre) copyCodeBlock(pre);
+    else showToast('No code on screen', 1400);
+  }
 
   function clearMessages() { messages.innerHTML = ''; aiEl = null; caretEl = null; streamPara = null; splitter = null; readingFollow.reset(); }
 
@@ -943,6 +963,13 @@
   }
   $('#hide-btn').addEventListener('click', toggleHide);
   cue.on('hide:toggle', toggleHide);
+  // Keyboard scrolling of the answers (Ctrl+Option+Cmd with U or D): most of a
+  // screen at a time, keeping a line of the old view for context.
+  cue.on('code:copy', copyCodeInView);
+  cue.on('answer:scroll', ({ direction }) => {
+    const step = Math.max(80, messages.clientHeight * 0.8) * (direction === 'up' ? -1 : 1);
+    messages.scrollBy({ top: step, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
 
   // Stop = start/stop listening. Kick off system-audio capture straight from the click so
   // the user-gesture is fresh for getDisplayMedia (loopback capture needs it).
@@ -1515,12 +1542,18 @@
     // A coding answer is worked through step by step, not read aloud: no
     // highlight and no automatic scrolling; the user scrolls it.
     if (coding) { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
-    // The coding model can take half a minute to start: say so, so it does not look frozen.
+    // The coding model can be slow to start: if no word has come after a few
+    // seconds, say so, so it does not look frozen. A fast start never shows it.
     if (slowStart) {
-      const wait = document.createElement('span');
-      wait.className = 'ai-wait';
-      wait.textContent = 'Working on the solution. The first words can take up to a minute.';
-      aiEl.insertBefore(wait, caretEl);
+      const target = aiEl;
+      setTimeout(() => {
+        // Still the answer being streamed (not finished, failed or cleared), with no word yet.
+        if (target !== aiEl || !target.isConnected || target.dataset.raw) return;
+        const wait = document.createElement('span');
+        wait.className = 'ai-wait';
+        wait.textContent = 'Working on the solution. The first words can take up to a minute.';
+        target.insertBefore(wait, caretEl && caretEl.parentNode === target ? caretEl : null);
+      }, SLOW_START_NOTE_MS);
     }
     messages.appendChild(group);
     // Scroll only #messages: scrollIntoView would also scroll the page itself and
@@ -1873,6 +1906,9 @@
     document.querySelectorAll('#architecture-seg button').forEach((button) => {
       button.classList.toggle('on', button.dataset.architecture === (settings.codeArchitecture || 'clean'));
     });
+    document.querySelectorAll('#coding-speed-seg button').forEach((button) => {
+      button.classList.toggle('on', button.dataset.codingSpeed === (settings.codingSpeed || 'fastest'));
+    });
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -2170,6 +2206,11 @@
     document.querySelectorAll('#auto-answer-seg button').forEach((candidate) => {
       candidate.classList.toggle('on', candidate === button);
     });
+  }));
+
+  document.querySelectorAll('#coding-speed-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.codingSpeed = button.dataset.codingSpeed;
+    document.querySelectorAll('#coding-speed-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
   }));
 
   document.querySelectorAll('#architecture-seg button').forEach((button) => button.addEventListener('click', () => {
