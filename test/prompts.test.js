@@ -180,8 +180,8 @@ test('a build task starts with every file to create, before the steps', () => {
 test('every coding answer says how to run it', () => {
   const system = MODES.leetcode.buildSystem('', '');
   const small = system.slice(system.indexOf('SMALL TASK'), system.indexOf('DESIGN TASK'));
-  assert.match(small, /\*\*Run it:\*\* a short fenced block with a main function .* expected output as a comment/s);
+  assert.match(small, /\*\*Run it:\*\*[^\n]*main function[^\n]*expected output as a comment[^\n]*below the full code in the same file/);
   assert.match(small, /dart run main\.dart/);
-  const build = system.slice(system.indexOf('BUILD TASK'));
+  const build = system.slice(system.indexOf('BUILD TASK'), system.indexOf('**Say:** lines are'));
   assert.match(build, /End with \*\*Run it:\*\* the exact commands/);
 });

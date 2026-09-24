@@ -323,9 +323,11 @@ const MODES = {
         '  **Check it on the example:** walk the first example through the code in 2 to 4 short plain sentences (no code block), showing the values as they change, so the candidate can say it aloud.\n' +
         '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together.\n' +
         '  **Time and space:** the complexity in Big O, each with a plain reason (for example "O(n log n) time because sorting is the slowest part").\n' +
-        '  **Run it:** a short fenced block with a main function (or the language\'s usual entry point) that calls the solution on the examples on screen ' +
-        'and prints each result, with the expected output as a comment on each line; then one plain sentence on where to run it: the interview\'s own Run button ' +
-        'when there is one, else the exact command (for example dart run main.dart, python3 main.py, node main.js) or an online playground such as DartPad for Dart.\n' +
+        '  **Run it:** a short fenced block tagged with its language, holding only a main function (or the language\'s usual entry point) ' +
+        'that calls the solution on the examples on screen and prints each result, with the expected output as a comment on each line. ' +
+        'Say to paste it below the full code in the same file. ' +
+        'Then one plain sentence on where to run it: the interview\'s own Run button when there is one, else the exact command ' +
+        '(for example dart run main.dart, python3 main.py, node main.js) or an online playground such as DartPad for Dart.\n' +
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
         'the main risks, and one **Say:** line per section. No code unless asked; a short sketch is fine.\n' +
