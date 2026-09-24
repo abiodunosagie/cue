@@ -274,6 +274,17 @@
 
       <!-- Tab: Profile -->
       <div class="s-body s-tab-pane hidden" data-pane="profile">
+        <label class="s-label">Job profile <span class="s-hint">one per application: its job description, company notes and prepared answers</span></label>
+        <div class="s-field s-upload">
+          <select id="profile-select" class="s-select" aria-label="Job profile"></select>
+          <button class="s-action s-upload-btn" id="profile-delete-btn">Delete this profile</button>
+        </div>
+        <div class="s-field s-upload">
+          <input id="profile-new-name" type="text" placeholder="New profile name, e.g. the company" autocomplete="off" aria-label="New profile name" />
+          <button class="s-action s-upload-btn" id="profile-new-btn">New profile</button>
+        </div>
+        <div class="s-note">A new profile keeps your resume, stories and work style and starts with an empty job description.</div>
+
         <label class="s-label">Your resume <span class="s-hint">paste full resume, or import a PDF, DOCX, TXT or Markdown file</span></label>
         <div class="s-field s-upload"><span class="s-filename" id="resume-filename"></span><button class="s-action s-upload-btn" id="upload-resume-btn">Import file</button></div>
         <textarea id="resume-text" rows="7" spellcheck="false" placeholder="Paste your full resume here. cue will extract Name, Summary, Experience, Skills, Projects, and Education automatically."></textarea>

@@ -1,0 +1,56 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { migrate, switchTo, create, remove, removeCurrent, names } = require('../src/profiles');
+
+const flat = { resumeText: 'CV', jobDescription: 'JD Acme', starStories: 'S', whyCompany: 'Acme mission', whyLeaving: 'Growth', workStyle: 'W', salaryTarget: '90k', questionsToAsk: 'Q', aiRules: 'keep', profiles: {}, activeProfile: '' };
+const apply = (s, r) => ({ ...s, ...r.fields, profiles: r.profiles, activeProfile: r.activeProfile });
+
+test('settings from before profiles become the first profile, untouched', () => {
+  const m = migrate(flat);
+  assert.equal(m.activeProfile, 'My profile');
+  assert.equal(m.profiles['My profile'].jobDescription, 'JD Acme');
+  assert.equal(m.profiles['My profile'].resumeText, 'CV');
+  assert.equal(migrate(apply(flat, { ...m, fields: {} })), null);
+});
+
+test('a new profile keeps the CV, stories and work style and starts the job fields empty', () => {
+  const s = apply(flat, { ...migrate(flat), fields: {} });
+  const r = create(s, '  Globex  ');
+  assert.equal(r.activeProfile, 'Globex');
+  assert.deepEqual([r.fields.resumeText, r.fields.starStories, r.fields.workStyle, r.fields.whyLeaving], ['CV', 'S', 'W', 'Growth']);
+  assert.deepEqual([r.fields.jobDescription, r.fields.whyCompany, r.fields.salaryTarget, r.fields.questionsToAsk], ['', '', '', '']);
+  assert.equal(r.profiles['My profile'].jobDescription, 'JD Acme');
+  assert.throws(() => create(s, ''), /Give the new profile a name/);
+  assert.throws(() => create(s, 'My profile'), /already exists/);
+});
+
+test('switching saves what was typed into the profile being left and loads the other', () => {
+  let s = apply(flat, { ...migrate(flat), fields: {} });
+  s = apply(s, create(s, 'Globex'));
+  s = { ...s, jobDescription: 'JD Globex typed just now' };
+  const back = switchTo(s, 'My profile');
+  assert.equal(back.fields.jobDescription, 'JD Acme');
+  assert.equal(back.profiles.Globex.jobDescription, 'JD Globex typed just now');
+  s = apply(s, back);
+  assert.equal(s.aiRules, 'keep');
+  assert.equal(switchTo(s, 'Globex').fields.jobDescription, 'JD Globex typed just now');
+  assert.throws(() => switchTo(s, 'Nope'), /no profile called Nope/);
+});
+
+test('the active profile cannot be deleted; another can', () => {
+  let s = apply(flat, { ...migrate(flat), fields: {} });
+  s = apply(s, create(s, 'Globex'));
+  assert.throws(() => remove(s, 'Globex'), /Switch to another profile/);
+  const r = remove(s, 'My profile');
+  assert.deepEqual(names({ profiles: r.profiles }), ['Globex']);
+});
+
+test('deleting the profile in use switches to another first, and the last one cannot go', () => {
+  let s = apply(flat, { ...migrate(flat), fields: {} });
+  assert.throws(() => removeCurrent(s), /only profile/);
+  s = apply(s, create(s, 'Globex'));
+  const r = removeCurrent(s);
+  assert.equal(r.activeProfile, 'My profile');
+  assert.equal(r.fields.jobDescription, 'JD Acme');
+  assert.deepEqual(Object.keys(r.profiles), ['My profile']);
+});

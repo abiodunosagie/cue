@@ -4,6 +4,7 @@ const path = require('path');
 const { app } = require('electron');
 const { normalizeBaseUrl } = require('./openai-compatible');
 const { normalizeLength } = require('../renderer/answer-length');
+const Profiles = require('./profiles');
 const PanelOpacity = require('../renderer/panel-opacity');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');
@@ -74,6 +75,9 @@ const DEFAULTS = {
   aiRules: '',
   panelOpacity: PanelOpacity.DEFAULT,
   answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)
+  // Job profiles (src/profiles.js): the active one lives in the flat fields above.
+  profiles: {},
+  activeProfile: '',
   sttWords: '',             // words the speech service should expect (src/vocab.js)
   practiceVoice: 'george',  // ElevenLabs voice for practice interviews (src/practice.js VOICES)
   // Answer questions that appear on screen while listening (src/screen-watch.js).
@@ -110,7 +114,8 @@ const DEFAULTS = {
 
 // Fields the renderer may never write. settings:set passes patches through
 // stripRendererPatch; settings:get hands out redactForRenderer's view.
-const RENDERER_READ_ONLY = ['publik'];
+// profiles: changed only through the profile:* IPC, so a stale renderer copy never overwrites them.
+const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile'];
 
 let data = null;
 
@@ -136,6 +141,8 @@ function load() {
   catch { data = deepMerge(DEFAULTS, {}); }
   data.panelOpacity = PanelOpacity.normalize(data.panelOpacity);
   data.answerLength = normalizeLength(data.answerLength);
+  const migrated = Profiles.migrate(data);
+  if (migrated) Object.assign(data, migrated);
 
 
   return data;
@@ -184,6 +191,14 @@ module.exports = {
   stripRendererPatch,
   redactForRenderer,
   getSettings() { return load(); },
+  // Main-process only: apply a src/profiles.js result. profiles is replaced whole
+  // (a deleted profile must not survive a merge).
+  setProfileState({ profiles, activeProfile, fields }) {
+    load();
+    data = { ...data, ...fields, profiles, activeProfile };
+    save();
+    return data;
+  },
   // Main-process only: the provisioning flow writes the key and its state here.
   setPublik(patch) {
     load();

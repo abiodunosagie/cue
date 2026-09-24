@@ -9,6 +9,7 @@ const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
 const { runSetupChecks } = require('./src/setup-check');
+const Profiles = require('./src/profiles');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
@@ -186,7 +187,7 @@ const practice = createPracticeSession({
   isBusy: () => state.busy,
   memoryIsEmpty: () => interviewMemory.summary().turnCount === 0,
   clearInterview: () => clearInterview(),
-  preparedQuestions: () => (preparedStore.isCurrent(profileHash(store.getSettings())) ? preparedStore.items() : []),
+  preparedQuestions: () => preparedStore.items(profileHash(store.getSettings())),
   markActive: (on) => {
     try { if (on) fs.writeFileSync(PRACTICE_MARKER, '', { mode: 0o600 }); else fs.unlinkSync(PRACTICE_MARKER); } catch { /* best effort */ }
   }
@@ -618,7 +619,7 @@ async function setCapturing(active) {
 function preparedState() {
   const settings = store.getSettings();
   return {
-    ...preparedStore.summary(),
+    ...preparedStore.summary(profileHash(settings)),
     current: preparedStore.isCurrent(profileHash(settings)),
     canPrepare: canPrepare(settings),
     running: preparing.running,
@@ -675,8 +676,7 @@ function schedulePrepare() {
 // is confirmed by the Fast model first.
 async function findPreparedAnswer(mode, userText, settings) {
   if (mode !== 'answerThis' || normalizeLength(settings.answerLength) !== 'medium') return null;
-  if (!preparedStore.isCurrent(profileHash(settings))) return null;
-  const match = preparedStore.match(userText || '');
+  const match = preparedStore.match(userText || '', profileHash(settings));
   if (!match) return null;
   if (match.direct) return match.item;
   const fast = createLLM({ ...settings, smart: false });
@@ -846,6 +846,21 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
+// Job profiles: every change goes through src/profiles.js and store.setProfileState.
+// The new profile's prepared answers are reused if cached, else built shortly.
+function applyProfileChange(change) {
+  try {
+    const saved = store.setProfileState(change(store.getSettings()));
+    if (!preparedStore.isCurrent(profileHash(saved))) schedulePrepare();
+    send('prepared:state', preparedState());
+    return { settings: store.redactForRenderer(saved) };
+  } catch (e) {
+    return { error: e && e.message ? e.message : String(e) };
+  }
+}
+ipcMain.handle('profile:switch', (_e, name) => applyProfileChange((s) => Profiles.switchTo(s, String(name || ''))));
+ipcMain.handle('profile:create', (_e, name) => applyProfileChange((s) => Profiles.create(s, String(name || ''))));
+ipcMain.handle('profile:delete-current', () => applyProfileChange((s) => Profiles.removeCurrent(s)));
 // Test my setup: real calls, one after another, each result sent as it lands.
 let setupTestRunning = false;
 ipcMain.handle('setup:test', async () => {

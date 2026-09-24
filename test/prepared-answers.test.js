@@ -66,12 +66,31 @@ test('the bank survives a restart, is 0600, and is only current for the profile 
   assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   const b = createPreparedStore({ file });
   b.load();
-  assert.equal(b.summary().count, 4);
+  assert.equal(b.summary('h1').count, 4);
+  assert.equal(b.summary('h2').count, 0);
   assert.equal(b.isCurrent('h1'), true);
   assert.equal(b.isCurrent('h2'), false);
-  assert.equal(b.match('introduce yourself').item.answer, 'INTRO');
-  assert.equal(b.match('introduce yourself').direct, true);
+  assert.equal(b.match('introduce yourself', 'h1').item.answer, 'INTRO');
+  assert.equal(b.match('introduce yourself', 'h1').direct, true);
+  assert.equal(b.match('introduce yourself', 'h2'), null);
   assert.equal(b.clear(), true);
   assert.equal(fs.existsSync(file), false);
   assert.equal(b.isCurrent('h1'), false);
+});
+
+test('banks for the last five profiles are kept, newest first, and an old one-bank file still loads', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cue-prep-')), 'cue-prepared.json');
+  const store = createPreparedStore({ file });
+  for (let i = 1; i <= 6; i++) store.replace('h' + i, items, i);
+  const again = createPreparedStore({ file });
+  again.load();
+  assert.equal(again.isCurrent('h1'), false);          // the oldest of six dropped
+  assert.equal(again.isCurrent('h2'), true);
+  assert.equal(again.isCurrent('h6'), true);
+  again.replace('h2', items.slice(0, 1), 10);          // rebuilding one moves it to the front
+  assert.equal(again.summary('h2').count, 1);
+  fs.writeFileSync(file, JSON.stringify({ hash: 'old', createdAt: 3, items }));
+  const legacy = createPreparedStore({ file });
+  legacy.load();
+  assert.equal(legacy.summary('old').count, 4);
 });

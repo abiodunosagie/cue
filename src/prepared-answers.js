@@ -113,28 +113,43 @@ function confirmSameQuestion({ llm, heard, prepared, timeoutMs = CONFIRM_TIMEOUT
     .then((reply) => /^\s*yes\b/i.test(reply), () => false);
 }
 
+// Banks for the last few profiles, keyed by the hash of the profile each was
+// made from, so switching back to another job's profile needs no rebuild.
+const MAX_BANKS = 5;
+
+function readItems(list) {
+  return parseItems(JSON.stringify(Array.isArray(list) ? list : []));
+}
+
 function createPreparedStore({ file } = {}) {
-  let bank = { hash: '', createdAt: 0, items: [] };
+  let banks = []; // { hash, createdAt, items }, newest first
 
   function load() {
-    if (!file) return bank;
+    banks = [];
+    if (!file) return banks;
     try {
       const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (parsed && typeof parsed.hash === 'string' && Array.isArray(parsed.items)) {
-        bank = { hash: parsed.hash, createdAt: Number(parsed.createdAt) || 0, items: parseItems(JSON.stringify(parsed.items)) };
-      }
-    } catch { /* no bank yet, or unreadable: prepare again */ }
-    return bank;
+      // Before banks per profile the file held one bank; it still loads.
+      const list = parsed && Array.isArray(parsed.banks) ? parsed.banks : (parsed && typeof parsed.hash === 'string' ? [parsed] : []);
+      banks = list
+        .filter((b) => b && typeof b.hash === 'string')
+        .map((b) => ({ hash: b.hash, createdAt: Number(b.createdAt) || 0, items: readItems(b.items) }))
+        .filter((b) => b.items.length)
+        .slice(0, MAX_BANKS);
+    } catch { /* no banks yet, or unreadable: prepare again */ }
+    return banks;
   }
 
-  // Returns false when the bank could not be written; it is still used in memory.
+  const bankFor = (hash) => banks.find((b) => b.hash === hash) || null;
+
+  // Returns false when the banks could not be written; they are still used in memory.
   function replace(hash, items, now = Date.now()) {
-    bank = { hash, createdAt: now, items };
-    return file ? writeFileAtomic(file, JSON.stringify(bank)) : true;
+    banks = [{ hash, createdAt: now, items }, ...banks.filter((b) => b.hash !== hash)].slice(0, MAX_BANKS);
+    return file ? writeFileAtomic(file, JSON.stringify({ banks })) : true;
   }
 
   function clear() {
-    bank = { hash: '', createdAt: 0, items: [] };
+    banks = [];
     return file ? removeFileAndTemp(file) : true;
   }
 
@@ -142,10 +157,10 @@ function createPreparedStore({ file } = {}) {
     load,
     replace,
     clear,
-    isCurrent(hash) { return !!bank.items.length && bank.hash === hash; },
-    match(heard) { return findMatch(bank.items, heard); },
-    items() { return bank.items.slice(); },
-    summary() { return { count: bank.items.length, createdAt: bank.createdAt }; }
+    isCurrent(hash) { const b = bankFor(hash); return !!(b && b.items.length); },
+    match(heard, hash) { const b = bankFor(hash); return b ? findMatch(b.items, heard) : null; },
+    items(hash) { const b = bankFor(hash); return b ? b.items.slice() : []; },
+    summary(hash) { const b = bankFor(hash); return { count: b ? b.items.length : 0, createdAt: b ? b.createdAt : 0 }; }
   };
 }
 

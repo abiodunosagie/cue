@@ -1741,6 +1741,7 @@
     $('#key-deepgram').value = settings.apiKeys.deepgram || '';
     $('#key-elevenlabs').value = settings.apiKeys.elevenlabs || '';
     $('#stt-words').value = settings.sttWords || '';
+    fillProfiles();
     $('#practice-voice').value = settings.practiceVoice || 'george';
     $('#key-custom').value = settings.apiKeys.custom || '';
     $('#base-url').value = settings.baseUrl || '';
@@ -1863,6 +1864,50 @@
   const preparedRunBtn = document.getElementById('prepared-run-btn');
   if (preparedRunBtn) preparedRunBtn.addEventListener('click', async () => { showPrepared(await cue.preparedRun()); });
   cue.on('prepared:state', showPrepared);
+
+  // ---- job profiles ----
+  function fillProfiles() {
+    const select = $('#profile-select');
+    select.replaceChildren(...Object.keys(settings.profiles || {}).map((name) => {
+      const o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      return o;
+    }));
+    select.value = settings.activeProfile || '';
+    $('#profile-delete-btn').disabled = Object.keys(settings.profiles || {}).length < 2;
+  }
+  // Every change saves what is typed first, then main moves the fields and
+  // sends the whole settings back, so the form always shows the active profile.
+  async function changeProfile(call, done) {
+    await saveSettings();
+    const res = await call();
+    if (!res || res.error || !res.settings) { showStatus((res && res.error) || 'The profile could not be changed.'); fillProfiles(); return; }
+    settings = res.settings;
+    fillSettings();
+    if (done) showToast(done, 1800);
+  }
+  $('#profile-select').addEventListener('change', (e) => {
+    const name = e.target.value;
+    void changeProfile(() => cue.profileSwitch(name), 'Switched to ' + name);
+  });
+  $('#profile-new-btn').addEventListener('click', () => {
+    const name = $('#profile-new-name').value;
+    void changeProfile(() => cue.profileCreate(name), 'Created ' + name.trim()).then(() => { $('#profile-new-name').value = ''; });
+  });
+  // Deleting loses that job's material, so it takes a second click within 3s.
+  let deleteArmed = null;
+  $('#profile-delete-btn').addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    if (!deleteArmed) {
+      btn.textContent = 'Click again to delete ' + settings.activeProfile;
+      deleteArmed = setTimeout(() => { deleteArmed = null; btn.textContent = 'Delete this profile'; }, 3000);
+      return;
+    }
+    clearTimeout(deleteArmed); deleteArmed = null;
+    btn.textContent = 'Delete this profile';
+    const name = settings.activeProfile;
+    void changeProfile(() => cue.profileDeleteCurrent(), 'Deleted ' + name);
+  });
 
   // ---- test my setup ----
   const setupResults = document.getElementById('setup-test-results');
