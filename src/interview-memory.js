@@ -130,7 +130,8 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
   // The newest coding solve, when it is among the last few answers: explaining
   // "your code" only makes sense while the coding round is still going.
   function recentCodingSolve({ withinAnswers = 4, maxChars = CODING_HISTORY_CHARS * 2 } = {}) {
-    const recent = record.answers.slice(-withinAnswers);
+    // Explaining the code is still the coding round, so it does not count toward the window.
+    const recent = record.answers.filter((a) => a.mode !== 'explainCode').slice(-withinAnswers);
     for (let i = recent.length - 1; i >= 0; i--) {
       if (recent[i].mode === 'leetcode') return recent[i].text.slice(0, maxChars);
     }

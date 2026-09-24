@@ -209,5 +209,6 @@ test('the chosen architecture is named in the coding request, clean by default',
   assert.match(MODES.leetcode.build({ architecture: 'simple' }), /lib\/screens\//);
   assert.match(MODES.leetcode.build({ architecture: 'bogus' }), /Clean Architecture/);
   assert.deepEqual(Object.keys(ARCHITECTURES), ['clean', 'mvvm', 'simple']);
-  assert.match(MODES.leetcode.build({}), /any other stack.*keep the same layers/);
+  assert.match(MODES.leetcode.build({}), /any other stack.*keep these same layers/);
+  assert.doesNotMatch(MODES.leetcode.build({ architecture: 'mvvm' }), /domain\//, 'MVVM is never told to use Clean Architecture folders');
 });

@@ -224,17 +224,23 @@
     aiEl = null; caretEl = null;
   }
 
-  // Under a coding solve that finished (never one cut short by an error: that
-  // one was not saved, so explaining would use an older solve): one click for
-  // the words to explain it.
-  function addExplainButton(el) {
+  // Under a coding answer that finished (never one cut short by an error: that
+  // one was not saved, so these would work from an older solve): one click to
+  // explain the code, or to check the progress on screen against the plan.
+  function addCodingButtons(el) {
     if (!el || el.dataset.coding !== '1' || el.dataset.error) return;
-    const explain = document.createElement('button');
-    explain.type = 'button';
-    explain.className = 'explain-code';
-    explain.textContent = isWindows ? 'Explain this code (Ctrl+Shift+E)' : 'Explain this code (⌘⇧E)';
-    explain.addEventListener('click', () => runMode('explainCode'));
-    el.appendChild(explain);
+    const row = document.createElement('div');
+    row.className = 'coding-actions';
+    const key = (letter) => (isWindows ? 'Ctrl+Shift+' + letter : '⌘⇧' + letter);
+    for (const [label, letter, mode] of [['Explain this code', 'E', 'explainCode'], ['Check my progress', 'C', 'checkProgress']]) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'explain-code';
+      b.textContent = label + ' (' + key(letter) + ')';
+      b.addEventListener('click', () => runMode(mode));
+      row.appendChild(b);
+    }
+    el.appendChild(row);
   }
 
   // Failsafe: main's stream watchdog (25s between tokens, 45s for coding solves) always
@@ -1525,7 +1531,7 @@
     group.insertBefore(pill, aiEl);
   });
   cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
-  cue.on('llm:done', () => { const done = aiEl; finalizeAi(); addExplainButton(done); setBusy(false); readingFollow.update(); });
+  cue.on('llm:done', () => { const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
     // Keep what already streamed (an opener the user may be saying aloud) and
     // show the error as its own line under it.

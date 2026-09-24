@@ -50,7 +50,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -711,7 +711,7 @@ async function prepareFollowUps(question, answer, generation) {
 // the one being explained for explainCode (the newest, even after the round).
 function priorSolvesFor(def, mode) {
   if (def.tier === 'coding') return interviewMemory.codingHistory();
-  if (mode === 'explainCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''];
+  if (mode === 'explainCode' || mode === 'checkProgress') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''];
   return [];
 }
 
@@ -750,7 +750,7 @@ async function runFeature(mode, userText, options = {}) {
       ? def.userBubble
       : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
-    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' });
+    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp });
 
     if (!llm.ready) {
       const message = llm.configurationError || ('Complete the ' + settings.provider + ' provider settings. Model: ' + (llm.model || 'unset') + '.');
@@ -1234,6 +1234,8 @@ function registerShortcuts() {
   shortcutState.buyTime = globalShortcut.register('CommandOrControl+Shift+B', () => runFeature('buyTime', ''));
   // E for explain: the words to walk the interviewer through the code just written.
   shortcutState.explainCode = globalShortcut.register('CommandOrControl+Shift+E', () => runFeature('explainCode', ''));
+  // C for check: what is done on screen, anything wrong, and the next step.
+  shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {
     if (!wasRegistered) {
       recordEvent({ level: 'warn', event: 'shortcut_unavailable', msg: 'another application holds the ' + name + ' shortcut', frame: 'registerShortcuts', context: { shortcut: name } });

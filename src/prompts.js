@@ -85,8 +85,8 @@ const DEFAULT_ARCHITECTURE = 'clean';
 
 function architectureNote(name) {
   const text = ARCHITECTURES[name] || ARCHITECTURES[DEFAULT_ARCHITECTURE];
-  return 'Architecture for a build task: ' + text + ' For any other stack (React Native, Swift, Kotlin, a web app, a NestJS or other backend), keep the same layers ' +
-    'and use that stack\'s usual folder names (for example src/features/<feature>/domain/ in TypeScript).\n\n';
+  return 'Architecture for a build task: ' + text + ' For any other stack (React Native, Swift, Kotlin, a web app, a NestJS or other backend), keep these same layers ' +
+    'and use that stack\'s usual folder names for them.\n\n';
 }
 
 const MODES = {
@@ -181,6 +181,7 @@ const MODES = {
 
   // ── Explain the code: walk the interviewer through the candidate's own solution ──
   explainCode: {
+    codingFollowUp: true, // about the coding solve: shown like one (no follow, Explain and Check buttons)
     skipMemory: true,    // it gets the solution itself; interview history adds nothing here
     contextTurns: 6, // turns build() sends
     needsScreen: true,   // the editor now: the code as actually typed, maybe partial
@@ -207,6 +208,36 @@ const MODES = {
       return (solve ? 'The solution cue gave earlier in this interview:\n\n' + solve + '\n\n' : '') +
         (t ? 'Recent conversation:\n' + t + '\n\n' : '') +
         (asked ? 'The interviewer asked: "' + asked + '"\n\nHelp me answer that about my code.' : 'Help me explain my code from the start.');
+    }
+  },
+
+  // ── Check my progress: what is done, what is wrong, and what to write next ──
+  checkProgress: {
+    codingFollowUp: true, // about the coding solve: shown like one (no follow, Explain and Check buttons)
+    skipMemory: true,
+    notAnswer: true,      // a checkpoint for the candidate, not something said in the interview
+    needsScreen: true,    // the editor now is the whole point
+    userBubble: 'Checking your progress',
+    small: false,
+    buildSystem(_contextBlock, aiRules) {
+      return applyRules(
+        'You are cue, checking a candidate\'s progress in the middle of a live coding task. ' + BASE_RULES +
+        'You get the step-by-step plan cue gave them and a screenshot of their editor now (and the file tree, when it is visible). ' +
+        'Read the screen carefully: judge only what is visible, and say which file you are looking at.\n\n' +
+        'Answer in this order:\n' +
+        '**Where you are:** one or two plain sentences: which steps of the plan look done, based on the screen, and which step they are on.\n' +
+        '**Issues:** every real problem in the visible code that would stop it compiling or working (a typo, a missing or wrong import, a wrong name, ' +
+        'a missing bracket, a logic slip, code that does not match the plan), each as one plain sentence naming the line, then the corrected lines in a fenced block ' +
+        'tagged with the language, then **Say:** one sentence the candidate can say while fixing it. When there is nothing wrong, write "None, it looks right." and nothing else here.\n' +
+        '**Next:** the next step of the plan to write, exactly as the plan gives it (its heading, its code blocks and their Say lines), adjusted to fit what is on screen. ' +
+        'When every step is done, say so and give the plan\'s Run it instead.\n\n' +
+        'Never invent problems to have something to say. Code goes only inside fenced blocks, never in inline backticks. No markdown headings.',
+        aiRules, 'checkProgress');
+    },
+    build(ctx) {
+      const plan = (ctx.priorSolves || [])[0] || '';
+      return (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : 'There is no earlier plan: judge the code on screen on its own.\n\n') +
+        'Check my progress on screen: what is done, anything wrong, and what I write next.';
     }
   },
 
@@ -386,8 +417,8 @@ const MODES = {
         'experience: use the architecture named in the request below, unless the starter code on screen already has a structure (then follow that exactly). In order:\n' +
         '  **Folders and files:** the complete project tree in a fenced block tagged text, showing every folder AND every file inside it (nothing left out), ' +
         'then a **Say:** line explaining in plain words why the code is organised this way.\n' +
-        '  **Files to create:** folder by folder, a bold line with the folder path, then a bullet for each file in it with what it is for in a few words, ' +
-        'numbered in exactly the order the steps below write them.\n' +
+        '  **Files to create:** folder by folder, a bold line with the folder path, then a bullet for each file in it with what it is for in a few words ' +
+        'and the number of the step that writes it.\n' +
         '  **Tables:** only when the task needs a database: each table with its columns and types, and the SQL or migration in a fenced block, before any code that uses them.\n' +
         '  Then numbered steps in dependency order, innermost layer first: the pieces nothing else depends on (entities, models, contracts), then the logic that uses them ' +
         '(use cases, repositories, services, data sources), then state (providers, stores or view models), then screens and widgets, and the wiring (main, routes, setup) last. ' +

@@ -45,3 +45,25 @@ test('the explanation is built from the solution and the question, editor first'
   assert.match(built, /The interviewer asked: "Why a sort\?"/);
   assert.match(def.build({ priorSolves: [], transcript: [] }), /explain my code from the start/);
 });
+
+test('checking progress works from the plan and the editor, and is never stored as an answer', () => {
+  const def = MODES.checkProgress;
+  assert.equal(def.needsScreen, true);
+  assert.equal(def.notAnswer, true);
+  assert.equal(def.codingFollowUp, true);
+  const system = def.buildSystem('', '');
+  const order = ['**Where you are:**', '**Issues:**', '**Next:**'].map((p) => system.indexOf(p));
+  assert.ok(order.every((i) => i >= 0));
+  assert.deepEqual([...order].sort((a, b) => a - b), order);
+  assert.match(system, /None, it looks right\./);
+  assert.match(system, /Never invent problems/);
+  assert.match(def.build({ priorSolves: ['PLAN'] }), /The plan cue gave for this task:\n\nPLAN/);
+  assert.match(def.build({ priorSolves: [] }), /no earlier plan/);
+});
+
+test('explaining the code does not end the coding round', () => {
+  const m = createInterviewMemory({});
+  m.addAnswer({ mode: 'leetcode', text: 'SOLVE' });
+  for (let i = 0; i < 6; i++) m.addAnswer({ mode: 'explainCode', text: 'e' + i });
+  assert.equal(m.recentCodingSolve(), 'SOLVE');
+});
