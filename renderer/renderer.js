@@ -1685,7 +1685,7 @@
       button.classList.toggle('on', (button.dataset.autoAnswer === 'on') === (settings.autoAnswer !== false));
     });
     document.querySelectorAll('#watch-screen-seg button').forEach((button) => {
-      button.classList.toggle('on', (button.dataset.watchScreen === 'on') === (settings.watchScreen !== false));
+      button.classList.toggle('on', (button.dataset.watchScreen === 'on') === !!settings.watchScreen);
     });
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';

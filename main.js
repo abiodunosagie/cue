@@ -1337,7 +1337,7 @@ function cueWindowBounds() {
 const SCREEN_RECENT_MS = 90000;
 const SCREEN_DETECT_TIMEOUT_MS = 15000;
 const screenWatcher = createScreenWatcher({
-  isActive: () => state.capturing && !state.busy && !practice.isActive() && store.getSettings().watchScreen !== false && !!win && !win.isDestroyed(),
+  isActive: () => state.capturing && !state.busy && !practice.isActive() && !!store.getSettings().watchScreen && !!win && !win.isDestroyed(),
   capture: () => captureMaskedScreen(cueWindowBounds()),
   detect: async (dataUrl) => {
     const fast = createLLM({ ...store.getSettings(), smart: false });

@@ -75,7 +75,10 @@ const DEFAULTS = {
   panelOpacity: PanelOpacity.DEFAULT,
   answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)
   practiceVoice: 'george',  // ElevenLabs voice for practice interviews (src/practice.js VOICES)
-  watchScreen: true,        // answer questions that appear on screen while listening (src/screen-watch.js)
+  // Answer questions that appear on screen while listening (src/screen-watch.js).
+  // Off by default on macOS for the same reason as meetingAudio: each capture shows
+  // the screen recording indicator, which a whole-screen share would show too.
+  watchScreen: process.platform !== 'darwin',
   // Window position
   windowX: null,
   windowY: null,
