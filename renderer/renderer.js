@@ -1682,6 +1682,9 @@
     document.querySelectorAll('#auto-answer-seg button').forEach((button) => {
       button.classList.toggle('on', (button.dataset.autoAnswer === 'on') === (settings.autoAnswer !== false));
     });
+    document.querySelectorAll('#watch-screen-seg button').forEach((button) => {
+      button.classList.toggle('on', (button.dataset.watchScreen === 'on') === (settings.watchScreen !== false));
+    });
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -1818,6 +1821,13 @@
   document.querySelectorAll('#auto-answer-seg button').forEach((button) => button.addEventListener('click', () => {
     settings.autoAnswer = button.dataset.autoAnswer === 'on';
     document.querySelectorAll('#auto-answer-seg button').forEach((candidate) => {
+      candidate.classList.toggle('on', candidate === button);
+    });
+  }));
+
+  document.querySelectorAll('#watch-screen-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.watchScreen = button.dataset.watchScreen === 'on';
+    document.querySelectorAll('#watch-screen-seg button').forEach((candidate) => {
       candidate.classList.toggle('on', candidate === button);
     });
   }));

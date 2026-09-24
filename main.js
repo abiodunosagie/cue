@@ -3,7 +3,8 @@ const path = require('path');
 const os = require('os');
 const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
-const { captureScreenshot } = require('./src/screen');
+const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
+const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
@@ -1273,7 +1274,42 @@ function launchApp() {
   registerShortcuts();
   // Build the prepared answers if the profile changed since the last run.
   prepareAnswers({ force: false });
+  screenWatcher.start();
 }
+
+// Screen watch: while listening and idle, a question or coding task that
+// appears on screen without being said gets answered like a heard one.
+const SCREEN_RECENT_MS = 90000;
+const screenWatcher = createScreenWatcher({
+  isActive: () => state.capturing && !state.busy && store.getSettings().watchScreen !== false && !!win && !win.isDestroyed(),
+  capture: () => captureMaskedScreen(win && !win.isDestroyed() && win.isVisible() ? win.getBounds() : null),
+  detect: async (dataUrl) => {
+    const fast = createLLM({ ...store.getSettings(), smart: false });
+    if (!fast.ready) return '';
+    let reply = '';
+    await fast.stream({
+      system: DETECT_SYSTEM,
+      turns: [{ role: 'user', text: 'What is the candidate being asked on this screen?' }],
+      imageDataUrl: dataUrl,
+      maxTokens: 200,
+      onToken: (t) => { reply += t; }
+    });
+    return reply;
+  },
+  recentQuestions: () => {
+    const since = Date.now() - SCREEN_RECENT_MS;
+    return transcript.filter((t) => t.channel === 'them' && t.ts >= since);
+  },
+  onDetect: (detection) => {
+    if (detection.kind === 'coding') {
+      send('status', { message: 'Coding task on screen: solving it.' });
+      runFeature('leetcode', '');
+    } else {
+      // Same path as a heard question: history, memory, then the auto-answer.
+      publishTranscript('them', detection.text);
+    }
+  }
+});
 
 // -------- lifecycle --------
 app.whenReady().then(async () => {

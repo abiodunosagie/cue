@@ -73,7 +73,8 @@ const DEFAULTS = {
   // strict for coding problems).
   aiRules: '',
   panelOpacity: PanelOpacity.DEFAULT,
-  answerLength: 'medium',   // short | medium | long spoken answers (src/answer-length.js)
+  answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)
+  watchScreen: true,        // answer questions that appear on screen while listening (src/screen-watch.js)
   // Window position
   windowX: null,
   windowY: null,
