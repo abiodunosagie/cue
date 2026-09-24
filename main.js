@@ -10,6 +10,7 @@ const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
 const { runSetupChecks } = require('./src/setup-check');
 const Profiles = require('./src/profiles');
+const CompanyResearch = require('./src/company-research');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
@@ -886,6 +887,23 @@ function applyProfileChange(change) {
     return { error: e && e.message ? e.message : String(e) };
   }
 }
+// Company research: read the website, return notes and a Why-this-company draft
+// for the renderer to put in the form (saved with Done, like an import).
+const RESEARCH_TIMEOUT_MS = 60000;
+ipcMain.handle('company:research', async (_e, rawUrl) => {
+  try {
+    const url = CompanyResearch.normalizeUrl(rawUrl);
+    const settings = store.getSettings();
+    const llm = createLLM({ ...settings, smart: true });
+    if (!llm.ready) return { error: 'Set up the Smart model in Settings > Keys first.' };
+    const page = await CompanyResearch.fetchPageText({ url });
+    const background = [settings.resumeText, settings.starStories].filter(Boolean).join('\n\n');
+    const reply = await quickAsk({ llm, system: CompanyResearch.RESEARCH_SYSTEM, text: CompanyResearch.researchPrompt(page, url, background), maxTokens: CompanyResearch.RESEARCH_MAX_TOKENS, timeoutMs: RESEARCH_TIMEOUT_MS });
+    return { url, ...CompanyResearch.parseResearch(reply) };
+  } catch (e) {
+    return { error: e && e.message ? e.message : String(e) };
+  }
+});
 ipcMain.handle('profile:switch', (_e, name) => applyProfileChange((s) => Profiles.switchTo(s, String(name || ''))));
 ipcMain.handle('profile:create', (_e, name) => applyProfileChange((s) => Profiles.create(s, String(name || ''))));
 ipcMain.handle('profile:delete-current', () => applyProfileChange((s) => Profiles.removeCurrent(s)));

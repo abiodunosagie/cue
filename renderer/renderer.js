@@ -1741,6 +1741,7 @@
     $('#key-deepgram').value = settings.apiKeys.deepgram || '';
     $('#key-elevenlabs').value = settings.apiKeys.elevenlabs || '';
     $('#stt-words').value = settings.sttWords || '';
+    $('#company-notes').value = settings.companyNotes || '';
     fillProfiles();
     $('#practice-voice').value = settings.practiceVoice || 'george';
     $('#key-custom').value = settings.apiKeys.custom || '';
@@ -1907,6 +1908,26 @@
     btn.textContent = 'Delete this profile';
     const name = settings.activeProfile;
     void changeProfile(() => cue.profileDeleteCurrent(), 'Deleted ' + name);
+  });
+
+  // ---- company research ----
+  $('#company-research-btn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const status = $('#company-research-status');
+    btn.disabled = true;
+    status.textContent = 'Reading the website, about 20 seconds…';
+    try {
+      const res = await cue.companyResearch($('#company-url').value);
+      if (!res || res.error) { status.textContent = (res && res.error) || 'Research failed.'; return; }
+      $('#company-notes').value = res.notes;
+      // A Why-this-company the user wrote themselves is never overwritten.
+      const why = $('#why-company');
+      const kept = !!why.value.trim();
+      if (!kept && res.whyCompany) why.value = res.whyCompany;
+      status.textContent = 'Company notes filled' + (kept ? '; your own Why this company was kept' : ' and Why this company drafted') + '. Press Done to keep them.';
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // ---- test my setup ----
@@ -2199,6 +2220,7 @@
     settings.apiKeys.deepgram = $('#key-deepgram').value.trim();
     settings.apiKeys.elevenlabs = $('#key-elevenlabs').value.trim();
     settings.sttWords = $('#stt-words').value.trim();
+    settings.companyNotes = $('#company-notes').value.trim();
     settings.practiceVoice = $('#practice-voice').value || 'george';
     settings.apiKeys.custom = $('#key-custom').value.trim();
     settings.baseUrl = $('#base-url').value.trim();

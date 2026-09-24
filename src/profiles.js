@@ -4,10 +4,10 @@
 // Switching writes the flat fields back into the profile being left, then
 // loads the chosen one into them. Pure: the store applies what these return.
 
-const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk'];
+const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk'];
 // A new profile is for another job with the same person: the CV, stories and
 // work style carry over; everything about the job starts empty.
-const JOB_FIELDS = ['jobDescription', 'whyCompany', 'salaryTarget', 'questionsToAsk'];
+const JOB_FIELDS = ['jobDescription', 'companyNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk'];
 const DEFAULT_NAME = 'My profile';
 const MAX_NAME = 40;
 const MAX_PROFILES = 20;

@@ -29,7 +29,7 @@ const SYNONYMS = { application: 'app', program: 'app', codebase: 'project', repo
 const PREPARE_MAX_TOKENS = 8000;
 
 // Everything an answer is built from. A change to any of it makes the bank stale.
-const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules'];
+const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules'];
 
 function profileHash(settings) {
   const h = crypto.createHash('sha256');
@@ -46,7 +46,7 @@ const PREPARE_INSTRUCTIONS =
   'This time there is no single question to answer. Apply every rule above about voice, length and using only the candidate\'s real stories to each answer below.\n\n' +
   'List the 20 questions this interviewer is most likely to ask for this role, and write the answer the candidate should say out loud to each. ' +
   'Cover: the intro ("tell me about yourself"), why this role and company, the main technical topics in the job description, ' +
-  'the behavioral questions the stories answer, strengths and weaknesses, and salary if a target is given.\n\n' +
+  'the behavioral questions the stories answer, strengths and weaknesses, questions about this company when company notes are given, and salary if a target is given.\n\n' +
   'For each question also give 3 or 4 other ways an interviewer might phrase it.\n\n' +
   'Reply with JSON only, no prose and no code fence: an array of objects {"question": string, "variants": [string], "answer": string}.';
 

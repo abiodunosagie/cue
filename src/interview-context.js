@@ -207,6 +207,8 @@ function buildInterviewContext(settings, mode, transcript) {
     if (rb) blocks.push('=== Your Background ===\n' + rb);
   }
   if (hasJD) blocks.push(buildJDBlock(jd));
+  // Facts from the company's own website: keeps company answers specific and true.
+  if (String(settings.companyNotes || '').trim()) blocks.push('About the company (from its website):\n' + clip(settings.companyNotes.trim(), 1500));
 
   // Category-specific injections
   switch (category) {

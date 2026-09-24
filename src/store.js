@@ -78,6 +78,7 @@ const DEFAULTS = {
   // Job profiles (src/profiles.js): the active one lives in the flat fields above.
   profiles: {},
   activeProfile: '',
+  companyNotes: '',         // facts from the company website (src/company-research.js), per profile
   sttWords: '',             // words the speech service should expect (src/vocab.js)
   practiceVoice: 'george',  // ElevenLabs voice for practice interviews (src/practice.js VOICES)
   // Answer questions that appear on screen while listening (src/screen-watch.js).

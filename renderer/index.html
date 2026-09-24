@@ -315,6 +315,15 @@
         </div>
         <div class="s-note">Start listening first. Uses your ElevenLabs key for the voice, or the Mac's voice without one. Practice needs an empty interview memory and clears it when it ends.</div>
 
+        <label class="s-label">Company research <span class="s-hint">paste the company's website; cue writes company notes and drafts Why this company</span></label>
+        <div class="s-field s-upload">
+          <input id="company-url" type="text" placeholder="e.g. acme.com or acme.com/about" autocomplete="off" aria-label="Company website" />
+          <button class="s-action s-upload-btn" id="company-research-btn">Research</button>
+        </div>
+        <div class="s-note" id="company-research-status"></div>
+        <label class="s-label">Company notes <span class="s-hint">facts from the website, used in answers and prepared questions; edit freely</span></label>
+        <textarea id="company-notes" rows="4" spellcheck="false" placeholder="Filled by Research, or write your own notes about the company."></textarea>
+
         <label class="s-label">Why this company <span class="s-hint">used for motivation questions</span></label>
         <textarea id="why-company" rows="3" spellcheck="false" placeholder="e.g. I admire how [company] has [specific thing]. Their work on [X] aligns with my experience in [Y]..."></textarea>
 

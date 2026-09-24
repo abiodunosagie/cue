@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('cue', {
   profileSwitch: (name) => ipcRenderer.invoke('profile:switch', name),
   profileCreate: (name) => ipcRenderer.invoke('profile:create', name),
   profileDeleteCurrent: () => ipcRenderer.invoke('profile:delete-current'),
+  companyResearch: (url) => ipcRenderer.invoke('company:research', url),
   practiceNext: () => ipcRenderer.invoke('practice:next'),
   practiceEnd: () => ipcRenderer.invoke('practice:end'),
   practicePlayed: (token) => ipcRenderer.send('practice:played', token),
