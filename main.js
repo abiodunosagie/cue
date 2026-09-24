@@ -5,6 +5,7 @@ const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
 const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
+const { pickQuestions, scoreAnswer, formatReport, synthesize } = require('./src/practice');
 const { createSTT } = require('./src/stt');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
@@ -162,6 +163,112 @@ function pushTranscript(turn) {
   transcript.push(turn);
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
   interviewMemory.addTurn(turn);
+}
+
+// -------- practice interview --------
+// A voice asks the likely questions; cue answers as in a real interview; each
+// spoken answer is scored locally (src/practice.js). Practice runs on an empty
+// interview memory and clears it when it ends, so a real interview never sees
+// practice questions.
+const practice = { active: false, questions: [], index: -1, askedAt: 0, results: [], hearingQuestion: false, hideThemUntil: 0 };
+// The practice voice is also heard as meeting audio. The question is published
+// as text instead, so the transcribed copy is dropped while it plays and briefly after.
+const PRACTICE_ECHO_MS = 3000;
+
+function practiceHidesTurn(turn) {
+  return practice.active && turn.channel === 'them' && (practice.hearingQuestion || Date.now() < practice.hideThemUntil);
+}
+
+function practiceState() {
+  return { active: practice.active, index: practice.index, total: practice.questions.length, question: practice.questions[practice.index] || '' };
+}
+
+function startPractice() {
+  if (practice.active) return practiceState();
+  if (!state.capturing) return { error: 'Start listening first, so cue can hear your answers.' };
+  if (interviewMemory.summary().turnCount > 0) {
+    return { error: 'Clear interview memory first (History). Practice starts empty and clears itself when it ends, so a real interview never sees practice questions.' };
+  }
+  const settings = store.getSettings();
+  const bank = preparedStore.isCurrent(profileHash(settings)) ? preparedStore.items() : [];
+  Object.assign(practice, { active: true, questions: pickQuestions(bank), index: -1, results: [], hearingQuestion: false, hideThemUntil: 0 });
+  askPracticeQuestion();
+  return practiceState();
+}
+
+async function askPracticeQuestion() {
+  practice.index++;
+  if (practice.index >= practice.questions.length) { finishPractice(); return; }
+  const question = practice.questions[practice.index];
+  practice.hearingQuestion = true;
+  practice.askedAt = Date.now();
+  send('practice:state', practiceState());
+  const settings = store.getSettings();
+  const apiKey = settings.apiKeys && settings.apiKeys.elevenlabs;
+  if (apiKey) {
+    try {
+      const audio = await synthesize({ apiKey, voice: settings.practiceVoice, text: question });
+      if (!practice.active) return;
+      send('practice:play', { text: question, audio: audio.toString('base64') });
+      return;
+    } catch (e) {
+      send('status', { message: (e && e.message ? e.message : 'The ElevenLabs voice failed.') + ' Using the system voice instead.' });
+    }
+  }
+  if (practice.active) send('practice:play', { text: question });
+}
+
+// The renderer finished playing the question: now it counts as asked.
+function practiceQuestionPlayed() {
+  if (!practice.active || !practice.hearingQuestion) return;
+  practice.hearingQuestion = false;
+  practice.hideThemUntil = Date.now() + PRACTICE_ECHO_MS;
+  practice.askedAt = Date.now();
+  publishTranscript('them', practice.questions[practice.index]);
+}
+
+// Score what the candidate said since the question was asked.
+function scorePracticeAnswer() {
+  const question = practice.questions[practice.index];
+  if (!question) return;
+  const settings = store.getSettings();
+  const answer = transcript.filter((t) => t.channel === 'you' && t.ts >= practice.askedAt).map((t) => t.text).join(' ');
+  const reference = [settings.resumeText, settings.jobDescription, settings.starStories, settings.workStyle].join('\n');
+  practice.results.push(scoreAnswer({ question, answer, reference, length: settings.answerLength }));
+}
+
+function nextPracticeQuestion() {
+  if (!practice.active) return practiceState();
+  scorePracticeAnswer();
+  askPracticeQuestion();
+  return practiceState();
+}
+
+function endPractice() {
+  if (!practice.active) return practiceState();
+  if (!practice.hearingQuestion) scorePracticeAnswer();
+  finishPractice();
+  return practiceState();
+}
+
+const PRACTICE_REPORT_WAIT_MS = 60000;
+function finishPractice() {
+  practice.active = false;
+  practice.hearingQuestion = false;
+  send('practice:state', practiceState());
+  const report = formatReport(practice.results);
+  const started = Date.now();
+  // Wait for an answer still streaming, so the report does not interleave with it.
+  const show = () => {
+    if (state.busy && Date.now() - started < PRACTICE_REPORT_WAIT_MS) { setTimeout(show, 500); return; }
+    send('llm:start', { userBubble: 'Practice report', small: false });
+    send('llm:token', { text: report });
+    send('llm:done', {});
+    transcript.splice(0, transcript.length);
+    const cleared = interviewMemory.clear();
+    send('practice:cleared', cleared);
+  };
+  show();
 }
 
 function send(channel, data) { if (win && !win.isDestroyed()) win.webContents.send(channel, data); }
@@ -382,6 +489,7 @@ async function flushChannel(channel) {
     }
     if (res.text && res.text.trim() && res.text.trim().length > 1 && !/^[?!.,;:\-…]+$/.test(res.text.trim())) {
       const turn = { channel, text: res.text.trim(), ts: Date.now() };
+      if (practiceHidesTurn(turn)) return;
       pushTranscript(turn);
       send('transcript', turn);
     }
@@ -431,6 +539,7 @@ function initStreamingSTT() {
     const sttInstance = createStreamingSTT(settings, channel, {
       onTranscript: (ch, text) => {
         const turn = { channel: ch, text, ts: Date.now() };
+        if (practiceHidesTurn(turn)) return;
         pushTranscript(turn);
         send('transcript', turn);
         send('stt:final', { channel: ch, text });
@@ -796,6 +905,10 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
+ipcMain.handle('practice:start', () => startPractice());
+ipcMain.handle('practice:next', () => nextPracticeQuestion());
+ipcMain.handle('practice:end', () => endPractice());
+ipcMain.on('practice:played', () => practiceQuestionPlayed());
 ipcMain.handle('prepared:run', () => prepareAnswers({ force: true }));
 
 // -------- publik API --------

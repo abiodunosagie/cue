@@ -1654,6 +1654,8 @@
     $('#key-anthropic').value = settings.apiKeys.anthropic || '';
     $('#key-gemini').value = settings.apiKeys.gemini || '';
     $('#key-deepgram').value = settings.apiKeys.deepgram || '';
+    $('#key-elevenlabs').value = settings.apiKeys.elevenlabs || '';
+    $('#practice-voice').value = settings.practiceVoice || 'george';
     $('#key-custom').value = settings.apiKeys.custom || '';
     $('#base-url').value = settings.baseUrl || '';
     updateCustomProviderFields();
@@ -1775,6 +1777,53 @@
   const preparedRunBtn = document.getElementById('prepared-run-btn');
   if (preparedRunBtn) preparedRunBtn.addEventListener('click', async () => { showPrepared(await cue.preparedRun()); });
   cue.on('prepared:state', showPrepared);
+
+  // ---- practice interview ----
+  const practiceBar = document.getElementById('practice-bar');
+  let practiceAudio = null;
+  function showPractice(p) {
+    if (!p) return;
+    practiceBar.classList.toggle('hidden', !p.active);
+    if (p.active) document.getElementById('practice-label').textContent = 'Practice: question ' + (p.index + 1) + ' of ' + p.total;
+    if (!p.active) stopPracticeVoice();
+  }
+  function stopPracticeVoice() {
+    if (practiceAudio) { practiceAudio.pause(); practiceAudio = null; }
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+  }
+  // Play the question, then tell main it has been asked. The Mac's own voice
+  // stands in when there is no ElevenLabs audio.
+  cue.on('practice:play', ({ text, audio }) => {
+    stopPracticeVoice();
+    let reported = false;
+    const done = () => { if (!reported) { reported = true; cue.practicePlayed(); } };
+    const speak = () => {
+      if (!window.speechSynthesis) { done(); return; }
+      const u = new SpeechSynthesisUtterance(text);
+      u.onend = done; u.onerror = done;
+      window.speechSynthesis.speak(u);
+    };
+    if (!audio) { speak(); return; }
+    practiceAudio = new Audio('data:audio/mpeg;base64,' + audio);
+    practiceAudio.onended = done;
+    practiceAudio.onerror = () => { practiceAudio = null; speak(); };
+    practiceAudio.play().catch(() => { practiceAudio = null; speak(); });
+  });
+  cue.on('practice:state', showPractice);
+  cue.on('practice:cleared', (res) => {
+    clearTranscriptSidebar();
+    hardClearSTTFill();
+    if (res && res.ok === false) showToast('Practice ended, but its memory could not be deleted from this computer.', 3500);
+  });
+  $('#practice-next-btn').addEventListener('click', async () => showPractice(await cue.practiceNext()));
+  $('#practice-end-btn').addEventListener('click', async () => showPractice(await cue.practiceEnd()));
+  $('#practice-start-btn').addEventListener('click', async () => {
+    await saveSettings(); // the key and voice just typed are the ones used
+    const res = await cue.practiceStart();
+    if (res && res.error) { showStatus(res.error); return; }
+    scrim.classList.add('hidden');
+    showPractice(res);
+  });
   cue.preparedState().then(showPrepared).catch(() => {});
 
   function statusText() {
@@ -1986,6 +2035,8 @@
     settings.apiKeys.anthropic = $('#key-anthropic').value.trim();
     settings.apiKeys.gemini = $('#key-gemini').value.trim();
     settings.apiKeys.deepgram = $('#key-deepgram').value.trim();
+    settings.apiKeys.elevenlabs = $('#key-elevenlabs').value.trim();
+    settings.practiceVoice = $('#practice-voice').value || 'george';
     settings.apiKeys.custom = $('#key-custom').value.trim();
     settings.baseUrl = $('#base-url').value.trim();
     settings.apiKeys.ollama = $('#key-ollama').value.trim();

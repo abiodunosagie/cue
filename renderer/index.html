@@ -37,6 +37,11 @@
           <div id="panel-main">
             <div id="messages"></div>
 
+            <div id="practice-bar" class="hidden" aria-live="polite">
+              <span id="practice-label">Practice</span>
+              <button id="practice-next-btn" class="s-action">Next question</button>
+              <button id="practice-end-btn" class="s-action">End practice</button>
+            </div>
             <div id="action-row">
               <button class="act act-primary" data-mode="say"
                 title="Suggests what to say next based on the conversation">
@@ -131,6 +136,7 @@
         <div class="s-field"><span>Anthropic</span><input id="key-anthropic" type="password" placeholder="sk-ant-..." autocomplete="off" /></div>
         <div class="s-field"><span>Gemini</span><input id="key-gemini" type="password" placeholder="AIza..." autocomplete="off" /></div>
         <div class="s-field"><span>Deepgram</span><input id="key-deepgram" type="password" placeholder="dg-..." autocomplete="off" /></div>
+        <div class="s-field"><span>ElevenLabs</span><input id="key-elevenlabs" type="password" placeholder="sk_... (practice interview voice)" autocomplete="off" /></div>
         <div class="s-field"><span>Custom</span><input id="key-custom" type="password" placeholder="optional" autocomplete="off" /></div>
         <div class="s-field"><span>MiniMax</span><input id="key-minimax" type="password" placeholder="MiniMax API key" autocomplete="off" /></div>
 
@@ -277,6 +283,18 @@
 
         <label class="s-label">Prepared answers <span class="s-hint">the likely questions for this job, answered before the interview so they appear instantly</span></label>
         <div class="s-field s-upload"><span class="s-filename" id="prepared-status">Not prepared yet</span><button class="s-action s-upload-btn" id="prepared-run-btn">Prepare again</button></div>
+
+        <label class="s-label">Practice interview <span class="s-hint">a voice asks the likely questions; say cue's answers out loud and get a score for each</span></label>
+        <div class="s-field s-upload">
+          <select id="practice-voice" class="s-select" aria-label="Practice voice">
+            <option value="george">George, British male</option>
+            <option value="alice">Alice, British female</option>
+            <option value="brian">Brian, American male</option>
+            <option value="sarah">Sarah, American female</option>
+          </select>
+          <button class="s-action s-upload-btn" id="practice-start-btn">Start practice</button>
+        </div>
+        <div class="s-note">Start listening first. Uses your ElevenLabs key for the voice, or the Mac's voice without one. Practice needs an empty interview memory and clears it when it ends.</div>
 
         <label class="s-label">Why this company <span class="s-hint">used for motivation questions</span></label>
         <textarea id="why-company" rows="3" spellcheck="false" placeholder="e.g. I admire how [company] has [specific thing]. Their work on [X] aligns with my experience in [Y]..."></textarea>

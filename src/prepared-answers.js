@@ -161,6 +161,7 @@ function createPreparedStore({ file } = {}) {
     clear,
     isCurrent(hash) { return !!bank.items.length && bank.hash === hash; },
     match(heard) { return findMatch(bank.items, heard); },
+    items() { return bank.items.slice(); },
     summary() { return { count: bank.items.length, createdAt: bank.createdAt }; }
   };
 }

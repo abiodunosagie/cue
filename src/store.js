@@ -74,6 +74,7 @@ const DEFAULTS = {
   aiRules: '',
   panelOpacity: PanelOpacity.DEFAULT,
   answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)
+  practiceVoice: 'george',  // ElevenLabs voice for practice interviews (src/practice.js VOICES)
   watchScreen: true,        // answer questions that appear on screen while listening (src/screen-watch.js)
   // Window position
   windowX: null,
