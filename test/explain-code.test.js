@@ -1,3 +1,5 @@
+// isExplainRequest lives in renderer/spoken-question.js (its routing tests are in
+// spoken-question.test.js); these cover the explain-code feature end to end.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { isExplainRequest } = require('../renderer/spoken-question');

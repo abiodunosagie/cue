@@ -707,6 +707,14 @@ async function prepareFollowUps(question, answer, generation) {
   }
 }
 
+// The earlier coding solves a mode builds on: the last two for a new solve,
+// the one being explained for explainCode (the newest, even after the round).
+function priorSolvesFor(def, mode) {
+  if (def.tier === 'coding') return interviewMemory.codingHistory();
+  if (mode === 'explainCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''];
+  return [];
+}
+
 // options.imageDataUrl: a screenshot already taken (the screen watcher's, with
 // cue's own panel blacked out), used instead of a fresh capture.
 async function runFeature(mode, userText, options = {}) {
@@ -714,7 +722,8 @@ async function runFeature(mode, userText, options = {}) {
   // A question about the code just written ("walk me through your code", "why
   // a map here?") is answered from that code, not from the resume.
   if ((mode === 'answerThis' || mode === 'assist') && interviewMemory.recentCodingSolve()) {
-    const heard = mode === 'answerThis' ? userText : openerQuestion('say', '', transcript);
+    // The text that was sent; the interviewer's newest turn only when none was (a bare Assist key press).
+    const heard = userText || openerQuestion(mode, '', transcript);
     if (isExplainRequest(heard)) { mode = 'explainCode'; userText = heard; }
   }
   const def = MODES[mode];
@@ -825,8 +834,7 @@ async function runFeature(mode, userText, options = {}) {
       transcript,
       userText: userText || '',
       answers: mode === 'report' ? interviewMemory.answers() : [],
-      priorSolves: def.tier === 'coding' ? interviewMemory.codingHistory()
-        : mode === 'explainCode' ? [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1 })[0] || ''] : []
+      priorSolves: priorSolvesFor(def, mode)
     }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });

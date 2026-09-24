@@ -183,7 +183,7 @@ const MODES = {
     },
     build(ctx) {
       const solve = (ctx.priorSolves || [])[0] || '';
-      const t = formatTranscript(ctx.transcript || [], this.contextTurns);
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
       const asked = String(ctx.userText || '').trim();
       return (solve ? 'The solution cue gave earlier in this interview:\n\n' + solve + '\n\n' : '') +
         (t ? 'Recent conversation:\n' + t + '\n\n' : '') +

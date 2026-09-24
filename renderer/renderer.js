@@ -132,7 +132,11 @@
     aiEl.innerHTML = renderMarkdown(openFence ? raw + '\n```' : raw);
     pairCodeWithSay(aiEl);
     streamPara = null;
-    if (caretEl) (aiEl.lastElementChild && aiEl.lastElementChild.tagName !== 'PRE' ? aiEl.lastElementChild : aiEl).appendChild(caretEl);
+    // The caret follows the newest text: after a code/Say pair it goes in the
+    // Say box, never loose in the pair's grid (where it would drop to its own row).
+    const last = aiEl.lastElementChild;
+    const home = !last || last.tagName === 'PRE' ? aiEl : last.classList.contains('step-pair') ? (last.lastElementChild || aiEl) : last;
+    if (caretEl) home.appendChild(caretEl);
   }
 
   function appendToken(t) {
@@ -217,16 +221,20 @@
       b.innerHTML = icon('copy', { size: 14 });
       pre.appendChild(b);
     });
-    // Under a finished coding solve: one click for the words to explain it.
-    if (aiEl.dataset.coding === '1' && !aiEl.dataset.error) {
-      const explain = document.createElement('button');
-      explain.type = 'button';
-      explain.className = 'explain-code';
-      explain.textContent = isWindows ? 'Explain this code (Ctrl+Shift+E)' : 'Explain this code (⌘⇧E)';
-      explain.addEventListener('click', () => runMode('explainCode'));
-      aiEl.appendChild(explain);
-    }
     aiEl = null; caretEl = null;
+  }
+
+  // Under a coding solve that finished (never one cut short by an error: that
+  // one was not saved, so explaining would use an older solve): one click for
+  // the words to explain it.
+  function addExplainButton(el) {
+    if (!el || el.dataset.coding !== '1' || el.dataset.error) return;
+    const explain = document.createElement('button');
+    explain.type = 'button';
+    explain.className = 'explain-code';
+    explain.textContent = isWindows ? 'Explain this code (Ctrl+Shift+E)' : 'Explain this code (⌘⇧E)';
+    explain.addEventListener('click', () => runMode('explainCode'));
+    el.appendChild(explain);
   }
 
   // Failsafe: main's stream watchdog (25s between tokens, 45s for coding solves) always
@@ -1517,7 +1525,7 @@
     group.insertBefore(pill, aiEl);
   });
   cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
-  cue.on('llm:done', () => { finalizeAi(); setBusy(false); readingFollow.update(); });
+  cue.on('llm:done', () => { const done = aiEl; finalizeAi(); addExplainButton(done); setBusy(false); readingFollow.update(); });
   cue.on('llm:error', ({ message, action }) => {
     // Keep what already streamed (an opener the user may be saying aloud) and
     // show the error as its own line under it.
