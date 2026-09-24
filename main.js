@@ -928,13 +928,13 @@ ipcMain.on('open-pane', (_e, url) => { shell.openExternal(url).catch(() => {}); 
 ipcMain.on('app:quit', () => app.quit());
 ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
 // -------- resume / job-description file import --------
-// The dialog runs in MAIN and is filtered to pdf/docx; the renderer never supplies a path.
+// The dialog runs in MAIN and is filtered to pdf/docx/txt/md; the renderer never supplies a path.
 // The parsed text is RETURNED to the renderer, which drops it into the existing
 // #resume-text / #job-description textareas so settings keep a single source of truth.
 async function pickAndParseDocument() {
   const res = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
-    filters: [{ name: 'Resume / Job description', extensions: ['pdf', 'docx'] }]
+    filters: [{ name: 'Resume / Job description', extensions: ['pdf', 'docx', 'txt', 'md'] }]
   });
   if (res.canceled || !res.filePaths.length) return null;
   const filePath = res.filePaths[0];
