@@ -137,10 +137,9 @@ function clip(text, limit) {
 // answer depends on these, so they are not trimmed per question category.
 const RESUME_LIMIT = 6000;
 const JD_LIMIT = 2500;
-// Six to eight real STAR stories run 3,000 to 4,000 characters. Clipping them
-// cuts whole stories, and then the model invents one instead.
-const STORIES_LIMIT = 4500;
-const STORIES_HIGHLIGHT_LIMIT = 2500;
+// Seven real STAR stories run about 5,000 characters. Clipping them cuts whole
+// stories, and then the model invents one instead, so every category gets all of them.
+const STORIES_LIMIT = 6000;
 
 function buildResumeBlock(resumeText, limit = RESUME_LIMIT) {
   if (!resumeText || !resumeText.trim()) return '';
@@ -238,12 +237,12 @@ function buildInterviewContext(settings, mode, transcript) {
 
     case 'situational':
       if (workStyle) blocks.push('Decision-Making Style / Values:\n' + clip(workStyle, 500));
-      if (hasStories) blocks.push('Relevant Past Experience:\n' + clip(stories, STORIES_HIGHLIGHT_LIMIT));
+      if (hasStories) blocks.push('Relevant Past Experience:\n' + clip(stories, STORIES_LIMIT));
       break;
 
     case 'experience':
       // Already have full resume — no extra blocks needed
-      if (hasStories) blocks.push('Key Stories / Highlights:\n' + clip(stories, STORIES_HIGHLIGHT_LIMIT));
+      if (hasStories) blocks.push('Key Stories / Highlights:\n' + clip(stories, STORIES_LIMIT));
       break;
 
     case 'compensation':
@@ -257,7 +256,7 @@ function buildInterviewContext(settings, mode, transcript) {
 
     case 'general':
     default:
-      if (hasStories) blocks.push('Key Experience Highlights:\n' + clip(stories, STORIES_HIGHLIGHT_LIMIT));
+      if (hasStories) blocks.push('Key Experience Highlights:\n' + clip(stories, STORIES_LIMIT));
       if (workStyle)  blocks.push('Work Style:\n' + clip(workStyle, 300));
       break;
   }
