@@ -673,7 +673,7 @@ function preparedState() {
 // system prompt exactly as for a live answer, so they follow the same voice,
 // length and no-invented-stories rules. Used for the prepared bank and follow-ups.
 async function askForItems({ llm, settings, turns, prompt, maxTokens, timeoutMs }) {
-  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns), settings.aiRules || '');
+  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: interviewMemory.answers().map((x) => x.text) }), settings.aiRules || '');
   return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
 }
 
@@ -1012,7 +1012,7 @@ async function runFeature(mode, userText, options = {}) {
     const memoryBlock = def.tier === 'coding' || def.skipMemory
       ? ''
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
-    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
+    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: interviewMemory.answers().map((x) => x.text) });
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
     opener = openerPromise ? await openerPromise : '';
     // One user turn builder for the answer, the quick start and the full

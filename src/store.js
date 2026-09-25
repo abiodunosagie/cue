@@ -6,6 +6,7 @@ const { normalizeBaseUrl } = require('./openai-compatible');
 const { normalizeLength } = require('../renderer/answer-length');
 const Profiles = require('./profiles');
 const { normalizeScripts } = require('./scripts');
+const { normalizeProjects } = require('./projects');
 const PanelOpacity = require('../renderer/panel-opacity');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');
@@ -87,6 +88,9 @@ const DEFAULTS = {
   scrollReading: true,
   // Teleprompter scripts (the Script button), cleaned by src/scripts.js.
   scripts: [],
+  // The candidate's real projects (Settings > Profile > Projects), cleaned by
+  // src/projects.js. Only ticked ones with a summary reach a prompt.
+  projects: [],
   codingSpeed: 'fastest',   // coding solves: fastest | balanced | careful (src/llm.js CODING_SPEEDS)
   codeArchitecture: 'clean', // how build tasks organise folders: clean | mvvm | simple (src/prompts.js)
   sttWords: '',             // words the speech service should expect (src/vocab.js)
@@ -226,6 +230,7 @@ module.exports = {
     nextSettings.panelOpacity = PanelOpacity.normalize(nextSettings.panelOpacity);
     nextSettings.answerLength = normalizeLength(nextSettings.answerLength);
     nextSettings.scripts = normalizeScripts(nextSettings.scripts);
+    nextSettings.projects = normalizeProjects(nextSettings.projects);
     data = nextSettings;
     save();
     return data;
