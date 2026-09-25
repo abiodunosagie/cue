@@ -1021,13 +1021,17 @@
   });
 
   // This question: how much of the current coding question cue holds, and the
-  // button that forgets it when the candidate moves to the next one.
-  const questionBar = document.getElementById('question-bar');
-  cue.on('question:changed', ({ views, screens }) => {
-    questionBar.classList.toggle('hidden', !screens);
-    document.getElementById('question-label').textContent =
-      'This question: ' + screens + ' screen' + (screens === 1 ? '' : 's') + (views > 1 ? ', ' + views + ' views' : '');
-  });
+  // button that forgets it when the candidate moves to the next one. Always
+  // shown, so the button is where the owner expects it before the first Cmd+H.
+  const solveKey = isWindows ? 'Ctrl+H' : '⌘H';
+  const questionLabel = document.getElementById('question-label');
+  function showQuestion(views, screens) {
+    questionLabel.textContent = screens
+      ? 'This question: ' + screens + ' screen' + (screens === 1 ? '' : 's') + (views > 1 ? ', ' + views + ' views' : '')
+      : 'Coding question: press ' + solveKey + ' to start reading';
+  }
+  showQuestion(0, 0);
+  cue.on('question:changed', ({ views, screens }) => showQuestion(views, screens));
   document.getElementById('question-next-btn').addEventListener('click', () => cue.nextQuestion());
 
   // Hide / collapse
