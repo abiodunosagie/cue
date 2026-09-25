@@ -43,6 +43,10 @@
               <button id="practice-next-btn" class="s-action">Next question</button>
               <button id="practice-end-btn" class="s-action">End practice</button>
             </div>
+            <div id="question-bar" class="hidden" aria-live="polite">
+              <span id="question-label">This question</span>
+              <button id="question-next-btn" class="s-action" title="Forget this question's screens and code">New question</button>
+            </div>
             <div id="action-row">
               <button class="act act-primary" data-mode="say"
                 title="Suggests what to say next based on the conversation">
@@ -367,12 +371,12 @@
           <button data-quick-start="off">Off</button>
         </div>
 
-        <label class="s-label" style="margin-top:14px;">Long questions <span class="s-hint" id="long-question-hint">for ⌘H: keeps reading while you scroll a question taller than the screen, then solves it all. ⌘H again solves at once. Ctrl+Option+⌘L switches it</span></label>
-        <div class="s-seg" id="long-question-seg">
-          <button data-long-question="on">On</button>
-          <button data-long-question="off">Off</button>
+        <label class="s-label" style="margin-top:14px;">Read while scrolling <span class="s-hint" id="scroll-reading-hint">⌘H starts reading. Scroll and switch tabs, then ⌘H again to solve. Off: ⌘H solves from one screen</span></label>
+        <div class="s-seg" id="scroll-reading-seg">
+          <button data-scroll-reading="on">On</button>
+          <button data-scroll-reading="off">Off</button>
         </div>
-        <div class="s-note" id="question-tabs-note">Questions with tabs (instructions, tests, the file to edit): open each tab and press Ctrl+Option+⌘G to add it, or ⌘H on each one. Every ⌘H solves with all the tabs added so far. Press Ctrl+Option+⌘N when you move to the next question.</div>
+        <div class="s-note">cue remembers every screen of the question you are on. When you move to the next question, press New question in the panel.</div>
 
         <label class="s-label" style="margin-top:14px;">Coding speed <span class="s-hint">for ⌘H solves on Claude: Fastest thinks least before writing, Most careful thinks longest</span></label>
         <div class="s-seg" id="coding-speed-seg">

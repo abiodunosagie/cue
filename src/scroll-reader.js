@@ -1,13 +1,15 @@
-// Long question reading: a coding task taller than the screen is read page by
-// page while the candidate scrolls, and solved with every page together.
+// Reading a coding question: after Cmd+H the candidate scrolls and switches
+// the question's tabs while cue keeps a copy of each screen they stop on, and
+// Cmd+H again solves with every page together.
 //
 // It keeps a screen as a new page only once the scroll stops on it (the view
 // settled) and it looks different from the last page kept. A video call's
 // camera tiles change every frame but cover a small part of the screen, so the
 // same change threshold as the screen watcher keeps them from counting.
 //
-// Reading ends when nothing has moved for a moment (the candidate reached the
-// end), at the page or time cap, or when finish() is called (Cmd+H again).
+// Reading ends on finish() (Cmd+H again, the taught way), or by itself when
+// nothing has moved for a while (the second press was forgotten), or at the
+// page or time cap.
 
 const { changedShare } = require('./screen-watch');
 
@@ -17,10 +19,13 @@ const TICK_MS = 700;
 const PAGE_CHANGE = 0.25;
 // Quiet time that ends reading: longer before the first scroll, so there is
 // time to move the pointer to the page and start scrolling after Cmd+H.
+// After a scroll it waits long enough to read a tab and switch to the next.
 const STILL_BEFORE_SCROLL_MS = 5000;
-const STILL_AFTER_SCROLL_MS = 2500;
-const MAX_PAGES = 8;
-const MAX_READ_MS = 30000;
+const STILL_AFTER_SCROLL_MS = 10000;
+// Every tab of a big question fits. The time cap stays under the renderer's
+// 150s busy failsafe (BUSY_FAILSAFE_MS), which each page's status line rearms.
+const MAX_PAGES = 24;
+const MAX_READ_MS = 120000;
 
 // capture() resolves { thumb, image } (see src/screen.js captureMaskedPage) or
 // null; onPage(count) fires on each page kept. Returns the reader: done
@@ -97,8 +102,11 @@ const PAGE_STEPS = [
   { maxLongEdge: 1568, quality: 55 },
   { maxLongEdge: 1280, quality: 55 },
   { maxLongEdge: 1024, quality: 50 },
-  // A gathered question can hold up to 24 screens (src/question-bundle.js).
-  { maxLongEdge: 800, quality: 45 }
+  // A gathered question can send up to 48 screens (a full bundle of 24 plus a
+  // read of 24 it could not keep). Measured on a text page: 27KB at 800/q45,
+  // 17KB at 640/q40; a busy IDE screen is a few times that.
+  { maxLongEdge: 800, quality: 45 },
+  { maxLongEdge: 640, quality: 40 }
 ];
 
 function fitPages(images, encode, budget) {

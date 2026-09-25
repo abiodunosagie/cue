@@ -1001,25 +1001,35 @@
 
   // Long questions: the Settings switch, and Ctrl+Option+Cmd+L in main, which
   // reports back here so a later Settings save keeps what the key set.
+  // Read while scrolling: the Settings switch, and Ctrl+Option+Cmd+L in main,
+  // which reports back here so a later Settings save keeps what the key set.
   if (!isMac) {
-    const hint = document.getElementById('long-question-hint');
-    if (hint) hint.textContent = 'for Ctrl+H: keeps reading while you scroll a question taller than the screen, then solves it all. Ctrl+H again solves at once. Ctrl+Alt+Shift+L switches it';
-    const tabs = document.getElementById('question-tabs-note');
-    if (tabs) tabs.textContent = 'Questions with tabs (instructions, tests, the file to edit): open each tab and press Ctrl+Alt+Shift+G to add it, or Ctrl+H on each one. Every Ctrl+H solves with all the tabs added so far. Press Ctrl+Alt+Shift+N when you move to the next question.';
+    const hint = document.getElementById('scroll-reading-hint');
+    if (hint) hint.textContent = 'Ctrl+H starts reading. Scroll and switch tabs, then Ctrl+H again to solve. Off: Ctrl+H solves from one screen';
   }
-  function showLongQuestion(on) {
-    document.querySelectorAll('#long-question-seg button').forEach((button) => {
-      button.classList.toggle('on', (button.dataset.longQuestion === 'on') === on);
+  function showScrollReading(on) {
+    document.querySelectorAll('#scroll-reading-seg button').forEach((button) => {
+      button.classList.toggle('on', (button.dataset.scrollReading === 'on') === on);
     });
   }
-  cue.on('longQuestion:changed', ({ longQuestion }) => {
-    if (settings) settings.longQuestion = longQuestion;
-    showLongQuestion(longQuestion);
+  cue.on('scrollReading:changed', ({ scrollReading }) => {
+    if (settings) settings.scrollReading = scrollReading;
+    showScrollReading(scrollReading);
     const solve = isWindows ? 'Ctrl+H' : '⌘H';
-    showToast(longQuestion
-      ? 'Long question on: ' + solve + ' reads while you scroll, ' + solve + ' again solves'
-      : 'Long question off: ' + solve + ' reads one screen', 2600);
+    showToast(scrollReading
+      ? 'Read while scrolling on: ' + solve + ' starts, ' + solve + ' again solves'
+      : 'Read while scrolling off: ' + solve + ' solves from one screen', 2600);
   });
+
+  // This question: how much of the current coding question cue holds, and the
+  // button that forgets it when the candidate moves to the next one.
+  const questionBar = document.getElementById('question-bar');
+  cue.on('question:changed', ({ views, screens }) => {
+    questionBar.classList.toggle('hidden', !screens);
+    document.getElementById('question-label').textContent =
+      'This question: ' + screens + ' screen' + (screens === 1 ? '' : 's') + (views > 1 ? ', ' + views + ' reads' : '');
+  });
+  document.getElementById('question-next-btn').addEventListener('click', () => cue.nextQuestion());
 
   // Hide / collapse
   function toggleHide() {
@@ -1992,7 +2002,7 @@
     document.querySelectorAll('#quick-start-seg button').forEach((button) => {
       button.classList.toggle('on', button.dataset.quickStart === (settings.codingQuickStart === false ? 'off' : 'on'));
     });
-    showLongQuestion(!!settings.longQuestion);
+    showScrollReading(settings.scrollReading !== false);
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -2313,9 +2323,9 @@
     document.querySelectorAll('#quick-start-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
   }));
 
-  document.querySelectorAll('#long-question-seg button').forEach((button) => button.addEventListener('click', () => {
-    settings.longQuestion = button.dataset.longQuestion === 'on';
-    showLongQuestion(settings.longQuestion);
+  document.querySelectorAll('#scroll-reading-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.scrollReading = button.dataset.scrollReading === 'on';
+    showScrollReading(settings.scrollReading);
   }));
 
   document.querySelectorAll('#coding-speed-seg button').forEach((button) => button.addEventListener('click', () => {

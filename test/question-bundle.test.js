@@ -109,10 +109,11 @@ test('Next question: earlier coding solves stop reaching coding prompts, the int
 
 test('coding prompt: gathered views read as one question; every answer says where the code goes', () => {
   const gathered = MODES.leetcode.build({ pages: 3, views: 2 });
-  assert.match(gathered, /3 screenshots in 2 views of the SAME question/);
+  assert.match(gathered, /3 screenshots of ONE question/);
+  assert.match(gathered, /on screen now/);
   assert.match(gathered, /the tests are the specification/);
   assert.doesNotMatch(gathered, /taller than the screen/);
-  assert.match(MODES.leetcode.build({ pages: 3, views: 1 }), /taller than the screen/);
+  assert.doesNotMatch(MODES.leetcode.build({ pages: 3, views: 1 }), /on screen now/);
   const system = MODES.leetcode.buildSystem(null);
   assert.match(system, /Always say WHERE each piece of code goes/);
   assert.match(system, /\*\*Where it goes:\*\*/);

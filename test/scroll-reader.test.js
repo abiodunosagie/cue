@@ -77,6 +77,16 @@ test('a slow, smooth scroll still reads every page and does not end early', asyn
   assert.equal(got.length, 3);
 });
 
+test('with the defaults, switching tabs and scrolling keeps every stop, and a forgotten second Cmd+H ends it after 10s still', async () => {
+  // Instructions (1), scroll to 2, switch to Tests (3), scroll to 4, switch to Solution (5), then stillness.
+  const frames = [1, 1, 2, 2, 3, 3, 4, 4, 5];
+  const { reader, ticks } = run(frames, { tickMs: 1000 });
+  const got = await reader.done;
+  assert.deepEqual(got.map((p) => p.image), ['img1', 'img2', 'img3', 'img4', 'img5']);
+  // Page 5 settles at 9s: reading continues through 10s of stillness, so it ends at 19s.
+  assert.equal(ticks(), 20);
+});
+
 test('scrolling back to a page already read does not keep it twice', async () => {
   const { reader } = run([1, 2, 2, 1, 1]);
   assert.deepEqual((await reader.done).map((p) => p.image), ['img1', 'img2']);

@@ -833,6 +833,9 @@ button:focus { outline: none; }
 #practice-bar { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
 #practice-bar.hidden { display: none; }
 #practice-label { flex: 1; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
+#question-bar { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
+#question-bar.hidden { display: none; }
+#question-label { flex: 1; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
 #practice-voice, #profile-select { flex: 1; min-width: 0; }
 #profile-new-name, #company-url { flex: 1; min-width: 0; }
 /* Test my setup: one line per check, the result word in its own colour. */

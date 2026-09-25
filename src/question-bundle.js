@@ -17,9 +17,9 @@ const { changedShare } = require('./screen-watch');
 // whole screen, and replacing a different tab loses it, while two copies of
 // one tab (the editor after a lot of typing) only cost a few tokens.
 const SAME_SCREEN = 0.12;
-// Most screens gathered for one question. The solve adds the screen in front
-// of the candidate on top, so a full bundle still sees what they see now.
-const MAX_SCREENS = 16;
+// Most screens kept for one question: one full read (src/scroll-reader.js
+// MAX_PAGES). A solve past it still sends the screens it just read on top.
+const MAX_SCREENS = 24;
 
 function createQuestionBundle({ maxScreens = MAX_SCREENS, sameScreen = SAME_SCREEN } = {}) {
   let screens = []; // { thumb, image, view }

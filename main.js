@@ -219,6 +219,7 @@ function clearInterview() {
   transcript.splice(0, transcript.length);
   followUps.clear();
   questionBundle.clear();
+  announceQuestion();
   return interviewMemory.clear();
 }
 
@@ -742,8 +743,8 @@ function priorSolvesFor(def, mode) {
   return [];
 }
 
-// Long question reading (Settings > Answer style, or Ctrl+Option+Cmd+L): Cmd+H
-// keeps reading while the candidate scrolls, and Cmd+H again solves at once.
+// Reading while scrolling (Settings > Answer style, default On): Cmd+H starts
+// reading, the candidate scrolls and switches tabs, Cmd+H again solves.
 let scrollReader = null;
 const cmdH = isMac ? '⌘H' : 'Ctrl+H';
 const noMouseKey = (letter) => (isMac ? 'Ctrl+Option+⌘' : 'Ctrl+Alt+Shift+') + letter;
@@ -758,20 +759,20 @@ let gathering = null;
 let questionEpoch = 0;
 
 // The screens of one view, unencoded ({ thumb, image }): read while the
-// candidate scrolls when Long questions is on, else the screen as it is.
+// candidate scrolls and switches tabs when reading is on, else the screen as it is.
 // purpose: 'solve' or 'gather', for the status line and the timing log.
 async function readView(startedAt, purpose) {
   const capture = () => captureMaskedPage(cueWindowBounds(), { keepPanel: true });
-  if (!store.getSettings().longQuestion) {
+  if (!store.getSettings().scrollReading) {
     const shot = await capture();
     return shot ? [shot] : [];
   }
-  const finishes = purpose === 'gather' ? 'stops reading' : 'solves now';
+  const finishes = purpose === 'gather' ? 'to stop reading' : 'to solve';
   const reader = readScrollPages({
     capture,
     onPage: (count) => send('status', { message: count === 1
-      ? `Reading this view. Scroll down to the end, then stop; ${cmdH} ${finishes}.`
-      : `Page ${count} read. Keep scrolling, or stop; ${cmdH} ${finishes}.` })
+      ? `Reading. Scroll and switch tabs until you have shown everything, then ${cmdH} ${finishes}.`
+      : `${count} screens read. Keep going, or ${cmdH} ${finishes}.` })
   });
   scrollReader = reader;
   let pages;
@@ -792,6 +793,7 @@ async function solveScreens(startedAt) {
   // so they are solved on their own and kept out of the new bundle.
   const bundle = epoch === questionEpoch ? questionBundle : createQuestionBundle();
   const added = bundle.add(pages);
+  announceQuestion();
   // A full bundle keeps what it has; the screen now still goes to the model.
   const screens = bundle.labelled(added.ok ? [] : pages);
   const urls = fitPages(screens.map((x) => x.image), encodeScreenshot, MAX_DATA_URL_BYTES);
@@ -819,6 +821,7 @@ async function gatherView() {
       if (!pages.length) throw new Error('No screen source was available.');
       if (epoch !== questionEpoch) return; // Next question was pressed meanwhile
       const added = questionBundle.add(pages);
+      announceQuestion();
       send('status', { message: added.ok
         ? `Gathered: ${questionBundle.viewCount()} view${questionBundle.viewCount() === 1 ? '' : 's'}, ${questionBundle.count()} screen${questionBundle.count() === 1 ? '' : 's'}. ${cmdH} solves with all of them; ${noMouseKey('N')} starts a new question.`
         : `This question already holds ${questionBundle.count()} screens, the most cue keeps. ${cmdH} solves with them; ${noMouseKey('N')} starts a new question.` });
@@ -835,8 +838,14 @@ async function gatherView() {
 function nextQuestion() {
   questionEpoch++;
   questionBundle.clear();
+  announceQuestion();
   interviewMemory.markNewQuestion();
   send('status', { message: `New question. The last question's screens and code are forgotten; ${cmdH} or ${noMouseKey('G')} starts reading this one.` });
+}
+
+// The panel's "This question" line and its New question button.
+function announceQuestion() {
+  send('question:changed', { views: questionBundle.viewCount(), screens: questionBundle.count() });
 }
 
 function reportCaptureFailure(e, frame, context) {
@@ -852,10 +861,10 @@ function captureFailedMessage() {
       : 'Screen capture failed. Check your desktop capture permissions, then try again.';
 }
 
-function toggleLongQuestion() {
-  const longQuestion = !store.getSettings().longQuestion;
-  store.setSettings({ longQuestion });
-  send('longQuestion:changed', { longQuestion });
+function toggleScrollReading() {
+  const scrollReading = !store.getSettings().scrollReading;
+  store.setSettings({ scrollReading });
+  send('scrollReading:changed', { scrollReading });
 }
 
 async function runFeature(mode, userText) {
@@ -1387,6 +1396,7 @@ ipcMain.handle('transcript:clear', () => {
 // 'transcript' events, which would refill the input and could auto-answer an old question.
 ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
 ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text));
+ipcMain.on('question:next', () => nextQuestion());
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('them', arrayBuffer); });
 ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
@@ -1477,8 +1487,8 @@ function registerShortcuts() {
   shortcutState.copyCode = globalShortcut.register(moveMods + 'C', () => send('code:copy'));
   // F for fix: read the error on screen and give the fixed file at once.
   shortcutState.fixCode = globalShortcut.register(moveMods + 'F', () => runFeature('fixCode', ''));
-  // L for long question: Cmd+H reads a question taller than the screen while you scroll.
-  shortcutState.longQuestion = globalShortcut.register(moveMods + 'L', toggleLongQuestion);
+  // L: reading while scrolling on or off (the Settings switch is the taught way).
+  shortcutState.scrollReading = globalShortcut.register(moveMods + 'L', toggleScrollReading);
   // G for gather: add this tab of the question without solving. N for next
   // question: forget the last question's screens and code.
   shortcutState.gather = globalShortcut.register(moveMods + 'G', gatherView);

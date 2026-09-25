@@ -396,7 +396,7 @@ const MODES = {
     buildSystem(_contextBlock, _aiRules) {
       // Context block AND aiRules intentionally ignored — code answers must
       // stay strict regardless of personal style or context.
-      return 'You are a principal engineer coaching a candidate through a live coding interview. The screenshot shows the task, often in an online IDE; a task taller than the screen comes as several screenshots, one per page. ' +
+      return 'You are a principal engineer coaching a candidate through a live coding interview. The screenshot shows the task, often in an online IDE; a task taller than the screen, or spread over tabs, comes as several screenshots of the same question. ' +
         'Read everything visible before answering: the instructions, the starter code, the test file and any error or test output. ' +
         'The tests are the specification: the solution must make every visible test pass. ' +
         'Use the exact language, framework and file names shown on screen, else Python. Keep the starter code\'s imports, exports and names. ' +
@@ -511,21 +511,18 @@ const QUICK_START_REQUEST =
   '• BUILD TASK: only **What it asks:** (one sentence), **Folders and files:** (the tree and its Say line) and **Files to create:**. No steps and no code files.\n' +
   '• DESIGN TASK: only the clarifying questions, then a short outline of the layers with one Say line.\n';
 
-// A long question read while the candidate scrolled (src/scroll-reader.js),
-// or several views of one question gathered across its tabs
-// (src/question-bundle.js): all of it is one task, not several.
+// One question read while the candidate scrolled and switched its tabs
+// (src/scroll-reader.js), maybe over several reads (src/question-bundle.js):
+// all of it is one task, not several.
 function pagesNote(pages, views) {
   if (!(pages > 1)) return '';
-  if (views > 1) {
-    return 'The task comes as ' + pages + ' screenshots in ' + views + ' views of the SAME question, labelled "View N of ' + views + '": ' +
-      'the candidate showed you its parts one at a time, often separate tabs such as the instructions, the tests and the file to edit. ' +
-      'Pages of one view are one tab scrolled from top to bottom and may overlap at the edges. Read everything together as one task: ' +
-      'the instructions say what to build, the tests are the specification, and the file to edit (with its line numbers) is where the answer goes. ' +
-      'The screens marked "on screen now" are what the candidate sees at this moment, so they show the newest state of that tab.\n\n';
-  }
-  return 'The task is taller than the screen, so it comes as ' + pages + ' screenshots of the same page, in scroll order, top first. ' +
-    'Next pages overlap: text repeated at the edges is the same text, not new. Read them together as one task, ' +
-    'and use the details from every page (constraints, examples and tests are often at the bottom).\n\n';
+  return 'The task comes as ' + pages + ' screenshots of ONE question, labelled in the order the candidate showed them. ' +
+    'They scrolled through it and may have switched between its tabs (for example the instructions, the examples, the tests and the file to edit). ' +
+    'Neighbouring screens can overlap: text repeated at the edges is the same text, not new. Read everything together as one task: ' +
+    'the instructions say what to build, the tests are the specification, rules and constraints are often at the bottom of a tab, ' +
+    'and the file to edit (with its line numbers) is where the answer goes.' +
+    (views > 1 ? ' Screens from a later read (a higher View number) show the newer state of a tab; those marked "on screen now" are what the candidate sees at this moment.' : '') +
+    '\n\n';
 }
 
 function solveRequest(pages) {

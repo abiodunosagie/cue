@@ -88,13 +88,15 @@ test('Ollama gets every page in scroll order on the last user message', async ()
 test('coding prompt: pages are one task read across screenshots; one page reads as before', () => {
   const one = MODES.leetcode.build({ pages: 1 });
   assert.match(one, /Solve the coding problem shown in the screenshot\.$/);
-  assert.doesNotMatch(one, /taller than the screen/);
+  assert.doesNotMatch(one, /screenshots of ONE question/);
   const three = MODES.leetcode.build({ pages: 3 });
-  assert.match(three, /comes as 3 screenshots of the same page, in scroll order/);
+  assert.match(three, /comes as 3 screenshots of ONE question/);
+  assert.match(three, /switched between its tabs/);
+  assert.doesNotMatch(three, /on screen now/);
   assert.match(three, /Solve the coding problem shown across these screenshots\.$/);
   const quick = MODES.leetcode.build({ pages: 2, quickStart: 'plan' });
   assert.match(quick, /QUICK START[\s\S]*Solve the coding problem shown across these screenshots\.$/);
   const full = MODES.leetcode.build({ pages: 2, quickPlan: 'plan text' });
   assert.match(full, /<quick_start>[\s\S]*2 screenshots[\s\S]*across these screenshots\.$/);
-  assert.match(MODES.leetcode.buildSystem(null), /several screenshots, one per page/);
+  assert.match(MODES.leetcode.buildSystem(null), /spread over tabs, comes as several screenshots/);
 });
