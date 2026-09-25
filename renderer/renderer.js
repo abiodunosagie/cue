@@ -29,6 +29,7 @@
   document.querySelector('.act[data-mode="say"] .ic').innerHTML = icon('wand-sparkles', { size: 16 });
   document.querySelector('.act[data-mode="followup"] .ic').innerHTML = icon('message-circle', { size: 16 });
   document.querySelector('.act[data-mode="recap"] .ic').innerHTML = icon('refresh-cw', { size: 16 });
+  $('#script-btn .ic').innerHTML = icon('scroll-text', { size: 16 });
   $('#smart-toggle .ic').innerHTML = icon('zap', { size: 14 });
   $('#more-btn').innerHTML = icon('more-horizontal', { size: 18 });
   $('#send-btn').innerHTML = icon('play', { size: 15 });
@@ -512,6 +513,289 @@
     };
   })();
 
+  // ---- teleprompter (the Script button) -----------------------------------
+  // The candidate reads a script they wrote, for example an intro video. The
+  // words move with their voice (window.ScriptFollow): the word just said is
+  // lit, words read are dimmed, and the view scrolls only as far as they have
+  // read. Silence holds it still. Speech during a script never reaches the
+  // interview (main drops it from the transcript and memory).
+  const teleprompter = (() => {
+    const COUNTDOWN_S = 5;
+    const READ_LINE = 0.35;       // the word being said sits this far down the view
+    const MANUAL_PAUSE_MS = 3000; // a manual scroll wins for a moment
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const bar = document.getElementById('script-bar');
+    const label = document.getElementById('script-label');
+    let text = '';
+    let follower = null;
+    let spans = [];
+    let view = null;
+    let countEl = null;
+    let active = false;
+    let counting = false;
+    let startedListening = false;
+    let lastToken = -1;
+    let pausedUntil = 0;
+    let countTimer = null;
+
+    // The script as blocks of word spans, one span per display token, in the
+    // follower's token order.
+    function render() {
+      view = document.createElement('div');
+      view.className = 'script-view';
+      countEl = document.createElement('div');
+      countEl.className = 'script-count';
+      countEl.setAttribute('aria-live', 'assertive');
+      view.appendChild(countEl);
+      spans = [];
+      for (const block of window.ScriptBlocks.splitScript(text)) {
+        const p = document.createElement('p');
+        block.split(/\s+/).filter(Boolean).forEach((token, i) => {
+          if (i) p.appendChild(document.createTextNode(' '));
+          const span = document.createElement('span');
+          span.className = 'sw';
+          span.textContent = token;
+          p.appendChild(span);
+          spans.push(span);
+        });
+        view.appendChild(p);
+      }
+      follower = window.ScriptFollow.createFollower(window.ScriptBlocks.splitScript(text).join('\n\n'));
+      messages.appendChild(view);
+      messages.classList.add('script-mode');
+    }
+
+    // Words before `token` read (dimmed), `token` lit (the word just said; the
+    // first word before any speech, so the eye knows where to start), and the
+    // lit word brought to the reading line.
+    function paint(token) {
+      const lit = Math.max(0, token);
+      spans.forEach((span, i) => {
+        span.classList.toggle('said', i < lit);
+        span.classList.toggle('now', i === lit);
+      });
+      lastToken = token;
+      scrollTo(spans[lit]);
+    }
+
+    function scrollTo(span) {
+      if (!span || Date.now() < pausedUntil) return;
+      const viewTop = messages.getBoundingClientRect().top;
+      const target = Math.max(0, messages.scrollTop + (span.getBoundingClientRect().top - viewTop) - messages.clientHeight * READ_LINE);
+      if (Math.abs(target - messages.scrollTop) < 8) return;
+      messages.scrollTo({ top: target, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
+    }
+
+    // 5, 4, 3, 2, 1: time to press record and look at the camera.
+    function countdown() {
+      clearInterval(countTimer);
+      counting = true;
+      let left = COUNTDOWN_S;
+      label.textContent = 'Start recording now';
+      countEl.textContent = String(left);
+      countTimer = setInterval(() => {
+        left -= 1;
+        if (left > 0) { countEl.textContent = String(left); return; }
+        clearInterval(countTimer);
+        countEl.textContent = '';
+        counting = false;
+        label.textContent = 'Reading: it follows your voice';
+      }, 1000);
+    }
+
+    async function start(scriptText) {
+      if (active) stop();
+      text = scriptText;
+      active = true;
+      cue.scriptActive(true);
+      // It follows the mic, so listening must be on; it is turned off again at Done.
+      const listening = await cue.captureState();
+      startedListening = false;
+      if (!(listening && listening.active)) {
+        startedListening = !!(await cue.captureToggle());
+        if (!startedListening) showStatus('Listening could not start, so the script cannot follow your voice. Check the microphone in Settings > Audio.');
+      }
+      render();
+      lastToken = -1;
+      paint(-1);
+      bar.classList.remove('hidden');
+      document.getElementById('panel-main').classList.add('scripting');
+      messages.scrollTop = 0;
+      countdown();
+    }
+
+    function restart() {
+      if (!active) return;
+      follower.reset();
+      spans.forEach((s) => s.classList.remove('said', 'now'));
+      lastToken = -1;
+      pausedUntil = 0;
+      paint(-1);
+      messages.scrollTop = 0;
+      countdown();
+    }
+
+    function stop() {
+      if (!active) return;
+      active = false;
+      counting = false;
+      clearInterval(countTimer);
+      cue.scriptActive(false);
+      if (startedListening) cue.captureToggle();
+      startedListening = false;
+      if (view) view.remove();
+      view = null; spans = []; follower = null;
+      messages.classList.remove('script-mode');
+      document.getElementById('panel-main').classList.remove('scripting');
+      bar.classList.add('hidden');
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function hear(said, isFinal) {
+      if (!active || counting || !follower) return;
+      const st = follower.hear(said, isFinal);
+      if (st.token !== lastToken) paint(st.token);
+      if (st.done) label.textContent = 'End of script. Stop recording, then press Done.';
+    }
+
+    messages.addEventListener('wheel', () => { if (active) pausedUntil = Date.now() + MANUAL_PAUSE_MS; }, { passive: true });
+    document.getElementById('script-restart-btn').addEventListener('click', restart);
+    document.getElementById('script-done-btn').addEventListener('click', stop);
+    cue.on('script:heard', ({ text: said }) => hear(said, true));
+
+    return { start, stop, hear, isActive: () => active };
+  })();
+
+  // The Script window: saved scripts, the text, Check it, and Start.
+  (() => {
+    const scrim = document.getElementById('script-scrim');
+    const pick = document.getElementById('script-pick');
+    const name = document.getElementById('script-name');
+    const area = document.getElementById('script-text');
+    const meta = document.getElementById('script-meta');
+    const status = document.getElementById('script-status');
+    const review = document.getElementById('script-review');
+    const checkBtn = document.getElementById('script-check');
+    const deleteBtn = document.getElementById('script-delete');
+    const READING_WPM = 140; // same pace as src/scripts.js
+    let currentId = '';
+    let saveTimer = null;
+    let revised = '';
+    let deleteArmed = null;
+
+    const scripts = () => (settings && Array.isArray(settings.scripts) ? settings.scripts : []);
+    const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+    function showMeta() {
+      const words = area.value.trim().split(/\s+/).filter(Boolean).length;
+      const seconds = Math.round((words / READING_WPM) * 60);
+      meta.textContent = words ? `${words} words, about ${seconds < 60 ? seconds + ' seconds' : Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' s'} at a calm pace` : '0 words';
+    }
+
+    function fillPicker() {
+      pick.replaceChildren(...scripts().map((s) => {
+        const o = document.createElement('option');
+        o.value = s.id; o.textContent = s.title;
+        return o;
+      }));
+      pick.disabled = !scripts().length;
+      if (currentId) pick.value = currentId;
+    }
+
+    function load(id) {
+      const s = scripts().find((x) => x.id === id);
+      currentId = s ? s.id : '';
+      name.value = s ? s.title : '';
+      area.value = s ? s.text : '';
+      review.classList.add('hidden');
+      status.textContent = '';
+      showMeta();
+      fillPicker();
+    }
+
+    // Saved as you type: into settings.scripts, cleaned by main (src/scripts.js).
+    async function save() {
+      clearTimeout(saveTimer);
+      if (!settings) return;
+      if (!area.value.trim() && !name.value.trim() && !currentId) return;
+      const title = name.value.trim() || area.value.trim().split(/\s+/).slice(0, 5).join(' ') || 'Untitled script';
+      const list = scripts().filter((s) => s.id !== currentId);
+      if (!currentId) currentId = newId();
+      list.unshift({ id: currentId, title, text: area.value, updatedAt: Date.now() });
+      settings.scripts = list;
+      await cue.settingsSet({ scripts: list });
+      fillPicker();
+    }
+    const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); };
+
+    function open() {
+      if (!settings) return;
+      scrim.classList.remove('hidden');
+      const newest = [...scripts()].sort((a, b) => b.updatedAt - a.updatedAt)[0];
+      load(currentId || (newest ? newest.id : ''));
+      area.focus();
+    }
+    async function close() { await save(); scrim.classList.add('hidden'); }
+
+    area.addEventListener('input', () => { showMeta(); saveSoon(); });
+    name.addEventListener('input', saveSoon);
+    pick.addEventListener('change', async () => { await save(); load(pick.value); });
+    document.getElementById('script-new').addEventListener('click', async () => { await save(); load(''); area.focus(); });
+    // Two clicks: no native dialog (cue hides its dock icon, so one never comes forward).
+    deleteBtn.addEventListener('click', async () => {
+      if (!currentId) { load(''); return; }
+      if (!deleteArmed) {
+        deleteBtn.textContent = 'Delete? Click again';
+        deleteArmed = setTimeout(() => { deleteArmed = null; deleteBtn.textContent = 'Delete'; }, 3000);
+        return;
+      }
+      clearTimeout(deleteArmed); deleteArmed = null; deleteBtn.textContent = 'Delete';
+      const list = scripts().filter((s) => s.id !== currentId);
+      settings.scripts = list;
+      await cue.settingsSet({ scripts: list });
+      currentId = '';
+      load(list[0] ? list[0].id : '');
+    });
+
+    checkBtn.addEventListener('click', async () => {
+      if (!area.value.trim()) { status.textContent = 'Write or paste your script first.'; return; }
+      checkBtn.disabled = true;
+      status.textContent = 'Checking your script...';
+      review.classList.add('hidden');
+      const res = await cue.scriptReview(area.value);
+      checkBtn.disabled = false;
+      if (!res || res.error) { status.textContent = (res && res.error) || 'The check did not work. Try again.'; return; }
+      status.textContent = '';
+      revised = res.revised;
+      document.getElementById('script-verdict').textContent = res.verdict;
+      document.getElementById('script-suggestions').replaceChildren(...res.suggestions.map((s) => {
+        const li = document.createElement('li');
+        li.textContent = s.what + ' ';
+        if (s.why) { const why = document.createElement('span'); why.className = 'why'; why.textContent = s.why; li.appendChild(why); }
+        return li;
+      }));
+      document.getElementById('script-revised').textContent = revised;
+      review.classList.remove('hidden');
+    });
+    document.getElementById('script-use').addEventListener('click', async () => {
+      area.value = revised;
+      review.classList.add('hidden');
+      showMeta();
+      await save();
+      status.textContent = 'Using the better version.';
+    });
+    document.getElementById('script-keep').addEventListener('click', () => review.classList.add('hidden'));
+
+    document.getElementById('script-start').addEventListener('click', async () => {
+      if (!area.value.trim()) { status.textContent = 'Write or paste your script first.'; return; }
+      await close();
+      teleprompter.start(area.value);
+    });
+    document.getElementById('script-close').addEventListener('click', close);
+    scrim.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    document.getElementById('script-btn').addEventListener('click', open);
+  })();
+
   // ---- transcript helpers ------------------------------------------------
   // NOTE: The old transcript-list element was renamed to ts-list.
   // These helpers are now deprecated but kept for compatibility.
@@ -556,7 +840,7 @@
     cue.ask({ mode, text: text || '' });
   }
 
-  document.querySelectorAll('.act').forEach((btn) => {
+  document.querySelectorAll('.act[data-mode]').forEach((btn) => {
     btn.addEventListener('click', () => runMode(btn.dataset.mode, ''));
   });
 
@@ -1534,6 +1818,8 @@
   }
   
   cue.on('stt:interim', ({ channel, text }) => {
+    // Reading a script: speech only moves the teleprompter.
+    if (teleprompter.isActive()) { if (channel === 'you') teleprompter.hear(text, false); return; }
     setLiveDotState('transcribing');
     const el = getOrCreateInterimEl();
     const label = channel === 'them' ? 'Interviewer' : 'You';

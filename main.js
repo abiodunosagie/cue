@@ -8,6 +8,8 @@ const { isExplainRequest, isFixRequest } = require('./renderer/spoken-question')
 const { captureScreenshot, captureMaskedScreen, captureMaskedPage, encodeScreenshot, MAX_DATA_URL_BYTES } = require('./src/screen');
 const { readScrollPages, fitPages } = require('./src/scroll-reader');
 const { createQuestionBundle } = require('./src/question-bundle');
+const { reviewScript } = require('./src/script-review');
+const { MAX_SCRIPT_CHARS } = require('./src/scripts');
 const { nudge } = require('./src/window-move');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
@@ -180,6 +182,17 @@ function isMicEcho(turn) {
   return false;
 }
 
+// Teleprompter (the Script button): while a script is read aloud, speech only
+// moves the highlight. Nothing reaches the interview transcript, memory,
+// history or auto-answer, and the other side (a recording tool playing the
+// speaker back) is dropped. True when the turn was taken.
+let scriptActive = false;
+function scriptTakesTurn(turn) {
+  if (!scriptActive) return false;
+  if (turn.channel === 'you') send('script:heard', { text: turn.text });
+  return true;
+}
+
 function pushTranscript(turn) {
   if (isMicEcho(turn)) return;
   transcript.push(turn);
@@ -241,6 +254,7 @@ function publishTranscript(channel, text, { fromPractice = false } = {}) {
   if (!text || !text.trim()) return;
   const turn = { channel, text: text.trim(), ts: Date.now() };
   if (!fromPractice && practice.hidesTurn(turn)) return;
+  if (!fromPractice && scriptTakesTurn(turn)) return;
   pushTranscript(turn);
   send('transcript', turn);
   send('stt:final', { channel, text: turn.text });
@@ -447,6 +461,7 @@ async function flushChannel(channel) {
     if (res.text && res.text.trim() && res.text.trim().length > 1 && !/^[?!.,;:\-…]+$/.test(res.text.trim())) {
       const turn = { channel, text: res.text.trim(), ts: Date.now() };
       if (practice.hidesTurn(turn)) return;
+      if (scriptTakesTurn(turn)) return;
       pushTranscript(turn);
       send('transcript', turn);
     }
@@ -497,6 +512,7 @@ function initStreamingSTT() {
       onTranscript: (ch, text) => {
         const turn = { channel: ch, text, ts: Date.now() };
         if (practice.hidesTurn(turn)) return;
+        if (scriptTakesTurn(turn)) { send('stt:final', { channel: ch, text }); return; }
         pushTranscript(turn);
         send('transcript', turn);
         send('stt:final', { channel: ch, text });
@@ -1404,6 +1420,21 @@ ipcMain.handle('transcript:clear', () => {
 ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
 ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text));
 ipcMain.on('question:next', () => nextQuestion());
+ipcMain.on('script:active', (_e, on) => { scriptActive = !!on; });
+// Check it: the Smart model reviews a teleprompter script (src/script-review.js).
+ipcMain.handle('script:review', async (_e, script) => {
+  try {
+    const settings = store.getSettings();
+    return await reviewScript({
+      script: String(script || '').slice(0, MAX_SCRIPT_CHARS),
+      background: [settings.resumeText, settings.starStories].filter(Boolean).join('\n\n'),
+      llm: createLLM({ ...settings, smart: true }),
+      quickAsk
+    });
+  } catch (e) {
+    return { error: e && e.message ? e.message : String(e) };
+  }
+});
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('them', arrayBuffer); });
 ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
@@ -1702,7 +1733,7 @@ function cueWindowBounds() {
 const SCREEN_RECENT_MS = 90000;
 const SCREEN_DETECT_TIMEOUT_MS = 15000;
 const screenWatcher = createScreenWatcher({
-  isActive: () => state.capturing && !state.busy && !gathering && !practice.isActive() && !!store.getSettings().watchScreen && !!win && !win.isDestroyed(),
+  isActive: () => state.capturing && !state.busy && !gathering && !scriptActive && !practice.isActive() && !!store.getSettings().watchScreen && !!win && !win.isDestroyed(),
   capture: () => captureMaskedScreen(cueWindowBounds()),
   detect: async (dataUrl) => {
     const fast = createLLM({ ...store.getSettings(), smart: false });

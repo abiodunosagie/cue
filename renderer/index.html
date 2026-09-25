@@ -43,6 +43,11 @@
               <button id="practice-next-btn" class="s-action">Next question</button>
               <button id="practice-end-btn" class="s-action">End practice</button>
             </div>
+            <div id="script-bar" class="hidden" aria-live="polite">
+              <span id="script-label">Script</span>
+              <button id="script-restart-btn" class="s-action">Start over</button>
+              <button id="script-done-btn" class="s-action">Done</button>
+            </div>
             <div id="question-bar" aria-live="polite">
               <span id="question-label">Coding question: press ⌘H to start reading</span>
               <button id="question-next-btn" class="s-action" title="Forget this question's screens and code">New question</button>
@@ -60,6 +65,7 @@
               </button>
               <button class="act" data-mode="followup"><span class="ic"></span><span>Follow-up</span></button>
               <button class="act" data-mode="recap"><span class="ic"></span><span>Recap</span></button>
+              <button class="act" id="script-btn" title="Teleprompter: read a script you wrote, it follows your voice"><span class="ic"></span><span>Script</span></button>
             </div>
 
             <div id="composer">
@@ -410,6 +416,41 @@
     </div>
   </div>
 
+  <!-- Teleprompter: write or paste a script, check it, start reading. -->
+  <div id="script-scrim" class="hidden">
+    <div id="script-editor" class="glass" role="dialog" aria-labelledby="script-title-label">
+      <div class="s-head">
+        <div class="s-title" id="script-title-label">Script</div>
+        <button id="script-close" class="s-close">Close</button>
+      </div>
+      <div class="sc-body">
+        <div class="sc-row">
+          <select id="script-pick" aria-label="Saved scripts"></select>
+          <button id="script-new" class="s-action">New</button>
+          <button id="script-delete" class="s-action danger">Delete</button>
+        </div>
+        <input id="script-name" type="text" maxlength="80" placeholder="Name, for example Upwork intro" aria-label="Script name" />
+        <textarea id="script-text" spellcheck="true" placeholder="Paste or write exactly what you will say. Leave a blank line between paragraphs." aria-label="Script"></textarea>
+        <div class="sc-meta" id="script-meta">0 words</div>
+        <div id="script-review" class="hidden" aria-live="polite">
+          <p id="script-verdict"></p>
+          <ol id="script-suggestions"></ol>
+          <div class="sc-label">Better version</div>
+          <div id="script-revised"></div>
+          <div class="sc-row">
+            <button id="script-use" class="s-action primary">Use this version</button>
+            <button id="script-keep" class="s-action">Keep mine</button>
+          </div>
+        </div>
+        <div class="sc-row sc-actions">
+          <button id="script-check" class="s-action">Check it</button>
+          <span id="script-status" class="sc-status"></span>
+          <button id="script-start" class="ob-primary">Start</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- First-run tutorial / walkthrough -->
   <div id="onboard-scrim" class="hidden">
     <div id="onboard" class="glass">
@@ -448,6 +489,8 @@
   <script src="panel-opacity.js"></script>
   <script src="answer-length.js"></script>
   <script src="stream-blocks.js"></script>
+  <script src="script-blocks.js"></script>
+  <script src="script-follow.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

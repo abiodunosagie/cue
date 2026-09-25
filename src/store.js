@@ -5,6 +5,7 @@ const { app } = require('electron');
 const { normalizeBaseUrl } = require('./openai-compatible');
 const { normalizeLength } = require('../renderer/answer-length');
 const Profiles = require('./profiles');
+const { normalizeScripts } = require('./scripts');
 const PanelOpacity = require('../renderer/panel-opacity');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');
@@ -84,6 +85,8 @@ const DEFAULTS = {
   // solves (src/scroll-reader.js). Off: Cmd+H solves from one screenshot.
   // A new key, so an Off saved by the older, opt-in setting does not carry over.
   scrollReading: true,
+  // Teleprompter scripts (the Script button), cleaned by src/scripts.js.
+  scripts: [],
   codingSpeed: 'fastest',   // coding solves: fastest | balanced | careful (src/llm.js CODING_SPEEDS)
   codeArchitecture: 'clean', // how build tasks organise folders: clean | mvvm | simple (src/prompts.js)
   sttWords: '',             // words the speech service should expect (src/vocab.js)
@@ -222,6 +225,7 @@ module.exports = {
     nextSettings.baseUrl = normalizeBaseUrl(nextSettings.baseUrl);
     nextSettings.panelOpacity = PanelOpacity.normalize(nextSettings.panelOpacity);
     nextSettings.answerLength = normalizeLength(nextSettings.answerLength);
+    nextSettings.scripts = normalizeScripts(nextSettings.scripts);
     data = nextSettings;
     save();
     return data;

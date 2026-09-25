@@ -63,7 +63,7 @@ html, body {
 /* The panel always fits under the toolbar: the answer area shrinks and scrolls
    instead of the panel growing past the bottom of the window. */
 #toolbar { flex-shrink: 0; }
-#toolbar, #panel-wrap, #settings-scrim, #onboard-scrim, #consent-scrim { pointer-events: auto; }
+#toolbar, #panel-wrap, #settings-scrim, #onboard-scrim, #consent-scrim, #script-scrim { pointer-events: auto; }
 #toolbar { -webkit-app-region: drag; }   /* drag the top pill to move the window */
 #panel-wrap, #panel, #messages, #action-row, #composer, #input, textarea, button, .act, .smart-pill, .more-btn, #send-btn, .s-close, .s-seg button, .ob-buttons button, .ob-ghost, .ob-primary { -webkit-app-region: no-drag; }
 
@@ -830,9 +830,43 @@ button:focus { outline: none; }
 /* Category pill (R3) */
 /* Marks an answer shown from the prepared bank rather than written live. */
 /* Practice interview controls, above the action row while a practice runs. */
-#practice-bar, #question-bar { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
-#practice-bar.hidden, #question-bar.hidden { display: none; }
-#practice-label, #question-label { flex: 1; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
+#practice-bar, #question-bar, #script-bar { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
+#practice-bar.hidden, #question-bar.hidden, #script-bar.hidden { display: none; }
+#practice-label, #question-label, #script-label { flex: 1; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
+
+/* ============================ Teleprompter ============================ */
+#script-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
+#script-scrim.hidden { display: none; }
+#script-editor { width: min(620px, 94vw); max-height: 90vh; display: flex; flex-direction: column; padding: 0; background: var(--surface-solid); overflow: hidden; -webkit-app-region: no-drag; }
+#script-editor .s-head { grid-column: auto; }
+.sc-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px 16px; overflow-y: auto; }
+.sc-row { display: flex; align-items: center; gap: 8px; }
+#script-pick { flex: 1; min-width: 0; }
+#script-pick, #script-name, #script-text { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--bd-hair); background: var(--field); color: var(--tx-1); font: 13px/1.5 var(--font); outline: none; -webkit-user-select: text; user-select: text; }
+#script-pick:focus, #script-name:focus, #script-text:focus { border-color: rgba(255,255,255,0.3); }
+#script-text { min-height: 190px; resize: vertical; font-size: 14px; line-height: 1.6; }
+.sc-meta, .sc-status { color: var(--tx-mut); font-size: 12px; }
+.sc-status { flex: 1; }
+.sc-label { color: rgba(255,255,255,0.8); font-size: 12.5px; font-weight: 600; }
+#script-review { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 9px; border: 1px solid var(--bd-hair); background: rgba(255,255,255,0.03); }
+#script-review.hidden { display: none; }
+#script-verdict { margin: 0; color: var(--tx-1); font-size: 13px; line-height: 1.5; }
+#script-suggestions { margin: 0; padding-left: 20px; color: var(--tx-1); font-size: 13px; line-height: 1.5; }
+#script-suggestions li + li { margin-top: 4px; }
+#script-suggestions .why { color: var(--tx-mut); }
+#script-revised { white-space: pre-wrap; max-height: 180px; overflow-y: auto; padding: 8px 10px; border-radius: 7px; background: var(--field); color: var(--tx-1); font-size: 13px; line-height: 1.6; -webkit-user-select: text; user-select: text; }
+.s-action.primary { border-color: transparent; background: var(--accent); color: #fff; }
+.s-action.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); color: #fff; }
+/* While a script is read, the panel shows only the script. */
+#messages.script-mode > :not(.script-view) { display: none; }
+#panel-main.scripting #question-bar { display: none; }
+.script-view { padding: 6vh 4px 45vh; }
+.script-view p { margin: 0 0 22px; font-size: 24px; line-height: 1.6; font-weight: 500; color: rgba(255,255,255,0.92); }
+.script-view .sw { border-radius: 4px; transition: color 160ms ease, background 160ms ease; }
+.script-view .sw.said { color: rgba(255,255,255,0.38); }
+.script-view .sw.now { color: #fff; background: rgba(250, 204, 21, 0.22); box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.22); }
+.script-count { position: sticky; top: 0; text-align: center; font-size: 64px; font-weight: 700; color: #fff; padding: 12px 0; }
+.script-count:empty { display: none; }
 #practice-voice, #profile-select { flex: 1; min-width: 0; }
 #profile-new-name, #company-url { flex: 1; min-width: 0; }
 /* Test my setup: one line per check, the result word in its own colour. */
@@ -924,7 +958,7 @@ button:focus { outline: none; }
 @media (prefers-reduced-motion: reduce) {
   #panel, .user-bubble, .ai-text .w { animation: none !important; opacity: 1 !important; transform: none !important; }
   #live-dot { animation: none !important; }
-  .ai-text .reading, #pace-hint, #speaker-label { transition: none !important; }
+  .ai-text .reading, #pace-hint, #speaker-label, .script-view .sw { transition: none !important; }
 }
 
 /* ============================ Assistant access ============================ */
