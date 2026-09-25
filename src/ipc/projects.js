@@ -25,7 +25,9 @@ function registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send }) {
   // drafting only. Never stored, never sent to the renderer.
   let lastScan = new Map();
 
-  const view = (settings) => ({ projects: settings.projects, fits: digestFits(settings.projects), root: ROOT });
+  // The folder as the candidate knows it, never an absolute path with their user name.
+  const shownRoot = '~' + path.sep + path.relative(os.homedir(), ROOT);
+  const view = (settings) => ({ projects: settings.projects, fits: digestFits(settings.projects), root: shownRoot });
 
   async function scan() {
     let indexText = '';
@@ -51,21 +53,25 @@ function registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send }) {
   });
 
   // Drafts for the given ids (the ticked ones without notes, or one project).
-  // Resolves the drafts for the renderer to put in the fields; nothing is
-  // saved until the candidate keeps them.
+  // Resolves the drafts for the renderer to put in the fields. When a scan was
+  // needed first (none this session, or a project moved since), its result
+  // comes back too, so the renderer adopts the fresh list before saving and
+  // cannot write the older one back over it.
   ipcMain.handle('projects:draft', async (_e, ids) => {
     try {
-      if (!lastScan.size) await scan();
       const wanted = (Array.isArray(ids) ? ids : []).map(String);
+      let scanned = null;
+      if (!wanted.every((id) => lastScan.has(id))) scanned = await scan();
       const projects = wanted.map((id) => lastScan.get(id)).filter(Boolean);
-      if (!projects.length) return { error: 'Scan your projects folder first.' };
+      if (!projects.length) return { error: 'These projects are no longer in your projects folder.', scanned };
       const settings = store.getSettings();
-      return await draftProjects({
+      const result = await draftProjects({
         projects,
         llm: createLLM({ ...settings, smart: true }),
         quickAsk,
         onProgress: (p) => send('projects:draft-progress', p)
       });
+      return { ...result, scanned };
     } catch (e) {
       return { error: e && e.message ? e.message : String(e) };
     }

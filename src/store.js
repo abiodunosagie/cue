@@ -88,7 +88,7 @@ const DEFAULTS = {
   scrollReading: true,
   // Teleprompter scripts (the Script button), cleaned by src/scripts.js.
   scripts: [],
-  // The candidate's real projects (Settings > Profile > Projects), cleaned by
+  // The candidate's real projects (Settings > Projects), cleaned by
   // src/projects.js. Only ticked ones with a summary reach a prompt.
   projects: [],
   codingSpeed: 'fastest',   // coding solves: fastest | balanced | careful (src/llm.js CODING_SPEEDS)

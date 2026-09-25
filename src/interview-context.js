@@ -216,7 +216,7 @@ function buildInterviewContext(settings, mode, transcript, { answerTexts = [] } 
       '<company_notes>\n' + clip(settings.companyNotes.trim(), 1500) + '\n</company_notes>');
   }
 
-  // The candidate's approved projects (Settings > Profile > Projects), so an
+  // The candidate's approved projects (Settings > Projects), so an
   // example comes from real work that fits the question instead of the same
   // one or two projects the resume names. Salary questions need none of it.
   if (category !== 'compensation') {

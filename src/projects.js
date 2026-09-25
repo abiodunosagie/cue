@@ -1,14 +1,12 @@
-// The candidate's real projects, as approved in Settings > Profile > Projects.
+// The candidate's real projects, as approved in Settings > Projects.
 // Kept in settings.projects and cleaned here on every save. Only projects the
 // candidate ticked ("use") reach a prompt, and only the fields they could
 // read and edit: name, stack, years, summary, details and their role.
 
+const { MAX_NAME_CHARS, MAX_SUMMARY_CHARS, MAX_DETAILS_CHARS, MAX_ROLE_CHARS } = require('../renderer/project-limits');
+
 const MAX_PROJECTS = 200;
-const MAX_NAME_CHARS = 80;
 const MAX_STACK_ITEMS = 16;
-const MAX_SUMMARY_CHARS = 300;
-const MAX_DETAILS_CHARS = 1200;
-const MAX_ROLE_CHARS = 300;
 // Every approved project goes in as one line; the whole list stays under this.
 // About 70 lines: a whole projects folder, approved.
 const DIGEST_MAX_CHARS = 9500;
@@ -18,7 +16,9 @@ const MAX_DEEP_CARDS = 2;
 // How many recent interviewer turns can name a project.
 const MENTION_TURNS = 4;
 
-const str = (v, max) => String(v == null ? '' : v).replace(/\s*[—–]\s*/g, ', ').trim().slice(0, max);
+// Em dashes read as AI-written. "</" is broken up so a card can never close
+// the <projects> or <project_notes> fence it is sent inside.
+const str = (v, max) => String(v == null ? '' : v).replace(/\s*[—–]\s*/g, ', ').replace(/<\//g, '< /').trim().slice(0, max);
 
 function normalizeProjects(list) {
   if (!Array.isArray(list)) return [];
@@ -85,31 +85,31 @@ function deepCard(p) {
   ].filter(Boolean).join('\n');
 }
 
-// Names to look for in speech: the full name and, for multi-word names, the
-// distinctive first word ("Votixcare Admin" -> "votixcare"). Short or common
-// words are left out so "App" or "Web" never counts as a mention.
+// Names to look for in speech: the full name, then for a multi-word name its
+// first distinctive word ("Votixcare Admin" -> "votixcare"). Later words are
+// left out ("golf" in small talk is not Communitee Golf), and so are short or
+// common ones. A name made only of common words ("Web App") never counts;
+// a short real name ("Cue", "UBS App") still does, in full.
 const COMMON = new Set(['app', 'web', 'the', 'admin', 'website', 'site', 'mobile', 'api', 'dashboard', 'project', 'portfolio', 'landing', 'page', 'new', 'my']);
 function namesOf(p) {
-  const full = p.name.toLowerCase();
-  const words = full.split(/\s+/).filter((w) => w.length >= 4 && !COMMON.has(w));
-  // A name made only of common words ("Web App") is never a mention.
-  if (!words.length) return [];
-  return [full, ...words].filter((v, i, a) => a.indexOf(v) === i);
+  const full = p.name.toLowerCase().trim();
+  const all = full.split(/\s+/).filter(Boolean);
+  if (!all.length || all.every((w) => COMMON.has(w))) return [];
+  const first = all.length > 1 ? all.find((w) => w.length >= 4 && !COMMON.has(w)) : null;
+  return first && first !== full ? [full, first] : [full];
 }
 
 const words = (text) => ' ' + String(text || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ') + ' ';
 const phrase = (name) => ' ' + name.replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
 
-// Whether prepared text (from words()) names the project: by its full name,
-// or, when wordMatch is on, by one of its distinctive words.
-function namedIn(prepared, p, wordMatch) {
+// How prepared text (from words()) names the project: 2 by its full name,
+// 1 by its distinctive first word, 0 not at all.
+function namedIn(prepared, p) {
   const names = namesOf(p);
   if (!names.length) return 0;
   if (prepared.includes(phrase(names[0]))) return 2;
-  return wordMatch && names.slice(1).some((n) => prepared.includes(phrase(n))) ? 1 : 0;
+  return names.slice(1).some((n) => prepared.includes(phrase(n))) ? 1 : 0;
 }
-
-function mentions(text, p) { return namedIn(words(text), p, true) > 0; }
 
 // Projects the interviewer named in their last few turns. People say
 // "VotixCare" for any of its apps, so a word match counts here, but a full
@@ -119,7 +119,7 @@ function mentionedProjects(projects, transcript) {
     .filter((t) => t && t.channel === 'them').slice(-MENTION_TURNS).map((t) => t.text).join(' ');
   if (!recent.trim()) return [];
   const prepared = words(recent);
-  return projects.map((p) => ({ p, score: namedIn(prepared, p, true) }))
+  return projects.map((p) => ({ p, score: namedIn(prepared, p) }))
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score || b.p.name.length - a.p.name.length)
     .slice(0, MAX_DEEP_CARDS)
@@ -206,7 +206,6 @@ module.exports = {
   digestFits,
   mentionedProjects,
   usedProjects,
-  mentions,
   MAX_PROJECTS,
   MAX_SUMMARY_CHARS,
   MAX_DETAILS_CHARS,

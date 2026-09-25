@@ -22,7 +22,7 @@
     if (!result || result.error) { status(result && result.error ? result.error : 'Something went wrong.'); return false; }
     projects = result.projects || [];
     if (result.info) info = result.info;
-    if (result.root) $('#proj-root').textContent = 'from ' + result.root.replace(/^\/Users\/[^/]+/, '~');
+    if (result.root) $('#proj-root').textContent = 'from ' + result.root;
     status(fitsText(result.fits));
     return true;
   }
@@ -45,12 +45,25 @@
     return bits.filter(Boolean).join(' · ');
   }
 
+  const LIMITS = window.ProjectLimits;
+  let fieldSeq = 0;
+
   function field(tag, cls, value, attrs) {
     const el = document.createElement(tag);
     el.className = cls;
+    el.id = 'proj-field-' + (fieldSeq += 1);
     el.value = value || '';
     for (const [k, v] of Object.entries(attrs || {})) el.setAttribute(k, v);
     return el;
+  }
+
+  // A real label, so a click on it puts the cursor in its field.
+  function labelFor(input, text) {
+    const label = document.createElement('label');
+    label.className = 'proj-field-label';
+    label.htmlFor = input.id;
+    label.textContent = text;
+    return label;
   }
 
   function rowFor(p) {
@@ -77,15 +90,9 @@
     meta.className = 'proj-meta';
     meta.textContent = metaLine(p);
 
-    const summaryLabel = document.createElement('div');
-    summaryLabel.className = 'proj-field-label';
-    summaryLabel.textContent = 'What it is (one sentence)';
-    const summary = field('textarea', 'proj-summary', p.summary, { rows: '2', spellcheck: 'true', 'aria-label': p.name + ' summary', maxlength: '300' });
-    const detailsLabel = document.createElement('div');
-    detailsLabel.className = 'proj-field-label';
-    detailsLabel.textContent = 'Details cue can use when asked about it';
-    const details = field('textarea', 'proj-details', p.details, { rows: '3', spellcheck: 'true', 'aria-label': p.name + ' details', maxlength: '1200' });
-    const role = field('input', 'proj-role', p.role, { type: 'text', placeholder: 'My role, e.g. built the whole Flutter app, or built the admin dashboard', 'aria-label': p.name + ' role', maxlength: '300' });
+    const summary = field('textarea', 'proj-summary', p.summary, { rows: '2', spellcheck: 'true', maxlength: String(LIMITS.MAX_SUMMARY_CHARS) });
+    const details = field('textarea', 'proj-details', p.details, { rows: '3', spellcheck: 'true', maxlength: String(LIMITS.MAX_DETAILS_CHARS) });
+    const role = field('input', 'proj-role', p.role, { type: 'text', placeholder: 'e.g. built the whole Flutter app, or built the admin dashboard', maxlength: String(LIMITS.MAX_ROLE_CHARS) });
 
     box.addEventListener('change', () => { p.use = box.checked; row.classList.toggle('on', p.use); scheduleSave(); });
     summary.addEventListener('input', () => { p.summary = summary.value; scheduleSave(); });
@@ -93,7 +100,10 @@
     role.addEventListener('input', () => { p.role = role.value; scheduleSave(); });
     draft.addEventListener('click', () => runDraft([p.id]));
 
-    row.append(head, meta, summaryLabel, summary, detailsLabel, details, role);
+    row.append(head, meta,
+      labelFor(summary, 'What it is (one sentence)'), summary,
+      labelFor(details, 'Details cue can use when asked about it'), details,
+      labelFor(role, 'My role'), role);
     return row;
   }
 
@@ -137,10 +147,12 @@
     }
   }
 
+  // Everything in the list is locked while a scan or draft runs: the list is
+  // replaced when it ends, and a keystroke typed meanwhile would be lost.
   function setBusy(on) {
     busy = on;
     for (const id of ['#proj-scan', '#proj-draft']) { const b = $(id); if (b) b.disabled = on; }
-    document.querySelectorAll('.proj-row button').forEach((b) => { b.disabled = on; });
+    document.querySelectorAll('.proj-row button, .proj-row input, .proj-row textarea').forEach((el) => { el.disabled = on; });
   }
 
   async function flushSave() {
@@ -171,7 +183,10 @@
     try {
       await flushSave();
       const res = await window.cue.projectsDraft(ids);
-      if (!res || res.error) { status(res && res.error ? res.error : 'Could not draft.'); return; }
+      // A scan ran first: work from its list, or saving below would put the
+      // older list back over what it found.
+      if (res && res.scanned) apply(res.scanned);
+      if (!res || res.error) { render(); status(res && res.error ? res.error : 'Could not draft.'); return; }
       let filled = 0;
       for (const p of projects) {
         const d = res.drafts && res.drafts[p.id];
@@ -184,7 +199,7 @@
       apply(saved);
       render();
       status(`Drafted ${filled} of ${ids.length}. Read each one and fix anything that is not true.` +
-        (res.failed ? ` ${res.failed} could not be drafted, press Draft on them to retry.` : ''));
+        (res.failed ? ` ${res.failed} could not be drafted (${res.reason || 'no reason given'}). Press Draft on them to retry.` : ''));
     } finally { setBusy(false); }
   }
 

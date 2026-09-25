@@ -9,8 +9,10 @@
 //   which stay on this machine), top-level folder names, and whether a
 //   requirements.txt / pyproject.toml exists (never its contents).
 // It never opens source files, SESSION_GUIDE.md, docs, .env files or anything
-// else. Author emails are used only to count the candidate's own commits and
-// are never put in a card.
+// else, and never follows a symlink. The owner's ~/project-guides/_PROJECTS_INDEX.md
+// is read by src/ipc/projects.js for the git identity per repo; like the author
+// emails, it only feeds the commit counts. Author emails are used only to
+// count the candidate's own commits and are never put in a card.
 
 const fs = require('fs');
 const path = require('path');
@@ -123,7 +125,11 @@ const TEMPLATE_PHRASES = [
 
 // A paragraph that points at the owner's machine or private notes is dropped
 // whole: it can end up in a prompt sent to the AI provider.
-const PRIVATE_RE = /~\/|\/Users\/|\/home\/|session guide|session_guide|\.env\b|api[_ -]?key|secret|password|token/i;
+const PRIVATE_RE = /~\/|\/Users\/|\/home\/|session guide|session_guide|\.env\b|api[_ -]?key|secret|passw|token|credential|private key/i;
+// Secret-shaped text whatever it is called: an env line (NAME=value), a JWT,
+// a URL with a password in it, or a long run of key-like characters.
+const SECRET_SHAPE_RE = /(^|\s)[A-Z][A-Z0-9_]{2,}=\S|eyJ[A-Za-z0-9_-]{20,}|:\/\/[^/\s:@]+:[^@\s]+@|[A-Za-z0-9+/_-]{40,}/;
+const isPrivate = (text) => PRIVATE_RE.test(text) || SECRET_SHAPE_RE.test(text);
 // A line of in-page links ("[Features](#features) • [Setup](#setup)").
 const LINK_ROW_RE = /^(\[[^\]]+\]\(#[^)]*\)\s*[•|·-]?\s*)+$/;
 
@@ -145,7 +151,7 @@ function readmeExcerpt(text, limit = README_EXCERPT_CHARS) {
   }
   flush();
   const useful = paragraphs.filter((p) => p.length >= 25 && !BOILERPLATE.some((re) => re.test(p)) &&
-    !TEMPLATE_PHRASES.some((phrase) => p.toLowerCase().includes(phrase)) && !PRIVATE_RE.test(p) && !LINK_ROW_RE.test(p));
+    !TEMPLATE_PHRASES.some((phrase) => p.toLowerCase().includes(phrase)) && !isPrivate(p) && !LINK_ROW_RE.test(p));
   const out = useful.slice(0, 3).join('\n\n');
   return out.length > limit ? out.slice(0, limit).trimEnd() + '…' : out;
 }
@@ -179,13 +185,13 @@ function parseGitLog(text) {
   return { authors, total, first: first * 1000, last: last * 1000 };
 }
 
-// The candidate's commits: those made under any of their own emails. The
-// share is a hint for the list order only; the candidate says what their role was.
+// The candidate's commits: those made under any of their own emails. Shown
+// as information only; the candidate says what their role was.
 function ownershipOf(git, ownEmails) {
-  if (!git || !git.total) return { mine: 0, total: 0, share: 0 };
+  if (!git || !git.total) return { mine: 0, total: 0 };
   let mine = 0;
   for (const [email, count] of git.authors) if (ownEmails.has(email)) mine += count;
-  return { mine, total: git.total, share: mine / git.total };
+  return { mine, total: git.total };
 }
 
 // _PROJECTS_INDEX.md table rows: `~/Projects/...` path and the git identity
@@ -213,8 +219,10 @@ function prettyName(folder) {
   return String(folder).replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }
 
+// A symlink is never followed: a README.md pointing at .env must read as nothing.
 function readSmall(file, max) {
   try {
+    if (fs.lstatSync(file).isSymbolicLink()) return '';
     const fd = fs.openSync(file, 'r');
     try {
       const buf = Buffer.alloc(max);
@@ -269,7 +277,7 @@ async function scanOne(dir, root, ownEmails) {
     category: rel.split(path.sep)[0],
     stack,
     // The same privacy rule as the README: a description naming a path or a secret is dropped.
-    description: [pub && pub.description, pkg && pkg.description, site].find((d) => d && !PRIVATE_RE.test(d)) || '',
+    description: [pub && pub.description, pkg && pkg.description, site].find((d) => d && !isPrivate(d)) || '',
     readme: readmeExcerpt(readSmall(path.join(dir, 'README.md'), README_MAX_CHARS)),
     folders: topDirs(dir),
     years: git ? yearsLabel(git.first, git.last) : '',
