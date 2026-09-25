@@ -751,11 +751,15 @@ const noMouseKey = (letter) => (isMac ? 'Ctrl+Option+⌘' : 'Ctrl+Alt+Shift+') +
 // The coding question in front of the candidate, across its tabs: every view
 // read by Cmd+H or by the gather key, until Next question (src/question-bundle.js).
 const questionBundle = createQuestionBundle();
-let gathering = false;
+// The gather in progress (a promise), so a Cmd+H solve waits for it instead of
+// reading the screen at the same time; and questionEpoch, which Next question
+// moves on, so a read that started before it never lands in the new question.
+let gathering = null;
+let questionEpoch = 0;
 
 // The screens of one view, unencoded ({ thumb, image }): read while the
 // candidate scrolls when Long questions is on, else the screen as it is.
-// `purpose` only words the status line: a solve, or a gather.
+// purpose: 'solve' or 'gather', for the status line and the timing log.
 async function readView(startedAt, purpose) {
   const capture = () => captureMaskedPage(cueWindowBounds(), { keepPanel: true });
   if (!store.getSettings().longQuestion) {
@@ -780,15 +784,19 @@ async function readView(startedAt, purpose) {
 // every gathered screen, labelled, sized together to fit one request. With
 // only one screen it is a plain screenshot, as before.
 async function solveScreens(startedAt) {
-  const pages = await readView(startedAt, 'leetcode');
+  if (gathering) await gathering;
+  const epoch = questionEpoch;
+  const pages = await readView(startedAt, 'solve');
   if (!pages.length) throw new Error('No screen source was available.');
-  const added = questionBundle.add(pages);
+  // Next question pressed while reading: these pages are the old question's,
+  // so they are solved on their own and kept out of the new bundle.
+  const bundle = epoch === questionEpoch ? questionBundle : createQuestionBundle();
+  const added = bundle.add(pages);
   // A full bundle keeps what it has; the screen now still goes to the model.
-  const screens = added.ok ? questionBundle.labelled()
-    : [...questionBundle.labelled(), ...pages.map((p, i) => ({ image: p.image, label: 'On screen now' + (pages.length > 1 ? `, page ${i + 1} of ${pages.length}` : '') }))];
+  const screens = bundle.labelled(added.ok ? [] : pages);
   const urls = fitPages(screens.map((x) => x.image), encodeScreenshot, MAX_DATA_URL_BYTES);
-  const views = added.ok ? questionBundle.viewCount() : questionBundle.viewCount() + 1;
-  if (!added.ok) send('status', { message: `This question already holds ${questionBundle.count()} screens, the most cue keeps. Solving with them and the screen now; ${noMouseKey('N')} starts a new question.` });
+  const views = added.ok ? bundle.viewCount() : bundle.viewCount() + 1;
+  if (!added.ok) send('status', { message: `This question already holds ${bundle.count()} screens, the most cue keeps. Solving with them and the screen now; ${noMouseKey('N')} starts a new question.` });
   else if (views > 1) send('status', { message: `Solving with ${views} views (${screens.length} screens) of this question.` });
   else if (urls.length > 1) send('status', { message: `Read ${urls.length} pages. Solving the whole question.` });
   return { urls: urls.map((url, i) => ({ url, label: screens[i].label })), views };
@@ -797,29 +805,43 @@ async function solveScreens(startedAt) {
 // Gather key: read this view into the question bundle without solving, so the
 // next Cmd+H knows every tab (instructions, tests, the file to edit).
 async function gatherView() {
-  if (scrollReader || gathering) return;
-  gathering = true;
-  try {
-    const pages = await readView(Date.now(), 'gather');
-    if (!pages.length) throw new Error('No screen source was available.');
-    const added = questionBundle.add(pages);
-    send('status', { message: added.ok
-      ? `Gathered: ${questionBundle.viewCount()} view${questionBundle.viewCount() === 1 ? '' : 's'}, ${questionBundle.count()} screen${questionBundle.count() === 1 ? '' : 's'}. ${cmdH} solves with all of them; ${noMouseKey('N')} starts a new question.`
-      : `This question already holds ${questionBundle.count()} screens, the most cue keeps. ${cmdH} solves with them; ${noMouseKey('N')} starts a new question.` });
-  } catch (e) {
-    recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame: 'gatherView', context: {} });
-    send('status', { message: captureFailedMessage() });
-  } finally {
-    gathering = false;
+  // One view at a time: a gather or a solve already reading the screen goes first.
+  if (gathering || scrollReader) {
+    send('status', { message: scrollReader
+      ? `Still reading the last view. Stop scrolling, or press ${cmdH} to finish it, then add this one.`
+      : 'Still adding the last view. Press again in a moment.' });
+    return;
   }
+  const run = (async () => {
+    const epoch = questionEpoch;
+    try {
+      const pages = await readView(Date.now(), 'gather');
+      if (!pages.length) throw new Error('No screen source was available.');
+      if (epoch !== questionEpoch) return; // Next question was pressed meanwhile
+      const added = questionBundle.add(pages);
+      send('status', { message: added.ok
+        ? `Gathered: ${questionBundle.viewCount()} view${questionBundle.viewCount() === 1 ? '' : 's'}, ${questionBundle.count()} screen${questionBundle.count() === 1 ? '' : 's'}. ${cmdH} solves with all of them; ${noMouseKey('N')} starts a new question.`
+        : `This question already holds ${questionBundle.count()} screens, the most cue keeps. ${cmdH} solves with them; ${noMouseKey('N')} starts a new question.` });
+    } catch (e) {
+      reportCaptureFailure(e, 'gatherView', {});
+    }
+  })();
+  gathering = run;
+  try { await run; } finally { gathering = null; }
 }
 
 // Next question: the gathered screens and the earlier coding solves belong to
 // the last question, so none of them reach the next solve.
 function nextQuestion() {
+  questionEpoch++;
   questionBundle.clear();
   interviewMemory.markNewQuestion();
   send('status', { message: `New question. The last question's screens and code are forgotten; ${cmdH} or ${noMouseKey('G')} starts reading this one.` });
+}
+
+function reportCaptureFailure(e, frame, context) {
+  recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame, context });
+  send('status', { message: captureFailedMessage() });
 }
 
 function captureFailedMessage() {
@@ -836,9 +858,7 @@ function toggleLongQuestion() {
   send('longQuestion:changed', { longQuestion });
 }
 
-// options.imageDataUrl: a screenshot already taken (the screen watcher's, with
-// cue's own panel blacked out), used instead of a fresh capture.
-async function runFeature(mode, userText, options = {}) {
+async function runFeature(mode, userText) {
   if (state.busy) return;
   // A question about the code just written ("walk me through your code", "why
   // a map here?") is answered from that code, not from the resume.
@@ -910,7 +930,7 @@ async function runFeature(mode, userText, options = {}) {
       send('llm:tag', { label: 'Prepared' });
       for (const chunk of prepared.answer.match(/\S+\s*/g) || []) send('llm:token', { text: chunk });
       send('llm:done', {});
-      interviewMemory.addAnswer({ mode, text: prepared.answer, generation: memoryGeneration });
+      interviewMemory.addAnswer({ mode, text: prepared.answer, generation: memoryGeneration, ts: startedAt });
       prepareFollowUps(userText, prepared.answer, memoryGeneration);
       return;
     }
@@ -927,7 +947,7 @@ async function runFeature(mode, userText, options = {}) {
       }
     }
 
-    let imageDataUrl = options.imageDataUrl || null;
+    let imageDataUrl = null;
     // Several screens, each { url, label }: the pages of a long question, or
     // every view gathered for this question (Cmd+H only).
     let imageDataUrls = null;
@@ -945,8 +965,7 @@ async function runFeature(mode, userText, options = {}) {
         if (!imageDataUrl && !imageDataUrls) throw new Error('No screen source was available.');
       }
       catch (e) {
-        recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame: 'captureScreenshot', context: { mode } });
-        send('status', { message: captureFailedMessage() });
+        reportCaptureFailure(e, 'captureScreenshot', { mode });
       }
     }
 
@@ -1060,20 +1079,20 @@ async function runFeature(mode, userText, options = {}) {
       answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');
     } catch (e) {
       // The quick start is on screen and may already be typed: keep it for Check and Explain.
-      if (quickPlan && !def.notAnswer) interviewMemory.addAnswer({ mode, text: quickPlan, generation: memoryGeneration });
+      if (quickPlan && !def.notAnswer) interviewMemory.addAnswer({ mode, text: quickPlan, generation: memoryGeneration, ts: startedAt });
       throw e;
     }
     send('llm:done', {});
     // Quick start and full solution are one plan to later progress checks.
     if (quickPlan) answer = quickPlan + '\n\n' + answer;
-    if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration });
+    if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration, ts: startedAt });
     // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
     if (LENGTH_MODES.has(mode)) prepareFollowUps(openerQuestion(mode, userText, transcript), (opener ? opener + ' ' : '') + answer, memoryGeneration);
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
   } catch (e) {
-    if (opener) interviewMemory.addAnswer({ mode, text: opener, generation: memoryGeneration });
+    if (opener) interviewMemory.addAnswer({ mode, text: opener, generation: memoryGeneration, ts: startedAt });
     // Timing, for the log: which model failed and after how long (never keys or text).
     console.log(`[timing] ${mode}: failed after ${Date.now() - startedAt}ms (${modelInUse || 'no model'}${firstShown ? ', after the first word' : ', before any word'}): ${e && e.message ? e.message : String(e)}`);
     recordEvent({ level: 'error', event: 'llm_failed', msg: e && e.message ? e.message : String(e), frame: 'runFeature', context: { mode, provider: store.getSettings().provider } });
@@ -1677,11 +1696,12 @@ const screenWatcher = createScreenWatcher({
     const since = Date.now() - SCREEN_RECENT_MS;
     return transcript.filter((t) => t.channel === 'them' && t.ts >= since);
   },
-  onDetect: (detection, dataUrl) => {
+  onDetect: (detection) => {
     if (detection.kind === 'coding') {
       send('status', { message: 'Coding task on screen: solving it.' });
-      // The screenshot the task was read from: masked, so cue's own panel is not in it.
-      runFeature('leetcode', '', { imageDataUrl: dataUrl });
+      // Like Cmd+H: a fresh read of the screen joins the question bundle, so
+      // the solve also sees every tab gathered for this question.
+      runFeature('leetcode', '');
     } else {
       // Same path as a heard question: history, memory, then the auto-answer.
       publishTranscript('them', detection.text);

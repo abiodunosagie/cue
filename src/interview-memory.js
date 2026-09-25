@@ -81,11 +81,13 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     touch();
   }
 
-  function addAnswer({ mode, text, generation: startedIn = generation }) {
+  // ts: when the answer was asked for (default now). A solve still streaming
+  // when Next question is pressed belongs to the question it started on.
+  function addAnswer({ mode, text, generation: startedIn = generation, ts = now() }) {
     if (startedIn !== generation) return;
     const body = String(text || '').trim();
     if (!body) return;
-    record.answers.push({ mode, text: body.slice(0, mode === 'leetcode' ? MAX_CODING_ANSWER_CHARS : MAX_ANSWER_CHARS), ts: now() });
+    record.answers.push({ mode, text: body.slice(0, mode === 'leetcode' ? MAX_CODING_ANSWER_CHARS : MAX_ANSWER_CHARS), ts });
     if (record.answers.length > MAX_ANSWERS) record.answers.splice(0, record.answers.length - MAX_ANSWERS);
     touch();
   }

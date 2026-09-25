@@ -39,11 +39,36 @@ test('the same tab seen again replaces its old copy in place: the editor after t
   ]);
 });
 
+test('two new pages like one kept screen: the first replaces it, the second is kept too', () => {
+  const b = createQuestionBundle();
+  b.add([screen(4)]);
+  // Each differs from the kept editor in one cell, from each other in two.
+  const lastCell = screen(4);
+  lastCell.thumb.fill(255, 9 * 4, 10 * 4);
+  const r = b.add([screen(4, 1), { ...lastCell, image: 'tab4-scrolled' }]);
+  assert.deepEqual(r, { ok: true, added: 1, replaced: 1 });
+  assert.deepEqual(b.labelled().map((s) => s.image), ['tab4+1', 'tab4-scrolled']);
+});
+
+test('a tab switch that changes a fifth of the screen (a narrow pane) is a new tab, not a replacement', () => {
+  const b = createQuestionBundle();
+  b.add([screen(1)]);
+  b.add([screen(1, 2)]); // 2 of 10 cells differ: another tab in the same pane
+  assert.deepEqual(b.labelled().map((s) => s.image), ['tab1', 'tab1+2']);
+});
+
 test('a view that would pass the cap is refused whole, and clear() empties it', () => {
   const b = createQuestionBundle({ maxScreens: 3 });
   assert.equal(b.add([screen(1), screen(2)]).ok, true);
   assert.deepEqual(b.add([screen(3), screen(4)]), { ok: false, added: 0, replaced: 0 });
   assert.equal(b.count(), 2);
+  // Refused pages still reach the model, as the last view, on screen now.
+  assert.deepEqual(b.labelled([screen(3), screen(4)]).map((s) => [s.image, s.label]), [
+    ['tab1', 'View 1 of 2, page 1 of 2'],
+    ['tab2', 'View 1 of 2, page 2 of 2'],
+    ['tab3', 'View 2 of 2, page 1 of 2, on screen now'],
+    ['tab4', 'View 2 of 2, page 2 of 2, on screen now']
+  ]);
   // A tab already kept still updates at the cap.
   assert.equal(b.add([screen(2, 1)]).ok, true);
   b.clear();
@@ -73,6 +98,13 @@ test('Next question: earlier coding solves stop reaching coding prompts, the int
   memory.addAnswer({ mode: 'leetcode', text: 'question 2 solution' });
   assert.deepEqual(memory.codingHistory(), ['question 2 solution']);
   assert.equal(memory.recentCodingSolve(), 'question 2 solution');
+  // A solve asked for before the next Next question but finished after it
+  // belongs to the question it started on.
+  t = 5000;
+  memory.markNewQuestion();
+  t = 9000;
+  memory.addAnswer({ mode: 'leetcode', text: 'late question 2 solution', ts: 4000 });
+  assert.deepEqual(memory.codingHistory(), []);
 });
 
 test('coding prompt: gathered views read as one question; every answer says where the code goes', () => {

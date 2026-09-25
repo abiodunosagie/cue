@@ -12,8 +12,11 @@
 
 const { changedShare } = require('./screen-watch');
 
-// Share of change-check cells under which two screens are the same tab.
-const SAME_SCREEN = 0.25;
+// Share of change-check cells under which two screens are the same tab. Low
+// on purpose: a tab switch inside a narrow pane changes a small part of the
+// whole screen, and replacing a different tab loses it, while two copies of
+// one tab (the editor after a lot of typing) only cost a few tokens.
+const SAME_SCREEN = 0.12;
 // Most screens gathered for one question. The solve adds the screen in front
 // of the candidate on top, so a full bundle still sees what they see now.
 const MAX_SCREENS = 16;
@@ -31,7 +34,8 @@ function createQuestionBundle({ maxScreens = MAX_SCREENS, sameScreen = SAME_SCRE
     const replace = new Map(); // index in screens -> page
     for (const page of pages) {
       const i = screens.findIndex((s) => changedShare(s.thumb, page.thumb) < sameScreen);
-      if (i >= 0) replace.set(i, page);
+      // Two new pages like one kept screen: the first replaces it, the next is new.
+      if (i >= 0 && !replace.has(i)) replace.set(i, page);
       else if (!fresh.some((f) => changedShare(f.thumb, page.thumb) < sameScreen)) fresh.push(page);
     }
     if (screens.length + fresh.length > maxScreens) return { ok: false, added: 0, replaced: 0 };
@@ -44,14 +48,18 @@ function createQuestionBundle({ maxScreens = MAX_SCREENS, sameScreen = SAME_SCRE
 
   // The screens with their labels, in the order first seen: "View 2 of 3,
   // page 1 of 4" (or "View 2 of 3" for a one-page view), and ", on screen now"
-  // on the ones the newest add() read.
-  function labelled() {
-    const viewIds = [...new Set(screens.map((s) => s.view))];
-    return screens.map((s) => {
-      const inView = screens.filter((o) => o.view === s.view);
+  // on the ones the newest add() read. `extra`: pages add() refused (a full
+  // bundle), sent anyway as one last view that is the one on screen now.
+  function labelled(extra = []) {
+    const extraView = Symbol('extra');
+    const all = [...screens, ...extra.map((p) => ({ ...p, view: extraView }))];
+    const onScreen = extra.length ? new Set(all.filter((s) => s.view === extraView)) : latest;
+    const viewIds = [...new Set(all.map((s) => s.view))];
+    return all.map((s) => {
+      const inView = all.filter((o) => o.view === s.view);
       const v = viewIds.indexOf(s.view) + 1;
       const label = `View ${v} of ${viewIds.length}` + (inView.length > 1 ? `, page ${inView.indexOf(s) + 1} of ${inView.length}` : '') +
-        (latest.has(s) ? ', on screen now' : '');
+        (onScreen.has(s) ? ', on screen now' : '');
       return { image: s.image, label };
     });
   }
