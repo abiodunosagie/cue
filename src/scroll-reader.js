@@ -19,11 +19,12 @@ const TICK_MS = 700;
 const PAGE_CHANGE = 0.25;
 // Quiet time that ends reading: longer before the first scroll, so there is
 // time to move the pointer to the page and start scrolling after Cmd+H.
-// After a scroll it waits long enough to read a tab and switch to the next.
-const STILL_BEFORE_SCROLL_MS = 5000;
+// Before the first scroll it waits long enough for a second Cmd+H press;
+// after one, long enough to read a tab and switch to the next.
+const STILL_BEFORE_SCROLL_MS = 12000;
 const STILL_AFTER_SCROLL_MS = 10000;
-// Every tab of a big question fits. The time cap stays under the renderer's
-// 150s busy failsafe (BUSY_FAILSAFE_MS), which each page's status line rearms.
+// Every tab of a big question fits. Each page's status line rearms the
+// renderer's busy failsafe (BUSY_FAILSAFE_MS), so a long read never trips it.
 const MAX_PAGES = 24;
 const MAX_READ_MS = 120000;
 

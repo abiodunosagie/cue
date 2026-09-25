@@ -11,15 +11,17 @@
 // Clear interview and a restart.
 
 const { changedShare } = require('./screen-watch');
+const { MAX_PAGES } = require('./scroll-reader');
 
 // Share of change-check cells under which two screens are the same tab. Low
 // on purpose: a tab switch inside a narrow pane changes a small part of the
 // whole screen, and replacing a different tab loses it, while two copies of
 // one tab (the editor after a lot of typing) only cost a few tokens.
 const SAME_SCREEN = 0.12;
-// Most screens kept for one question: one full read (src/scroll-reader.js
-// MAX_PAGES). A solve past it still sends the screens it just read on top.
-const MAX_SCREENS = 24;
+// Most screens kept for one question: one full read. After a full read, later
+// reads still replace the tabs they show again (the editor after typing), and
+// a solve still sends any new screens it could not keep on top.
+const MAX_SCREENS = MAX_PAGES;
 
 function createQuestionBundle({ maxScreens = MAX_SCREENS, sameScreen = SAME_SCREEN } = {}) {
   let screens = []; // { thumb, image, view }

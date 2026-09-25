@@ -312,10 +312,11 @@
   // Failsafe: main's stream watchdog (25s between tokens; for coding solves 45s,
   // or 120s of silence before the first word) always sends llm:done/llm:error, but
   // if a terminal event is ever lost the whole UI stays frozen. Rearmed on every
-  // token and thinking line, like main's watchdog, and longer than its longest
-  // limit, so a solve that is still working never unlocks the UI while main is
-  // still busy and would drop the next question.
-  const BUSY_FAILSAFE_MS = 150000;
+  // token, thinking and status line, and longer than main's longest silence (a
+  // silent 30s quick start, then 120s before the full solution's first word, after
+  // the "Solving it now" status), so a solve that is still working never unlocks
+  // the UI while main is still busy and would drop the next question.
+  const BUSY_FAILSAFE_MS = 200000;
   let busyFailsafe = null;
   function armBusyFailsafe() {
     clearTimeout(busyFailsafe);
@@ -999,8 +1000,6 @@
     showLength(answerLength, true);
   });
 
-  // Long questions: the Settings switch, and Ctrl+Option+Cmd+L in main, which
-  // reports back here so a later Settings save keeps what the key set.
   // Read while scrolling: the Settings switch, and Ctrl+Option+Cmd+L in main,
   // which reports back here so a later Settings save keeps what the key set.
   if (!isMac) {
@@ -1027,7 +1026,7 @@
   cue.on('question:changed', ({ views, screens }) => {
     questionBar.classList.toggle('hidden', !screens);
     document.getElementById('question-label').textContent =
-      'This question: ' + screens + ' screen' + (screens === 1 ? '' : 's') + (views > 1 ? ', ' + views + ' reads' : '');
+      'This question: ' + screens + ' screen' + (screens === 1 ? '' : 's') + (views > 1 ? ', ' + views + ' views' : '');
   });
   document.getElementById('question-next-btn').addEventListener('click', () => cue.nextQuestion());
 
@@ -1735,7 +1734,7 @@
   }
   cue.on('status', ({ message }) => {
     cue.log('[status] ' + message);
-    // Long question reading reports each page here before any token comes.
+    // Reading a coding question reports each page here before any token comes.
     if (busy) armBusyFailsafe();
     showStatus(message);
     if (sttState !== 'disconnected') {

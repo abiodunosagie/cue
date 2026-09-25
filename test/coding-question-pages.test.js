@@ -1,4 +1,4 @@
-// Long questions: the pages read while scrolling reach every provider in
+// A coding question's pages, read while scrolling, reach every provider in
 // scroll order, and the coding prompt reads them as one task.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,6 +14,15 @@ test('turnImages: the pages in order with labels, or one unlabeled screenshot', 
   assert.deepEqual(one.map((p) => [p.b64, p.mime, p.label]), [['CC', 'image/jpeg', '']]);
   assert.deepEqual(_test.turnImages(null, []), []);
   assert.deepEqual(_test.turnImages('not a data url', null), []);
+});
+
+test('providers with a documented image limit get the newest screens only', () => {
+  const { _test } = require('../src/llm');
+  const five = ['a', 'b', 'c', 'd', 'e'];
+  assert.deepEqual(_test.capImages('groq', five), ['c', 'd', 'e']);
+  assert.equal(_test.capImages('anthropic', five), five);
+  assert.equal(_test.capImages('azure', five), five);
+  assert.equal(_test.capImages('groq', undefined), undefined);
 });
 
 test('OpenAI-style content: the request, then each page after its label', () => {

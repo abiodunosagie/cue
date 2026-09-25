@@ -53,7 +53,7 @@ async function captureMaskedScreen(maskBounds) {
   return shot && { thumb: shot.thumb, dataUrl: encodeScreenshot(shot.image) };
 }
 
-// The same capture, left unencoded: long question reading takes one every tick
+// The same capture, left unencoded: reading a coding question takes one every tick
 // and encodes only the pages it keeps (src/scroll-reader.js). keepPanel: the
 // image keeps what is under cue's panel, like a Cmd+H screenshot, and only the
 // change-check thumb is masked (the panel's status line changes every page).

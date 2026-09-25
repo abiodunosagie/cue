@@ -43,3 +43,9 @@ test('blur is full at the default and above, and fades to none at the floor', ()
   assert.equal(blurFor(MIN), 0);
   assert.ok(blurFor(0.6) > 0 && blurFor(0.6) < 24);
 });
+
+test('reading while scrolling is on for a new file and for one saved with the old opt-in setting off', () => {
+  assert.equal(loadStore().getSettings().scrollReading, true);
+  assert.equal(loadStore({ provider: 'anthropic', longQuestion: false }).getSettings().scrollReading, true);
+  assert.equal(loadStore({ provider: 'anthropic', scrollReading: false }).getSettings().scrollReading, false);
+});

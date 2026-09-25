@@ -201,7 +201,7 @@ function stripDataUrl(dataUrl) {
 }
 
 // The screenshots for the last user turn, in order: imageDataUrls (the pages
-// of a long question in scroll order, or the screens of a gathered question)
+// of a coding question read while scrolling and switching tabs)
 // or the single imageDataUrl. An entry is a data URL, or { url, label } when
 // the caller names it ("View 2 of 3, page 1 of 2"). Each result is
 // { url, mime, b64, label }; label names the page when there is more than one.
@@ -214,6 +214,18 @@ function turnImages(imageDataUrl, imageDataUrls) {
     const label = named ? entry.label + ':' : entries.length > 1 ? `Page ${i + 1} of ${entries.length}:` : '';
     return img && { url, ...img, label };
   }).filter(Boolean);
+}
+
+// Most images a provider takes in one request; the newest are kept (the
+// screen on screen now is last). Documented limits, checked 2026-09-25:
+// Groq "a maximum of 3 images" (console.groq.com/docs/vision), Azure OpenAI
+// 50 (learn.microsoft.com Foundry quotas). Anthropic takes 100 (600 on larger
+// context models) and cue sends at most 48, each under the 2000px many-image limit.
+const MAX_IMAGES = { groq: 3, azure: 50 };
+
+function capImages(provider, imageDataUrls) {
+  const max = MAX_IMAGES[provider];
+  return Array.isArray(imageDataUrls) && max && imageDataUrls.length > max ? imageDataUrls.slice(-max) : imageDataUrls;
 }
 
 // OpenAI-style content parts: the text, then each image after its page label.
@@ -583,7 +595,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
     configurationError,
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
-      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, ...params, turns: sanitizeTurns(params.turns) };
+      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, ...params, imageDataUrls: capImages(provider, params.imageDataUrls), turns: sanitizeTurns(params.turns) };
       try {
         if (provider === 'openai') return await streamOpenAI(args);
         if (provider === CUSTOM_PROVIDER) return await streamOpenAI(args);
@@ -608,7 +620,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 }
 
 // Test-only hooks, kept apart from the real API.
-const _test = { resetFastMode: () => fastModePausedUntil.clear(), turnImages, openAIContent, streamGemini, streamOllama };
+const _test = { resetFastMode: () => fastModePausedUntil.clear(), turnImages, openAIContent, capImages, streamGemini, streamOllama };
 
 module.exports = {
   _test,

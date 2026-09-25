@@ -397,6 +397,8 @@ function createWindow() {
   win.setTitle('Microsoft Edge Update'); // set before load
 
   win.webContents.on('did-finish-load', () => {
+    // A reloaded panel shows the question cue still holds.
+    announceQuestion();
     win.showInactive();
     win.setTitle('Microsoft Edge Update');
     // Warn about missing content protection on old Windows builds
@@ -761,9 +763,11 @@ let questionEpoch = 0;
 // The screens of one view, unencoded ({ thumb, image }): read while the
 // candidate scrolls and switches tabs when reading is on, else the screen as it is.
 // purpose: 'solve' or 'gather', for the status line and the timing log.
-async function readView(startedAt, purpose) {
+// oneShot: the screen as it is, whatever the setting (a solve cue started on
+// its own, when the candidate is not showing it anything).
+async function readView(startedAt, purpose, { oneShot = false } = {}) {
   const capture = () => captureMaskedPage(cueWindowBounds(), { keepPanel: true });
-  if (!store.getSettings().scrollReading) {
+  if (oneShot || !store.getSettings().scrollReading) {
     const shot = await capture();
     return shot ? [shot] : [];
   }
@@ -784,10 +788,10 @@ async function readView(startedAt, purpose) {
 // The images for a Cmd+H solve: this view added to the question bundle, then
 // every gathered screen, labelled, sized together to fit one request. With
 // only one screen it is a plain screenshot, as before.
-async function solveScreens(startedAt) {
+async function solveScreens(startedAt, { oneShot = false } = {}) {
   if (gathering) await gathering;
   const epoch = questionEpoch;
-  const pages = await readView(startedAt, 'solve');
+  const pages = await readView(startedAt, 'solve', { oneShot });
   if (!pages.length) throw new Error('No screen source was available.');
   // Next question pressed while reading: these pages are the old question's,
   // so they are solved on their own and kept out of the new bundle.
@@ -801,6 +805,8 @@ async function solveScreens(startedAt) {
   if (!added.ok) send('status', { message: `This question already holds ${bundle.count()} screens, the most cue keeps. Solving with them and the screen now; ${noMouseKey('N')} starts a new question.` });
   else if (views > 1) send('status', { message: `Solving with ${views} views (${screens.length} screens) of this question.` });
   else if (urls.length > 1) send('status', { message: `Read ${urls.length} pages. Solving the whole question.` });
+  // Also replaces "then Cmd+H to solve": a later press would only say it is already answering.
+  else send('status', { message: 'Read the screen. Solving it now.' });
   return { urls: urls.map((url, i) => ({ url, label: screens[i].label })), views };
 }
 
@@ -867,7 +873,8 @@ function toggleScrollReading() {
   send('scrollReading:changed', { scrollReading });
 }
 
-async function runFeature(mode, userText) {
+// options.oneShot: read one screen, never wait for scrolling (see readView).
+async function runFeature(mode, userText, options = {}) {
   if (state.busy) return;
   // A question about the code just written ("walk me through your code", "why
   // a map here?") is answered from that code, not from the resume.
@@ -957,14 +964,14 @@ async function runFeature(mode, userText) {
     }
 
     let imageDataUrl = null;
-    // Several screens, each { url, label }: the pages of a long question, or
+    // Several screens, each { url, label }: the pages read this time, or
     // every view gathered for this question (Cmd+H only).
     let imageDataUrls = null;
     let views = 1;
     if (def.needsScreen && !imageDataUrl) {
       try {
         if (mode === 'leetcode') {
-          const screens = await solveScreens(startedAt);
+          const screens = await solveScreens(startedAt, { oneShot: !!options.oneShot });
           views = screens.views;
           if (screens.urls.length > 1) imageDataUrls = screens.urls;
           else imageDataUrl = screens.urls[0].url;
@@ -1462,8 +1469,13 @@ function cycleAnswerLength() {
 function registerShortcuts() {
   shortcutState.assist = globalShortcut.register('CommandOrControl+Return', () => runFeature('assist', ''));
   shortcutState.say = globalShortcut.register('CommandOrControl+Shift+Return', () => runFeature('say', ''));
-  // While a long question is being read, Cmd+H again stops reading and solves.
-  shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => (scrollReader ? scrollReader.finish() : runFeature('leetcode', '')));
+  // While a coding question is being read, Cmd+H again stops reading and solves.
+  // Pressed again after reading ended on its own, it says so instead of doing nothing.
+  shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => {
+    if (scrollReader) scrollReader.finish();
+    else if (state.busy) send('status', { message: 'Already answering. It shows here in a moment.' });
+    else runFeature('leetcode', '');
+  });
   shortcutState.hide = globalShortcut.register('CommandOrControl+Shift+/', () => send('hide:toggle', {}));
   // H for hide, next to Cmd+H for solve: easier to remember than Cmd+Shift+/,
   // which stays for anyone already used to it. Both do the same thing.
@@ -1710,8 +1722,9 @@ const screenWatcher = createScreenWatcher({
     if (detection.kind === 'coding') {
       send('status', { message: 'Coding task on screen: solving it.' });
       // Like Cmd+H: a fresh read of the screen joins the question bundle, so
-      // the solve also sees every tab gathered for this question.
-      runFeature('leetcode', '');
+      // the solve also sees every tab gathered for this question. One screen:
+      // the candidate did not press anything, so nobody is scrolling for cue.
+      runFeature('leetcode', '', { oneShot: true });
     } else {
       // Same path as a heard question: history, memory, then the auto-answer.
       publishTranscript('them', detection.text);
