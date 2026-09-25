@@ -50,8 +50,12 @@ const usable = (projects) => normalizeProjects(projects).filter((p) => p.use && 
 
 // Short on purpose so every approved project fits: name, three stack items
 // and the summary. Years, details and the role go in the full card.
+// Languages and styling go with every framework ("Next.js" already means
+// React and usually TypeScript), so the list line skips them and names what
+// sets the project apart: Supabase, Paystack, Stream Chat, Maps.
+const OBVIOUS_STACK = new Set(['React', 'TypeScript', 'Dart', 'Tailwind CSS', 'Framer Motion']);
 function oneLine(p) {
-  const stack = p.stack.slice(0, 3).join(', ');
+  const stack = p.stack.filter((s) => !OBVIOUS_STACK.has(s)).slice(0, 3).join(', ');
   const line = `- ${p.name}${stack ? ` (${stack})` : ''}: ${p.summary}`;
   return line.length > DIGEST_LINE_CHARS ? line.slice(0, DIGEST_LINE_CHARS - 1).trimEnd() + '…' : line;
 }

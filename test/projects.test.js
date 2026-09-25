@@ -6,10 +6,11 @@ const os = require('os');
 const path = require('path');
 const {
   parsePackageJson, parsePubspec, readmeExcerpt, siteDescription, parseGitLog, ownershipOf,
+  guideIntro, structureOf, webStructure, flutterStructure,
   parseProjectsIndex, yearsLabel, prettyName, scanProjects
 } = require('../src/projects-scan');
 const { normalizeProjects, buildProjectsBlock, digestFits, mentionedProjects, usedProjects, DIGEST_MAX_CHARS } = require('../src/projects');
-const { parseDrafts, projectText, draftProjects } = require('../src/project-draft');
+const { parseDrafts, projectText, draftProjects, BATCH_SIZE } = require('../src/project-draft');
 const { buildInterviewContext } = require('../src/interview-context');
 
 test('package.json: name, description and the stack in framework-first order', () => {
@@ -112,6 +113,8 @@ test('only approved projects with a summary reach the prompt, fenced as data', (
   const block = buildProjectsBlock(sample);
   assert.match(block, /<projects>/);
   assert.match(block, /- Beepex \(Flutter, Riverpod\): Fintech app/);
+  const web = buildProjectsBlock([{ id: 'w', name: 'Shop', stack: ['Next.js', 'React', 'TypeScript', 'Tailwind CSS', 'Supabase', 'Paystack'], summary: 'A shop.', use: true }]);
+  assert.match(web, /- Shop \(Next\.js, Supabase, Paystack\): A shop\./);
   assert.doesNotMatch(block, /Hidden|Empty/);
   assert.match(block, /Never invent/);
   assert.equal(buildProjectsBlock([]), '');
@@ -175,8 +178,9 @@ test('drafting runs in batches and keeps the good batches when one fails', async
     return JSON.stringify({ projects: ids.map((id) => ({ id, summary: 'About ' + id, details: '' })) });
   };
   const out = await draftProjects({ projects, llm: { ready: true }, quickAsk });
-  assert.equal(Object.keys(out.drafts).length, 6);
-  assert.equal(out.failed, 2);
+  // The second call fails: its batch is lost, every other project is drafted.
+  assert.equal(out.failed, BATCH_SIZE);
+  assert.equal(Object.keys(out.drafts).length, projects.length - BATCH_SIZE);
   await assert.rejects(draftProjects({ projects, llm: { ready: false }, quickAsk }), /Smart model/);
 });
 
@@ -223,4 +227,41 @@ test('review fixes: a draft reply echoing a cleaned id still lands on the right 
   const out = await draftProjects({ projects: [{ id: 'p', name: 'P' }], llm: { ready: true }, quickAsk: async () => { throw new Error('the model took too long'); } });
   assert.equal(out.failed, 1);
   assert.equal(out.reason, 'the model took too long');
+});
+
+test('the guide intro keeps the description and drops status, ids, links and fragments', () => {
+  const guide = [
+    '# Shop Session Guide', '', '## 0. The one thing the owner cares about right now', '',
+    'Evvy is an online hair store built with Next.js. Customers pay with Paystack (see com.evvy.app for the id).',
+    '(verify whether it is deployed.) Contact owner@example.com for access. Commit abc1234def shipped it.', '',
+    'Current focus: the checkout redesign is blocked on the client.', '', '## 1. Projects, accounts, paths', 'secret stuff'
+  ].join('\n');
+  const out = guideIntro(guide);
+  assert.match(out, /^Evvy is an online hair store built with Next\.js\./);
+  assert.match(out, /com\.evvy\.app/);
+  assert.doesNotMatch(out, /verify|owner@|abc1234|Current focus|secret/);
+  assert.equal(guideIntro('# No section zero here'), '');
+});
+
+test('structure: routes, API routes and components for web; screens, state and layers for Flutter; names only', () => {
+  const web = webStructure(['src/app/(dashboard)/orders/[id]/page.tsx', 'src/app/page.tsx', 'src/app/api/orders/route.ts', 'src/components/orders/table.tsx', 'src/components/button.tsx', 'pages/about.tsx', 'pages/_app.tsx']);
+  assert.deepEqual(web, ['Pages: /, /about, /orders/[id]', 'API routes: /api/orders', 'Component folders: button, orders']);
+  const flutter = flutterStructure(['lib/features/auth/presentation/login_screen.dart', 'lib/features/auth/data/auth_repository.dart', 'lib/features/wallet/presentation/wallet_notifier.dart', 'lib/main.dart']);
+  assert.match(flutter.join('\n'), /feature-first/);
+  assert.match(flutter.join('\n'), /Features: auth, wallet/);
+  assert.match(flutter.join('\n'), /Screens: login_screen/);
+  assert.match(flutter.join('\n'), /State management files: wallet_notifier/);
+});
+
+test('structure never enters database or backend folders and never reads file contents', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cue-struct-'));
+  for (const f of ['src/app/page.tsx', 'supabase/migrations/001_tables.sql', 'prisma/schema.prisma', 'src/app/api/pay/route.ts']) {
+    fs.mkdirSync(path.join(root, path.dirname(f)), { recursive: true });
+    fs.writeFileSync(path.join(root, f), 'SECRET_BODY');
+  }
+  const out = structureOf(root, ['Next.js']);
+  assert.match(out, /Pages: \//);
+  assert.match(out, /API routes: \/api\/pay/);
+  assert.doesNotMatch(out, /migrations|schema|prisma|supabase|SECRET_BODY/);
+  fs.rmSync(root, { recursive: true, force: true });
 });

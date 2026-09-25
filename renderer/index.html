@@ -316,7 +316,7 @@
       <!-- Tab: Projects (src/ipc/projects.js, renderer/projects-panel.js) -->
       <div class="s-body s-tab-pane hidden" data-pane="projects">
         <label class="s-label">Your projects <span class="s-hint" id="proj-root">from your Projects folder</span></label>
-        <div class="s-note">cue reads only each project's README introduction, its package.json or pubspec.yaml (name, description, libraries), a website's public description, git dates and commit counts, and its top-level folder names. It never opens source code, session guides, .env files or docs. Only projects you tick, with a summary, are used in answers.</div>
+        <div class="s-note">cue reads each project's README introduction, the opening description in its session guide, its libraries (package.json or pubspec.yaml), git dates, and the names of its pages, API routes, screens and state files. It never reads the contents of source files, the rest of the session guide, .env files, or database and backend folders. Draft sends that text to your AI provider to write the notes. Only projects you tick, with a summary, are used in answers.</div>
         <div class="proj-bar">
           <button class="s-action primary" id="proj-scan">Scan my projects folder</button>
           <button class="s-action" id="proj-draft">Draft notes for ticked projects</button>
