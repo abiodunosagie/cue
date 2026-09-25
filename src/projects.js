@@ -8,8 +8,9 @@ const { MAX_NAME_CHARS, MAX_SUMMARY_CHARS, MAX_DETAILS_CHARS, MAX_ROLE_CHARS } =
 const MAX_PROJECTS = 200;
 const MAX_STACK_ITEMS = 16;
 // Every approved project goes in as one line; the whole list stays under this.
-// About 70 lines: a whole projects folder, approved.
-const DIGEST_MAX_CHARS = 9500;
+// About 75 lines of ~160 chars: a whole projects folder, approved. Measured
+// on the owner's 69 drafted projects: 11k chars.
+const DIGEST_MAX_CHARS = 12000;
 const DIGEST_LINE_CHARS = 170;
 // Full cards for the projects the interviewer just named.
 const MAX_DEEP_CARDS = 2;
