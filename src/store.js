@@ -130,7 +130,8 @@ const DEFAULTS = {
 // Fields the renderer may never write. settings:set passes patches through
 // stripRendererPatch; settings:get hands out redactForRenderer's view.
 // profiles: changed only through the profile:* IPC, so a stale renderer copy never overwrites them.
-const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile'];
+// projects: changed only through the projects:* IPC for the same reason.
+const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile', 'projects'];
 
 let data = null;
 
@@ -211,6 +212,14 @@ module.exports = {
   setProfileState({ profiles, activeProfile, fields }) {
     load();
     data = { ...data, ...fields, profiles, activeProfile };
+    save();
+    return data;
+  },
+  // Main-process only: the projects:* IPC replaces the whole list (a project
+  // removed from the list must not survive a merge).
+  setProjects(list) {
+    load();
+    data = { ...data, projects: normalizeProjects(list) };
     save();
     return data;
   },

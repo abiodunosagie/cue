@@ -123,6 +123,7 @@
         <button class="s-tab on" data-tab="keys">Keys</button>
         <button class="s-tab" data-tab="transcription">Audio</button>
         <button class="s-tab" data-tab="profile">Profile</button>
+        <button class="s-tab" data-tab="projects">Projects</button>
         <button class="s-tab" data-tab="prep">Interview prep</button>
         <button class="s-tab" data-tab="style">Answer style</button>
         <button class="s-tab" data-tab="qa">Salary &amp; Q&amp;A</button>
@@ -312,6 +313,27 @@
         <textarea id="job-description" rows="5" spellcheck="false" placeholder="Paste the job description for the role you're interviewing for. cue will highlight your most relevant experience."></textarea>
       </div>
 
+      <!-- Tab: Projects (src/ipc/projects.js, renderer/projects-panel.js) -->
+      <div class="s-body s-tab-pane hidden" data-pane="projects">
+        <label class="s-label">Your projects <span class="s-hint" id="proj-root">from your Projects folder</span></label>
+        <div class="s-note">cue reads only each project's README introduction, its package.json or pubspec.yaml (name, description, libraries), a website's public description, git dates and commit counts, and its top-level folder names. It never opens source code, session guides, .env files or docs. Only projects you tick, with a summary, are used in answers.</div>
+        <div class="proj-bar">
+          <button class="s-action primary" id="proj-scan">Scan my projects folder</button>
+          <button class="s-action" id="proj-draft">Draft notes for ticked projects</button>
+        </div>
+        <div class="s-status" id="proj-status" role="status"></div>
+        <div class="proj-filter">
+          <input id="proj-search" type="search" placeholder="Search projects" autocomplete="off" aria-label="Search projects" />
+          <select id="proj-show" class="s-select" aria-label="Show">
+            <option value="all">All projects</option>
+            <option value="ticked">Ticked</option>
+            <option value="unticked">Not ticked</option>
+            <option value="empty">Ticked, no summary yet</option>
+          </select>
+        </div>
+        <div id="proj-list" class="proj-list"></div>
+      </div>
+
       <!-- Tab: Interview Prep -->
       <div class="s-body s-tab-pane hidden" data-pane="prep">
         <label class="s-label">Your STAR stories <span class="s-hint">real stories only, cue tells them as yours</span></label>
@@ -491,6 +513,7 @@
   <script src="stream-blocks.js"></script>
   <script src="script-blocks.js"></script>
   <script src="script-follow.js"></script>
+  <script src="projects-panel.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

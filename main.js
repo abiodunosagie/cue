@@ -16,6 +16,7 @@ const { synthesize } = require('./src/practice');
 const { createPracticeSession } = require('./src/practice-session');
 const { registerSetupIpc } = require('./src/ipc/setup');
 const { registerProfileIpc } = require('./src/ipc/profiles');
+const { registerProjectsIpc } = require('./src/ipc/projects');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
@@ -110,6 +111,9 @@ const buffers = { you: [], them: [] };
 // The whole current interview on disk (cue-interview.json next to cue-data.json),
 // so a restart mid-interview keeps the conversation. Cleared by Clear History.
 const interviewMemory = createInterviewMemory({ file: path.join(app.getPath('userData'), 'cue-interview.json') });
+// cue's own answers this interview, minus coding solves (long, and never
+// about the candidate's projects), for the "already used" projects note.
+const spokenAnswerTexts = () => interviewMemory.answers().filter((a) => a.mode !== 'leetcode').map((a) => a.text);
 interviewMemory.load();
 // Answers to the likely questions, made before the interview (cue-prepared.json).
 const preparedStore = createPreparedStore({ file: path.join(app.getPath('userData'), 'cue-prepared.json') });
@@ -673,7 +677,7 @@ function preparedState() {
 // system prompt exactly as for a live answer, so they follow the same voice,
 // length and no-invented-stories rules. Used for the prepared bank and follow-ups.
 async function askForItems({ llm, settings, turns, prompt, maxTokens, timeoutMs }) {
-  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: interviewMemory.answers().map((x) => x.text) }), settings.aiRules || '');
+  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: spokenAnswerTexts() }), settings.aiRules || '');
   return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
 }
 
@@ -1012,7 +1016,7 @@ async function runFeature(mode, userText, options = {}) {
     const memoryBlock = def.tier === 'coding' || def.skipMemory
       ? ''
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
-    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: interviewMemory.answers().map((x) => x.text) });
+    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: spokenAnswerTexts() });
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
     opener = openerPromise ? await openerPromise : '';
     // One user turn builder for the answer, the quick start and the full
@@ -1181,6 +1185,7 @@ registerProfileIpc({
     send('prepared:state', preparedState());
   }
 });
+registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send });
 ipcMain.handle('practice:start', () => practice.start());
 ipcMain.handle('practice:next', () => practice.next());
 ipcMain.handle('practice:end', () => practice.end());

@@ -44,3 +44,15 @@ test('the renderer cannot overwrite profiles; a deleted profile does not come ba
   assert.equal(onDisk.activeProfile, 'My profile');
   assert.equal(onDisk.jobDescription, 'A');
 });
+
+test('projects are main-owned: the Settings Save cannot overwrite them, setProjects cleans them', () => {
+  const { store } = loadStore({ resumeText: 'CV' });
+  store.setProjects([{ id: 'web/shop', name: 'Shop', summary: 'A shop.', use: true }, { id: 'web/shop' }, null]);
+  assert.equal(store.getSettings().projects.length, 1);
+  store.setSettings(store.stripRendererPatch({ projects: [], resumeText: 'New CV' }));
+  assert.equal(store.getSettings().resumeText, 'New CV');
+  assert.deepEqual(store.getSettings().projects.map((p) => p.id), ['web/shop']);
+  // Switching job profiles keeps them: projects are about the candidate, not the job.
+  store.setProfileState(Profiles.create(store.getSettings(), 'Globex'));
+  assert.equal(store.getSettings().projects.length, 1);
+});

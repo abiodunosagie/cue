@@ -268,7 +268,8 @@ async function scanOne(dir, root, ownEmails) {
     name: prettyName(path.basename(dir)),
     category: rel.split(path.sep)[0],
     stack,
-    description: (pub && pub.description) || (pkg && pkg.description) || site || '',
+    // The same privacy rule as the README: a description naming a path or a secret is dropped.
+    description: [pub && pub.description, pkg && pkg.description, site].find((d) => d && !PRIVATE_RE.test(d)) || '',
     readme: readmeExcerpt(readSmall(path.join(dir, 'README.md'), README_MAX_CHARS)),
     folders: topDirs(dir),
     years: git ? yearsLabel(git.first, git.last) : '',

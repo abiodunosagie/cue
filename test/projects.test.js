@@ -8,7 +8,7 @@ const {
   parsePackageJson, parsePubspec, readmeExcerpt, siteDescription, parseGitLog, ownershipOf,
   parseProjectsIndex, yearsLabel, prettyName, scanProjects
 } = require('../src/projects-scan');
-const { normalizeProjects, buildProjectsBlock, mentionedProjects, usedProjects, DIGEST_MAX_CHARS } = require('../src/projects');
+const { normalizeProjects, buildProjectsBlock, digestFits, mentionedProjects, usedProjects, DIGEST_MAX_CHARS } = require('../src/projects');
 const { parseDrafts, projectText, draftProjects } = require('../src/project-draft');
 const { buildInterviewContext } = require('../src/interview-context');
 
@@ -111,14 +111,33 @@ test('stored projects are cleaned: bad entries dropped, fields cut, em dashes re
 test('only approved projects with a summary reach the prompt, fenced as data', () => {
   const block = buildProjectsBlock(sample);
   assert.match(block, /<projects>/);
-  assert.match(block, /- Beepex \(Flutter, Riverpod; 2025 to 2026\): Fintech app/);
-  assert.match(block, /My role: Built the Flutter app\./);
+  assert.match(block, /- Beepex \(Flutter, Riverpod\): Fintech app/);
   assert.doesNotMatch(block, /Hidden|Empty/);
   assert.match(block, /Never invent/);
   assert.equal(buildProjectsBlock([]), '');
   assert.equal(buildProjectsBlock(undefined), '');
   const many = Array.from({ length: 200 }, (_, i) => ({ id: 'p' + i, name: 'Project ' + i, summary: 'x'.repeat(250), use: true }));
   assert.ok(buildProjectsBlock(many).length < DIGEST_MAX_CHARS + 1500);
+});
+
+test('sixty approved projects with real-length summaries all fit, and the count says so', () => {
+  const sixty = Array.from({ length: 60 }, (_, i) => ({
+    id: 'p' + i, name: 'Client Project ' + i, stack: ['Next.js', 'React', 'TypeScript', 'Supabase'],
+    summary: 'Web dashboard for a Lagos business to manage orders, customers and payments online.', use: true
+  }));
+  const block = buildProjectsBlock(sixty);
+  for (let i = 0; i < 60; i += 1) assert.match(block, new RegExp('- Client Project ' + i + ' \\('));
+  assert.deepEqual(digestFits(sixty), { approved: 60, fit: 60 });
+  assert.deepEqual(digestFits([...sixty, { id: 'x', name: 'X', summary: '', use: true }]), { approved: 60, fit: 60 });
+});
+
+test('one answer naming VotixCare marks only the project it names in full', () => {
+  const family = normalizeProjects(['Votixcare App', 'Votixcare Admin', 'Votixcare Website', 'Votixcare'].map((name, i) => ({ id: 'v' + i, name, summary: 's', use: true })));
+  assert.deepEqual(usedProjects(family, ['On VotixCare I built the patient app.']).map((p) => p.name), ['Votixcare']);
+  assert.deepEqual(usedProjects(family, ['I built the Votixcare Admin dashboard.']).map((p) => p.name), ['Votixcare Admin']);
+  // The interviewer saying the full name gets that one first.
+  assert.equal(mentionedProjects(family, [{ channel: 'them', text: 'How does the votixcare website work?' }])[0].name, 'Votixcare Website');
+  assert.equal(mentionedProjects(family, [{ channel: 'them', text: 'Walk me through the VotixCare admin.' }])[0].name, 'Votixcare Admin');
 });
 
 test('a project the interviewer names gets its full notes; one already used is flagged', () => {
