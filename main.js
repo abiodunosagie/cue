@@ -411,8 +411,10 @@ function createWindow() {
   win.setTitle('Microsoft Edge Update'); // set before load
 
   win.webContents.on('did-finish-load', () => {
-    // A reloaded panel shows the question cue still holds.
+    // A reloaded panel shows the question cue still holds, and has no script
+    // running: never keep dropping interview speech for one.
     announceQuestion();
+    scriptActive = false;
     win.showInactive();
     win.setTitle('Microsoft Edge Update');
     // Warn about missing content protection on old Windows builds
@@ -512,7 +514,7 @@ function initStreamingSTT() {
       onTranscript: (ch, text) => {
         const turn = { channel: ch, text, ts: Date.now() };
         if (practice.hidesTurn(turn)) return;
-        if (scriptTakesTurn(turn)) { send('stt:final', { channel: ch, text }); return; }
+        if (scriptTakesTurn(turn)) return;
         pushTranscript(turn);
         send('transcript', turn);
         send('stt:final', { channel: ch, text });

@@ -547,20 +547,23 @@
       countEl.className = 'script-count';
       countEl.setAttribute('aria-live', 'assertive');
       view.appendChild(countEl);
+      // The follower's own tokens are what is shown, so span i is always token i.
+      follower = window.ScriptFollow.createFollower(window.ScriptBlocks.splitScript(text));
       spans = [];
-      for (const block of window.ScriptBlocks.splitScript(text)) {
-        const p = document.createElement('p');
-        block.split(/\s+/).filter(Boolean).forEach((token, i) => {
-          if (i) p.appendChild(document.createTextNode(' '));
-          const span = document.createElement('span');
-          span.className = 'sw';
-          span.textContent = token;
-          p.appendChild(span);
-          spans.push(span);
-        });
-        view.appendChild(p);
-      }
-      follower = window.ScriptFollow.createFollower(window.ScriptBlocks.splitScript(text).join('\n\n'));
+      let p = null;
+      follower.tokens.forEach((token, i) => {
+        if (!p || follower.tokenBlocks[i] !== follower.tokenBlocks[i - 1]) {
+          p = document.createElement('p');
+          view.appendChild(p);
+        } else {
+          p.appendChild(document.createTextNode(' '));
+        }
+        const span = document.createElement('span');
+        span.className = 'sw';
+        span.textContent = token;
+        p.appendChild(span);
+        spans.push(span);
+      });
       messages.appendChild(view);
       messages.classList.add('script-mode');
     }
@@ -608,20 +611,26 @@
       text = scriptText;
       active = true;
       cue.scriptActive(true);
-      // It follows the mic, so listening must be on; it is turned off again at Done.
-      const listening = await cue.captureState();
-      startedListening = false;
-      if (!(listening && listening.active)) {
-        startedListening = !!(await cue.captureToggle());
-        if (!startedListening) showStatus('Listening could not start, so the script cannot follow your voice. Check the microphone in Settings > Audio.');
+      try {
+        // It follows the mic, so listening must be on; it is turned off again at Done.
+        const listening = await cue.captureState();
+        startedListening = false;
+        if (!(listening && listening.active)) {
+          startedListening = !!(await cue.captureToggle());
+          if (!startedListening) showStatus('Listening could not start, so the script cannot follow your voice. Check the microphone in Settings > Audio.');
+        }
+        render();
+        lastToken = -1;
+        paint(-1);
+        bar.classList.remove('hidden');
+        document.getElementById('panel-main').classList.add('scripting');
+        messages.scrollTop = 0;
+        countdown();
+      } catch (e) {
+        // Never leave main dropping interview speech for a script that is not on screen.
+        stop();
+        showStatus('The script could not start. Try again.');
       }
-      render();
-      lastToken = -1;
-      paint(-1);
-      bar.classList.remove('hidden');
-      document.getElementById('panel-main').classList.add('scripting');
-      messages.scrollTop = 0;
-      countdown();
     }
 
     function restart() {
@@ -677,7 +686,6 @@
     const review = document.getElementById('script-review');
     const checkBtn = document.getElementById('script-check');
     const deleteBtn = document.getElementById('script-delete');
-    const READING_WPM = 140; // same pace as src/scripts.js
     let currentId = '';
     let saveTimer = null;
     let revised = '';
@@ -687,8 +695,7 @@
     const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
     function showMeta() {
-      const words = area.value.trim().split(/\s+/).filter(Boolean).length;
-      const seconds = Math.round((words / READING_WPM) * 60);
+      const { words, seconds } = window.ScriptBlocks.readingTime(area.value);
       meta.textContent = words ? `${words} words, about ${seconds < 60 ? seconds + ' seconds' : Math.floor(seconds / 60) + ' min ' + (seconds % 60) + ' s'} at a calm pace` : '0 words';
     }
 
@@ -702,7 +709,13 @@
       if (currentId) pick.value = currentId;
     }
 
+    function disarmDelete() {
+      clearTimeout(deleteArmed); deleteArmed = null;
+      deleteBtn.textContent = 'Delete';
+    }
+
     function load(id) {
+      disarmDelete();
       const s = scripts().find((x) => x.id === id);
       currentId = s ? s.id : '';
       name.value = s ? s.title : '';
@@ -722,9 +735,13 @@
       const list = scripts().filter((s) => s.id !== currentId);
       if (!currentId) currentId = newId();
       list.unshift({ id: currentId, title, text: area.value, updatedAt: Date.now() });
-      settings.scripts = list;
-      await cue.settingsSet({ scripts: list });
+      await saveScripts(list);
       fillPicker();
+    }
+    // Main cleans the list (src/scripts.js): keep what it saved, not what was sent.
+    async function saveScripts(list) {
+      const saved = await cue.settingsSet({ scripts: list });
+      settings.scripts = saved && Array.isArray(saved.scripts) ? saved.scripts : list;
     }
     const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); };
 
@@ -739,7 +756,8 @@
 
     area.addEventListener('input', () => { showMeta(); saveSoon(); });
     name.addEventListener('input', saveSoon);
-    pick.addEventListener('change', async () => { await save(); load(pick.value); });
+    // The choice is read first: saving rebuilds the list, which puts the old one back in the box.
+    pick.addEventListener('change', async () => { const chosen = pick.value; await save(); load(chosen); });
     document.getElementById('script-new').addEventListener('click', async () => { await save(); load(''); area.focus(); });
     // Two clicks: no native dialog (cue hides its dock icon, so one never comes forward).
     deleteBtn.addEventListener('click', async () => {
@@ -749,12 +767,10 @@
         deleteArmed = setTimeout(() => { deleteArmed = null; deleteBtn.textContent = 'Delete'; }, 3000);
         return;
       }
-      clearTimeout(deleteArmed); deleteArmed = null; deleteBtn.textContent = 'Delete';
-      const list = scripts().filter((s) => s.id !== currentId);
-      settings.scripts = list;
-      await cue.settingsSet({ scripts: list });
+      disarmDelete();
+      await saveScripts(scripts().filter((s) => s.id !== currentId));
       currentId = '';
-      load(list[0] ? list[0].id : '');
+      load(scripts()[0] ? scripts()[0].id : '');
     });
 
     checkBtn.addEventListener('click', async () => {
@@ -792,7 +808,9 @@
       teleprompter.start(area.value);
     });
     document.getElementById('script-close').addEventListener('click', close);
-    scrim.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    // Like Settings: Escape anywhere, or a click on the dimmed backdrop, closes it.
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !scrim.classList.contains('hidden')) close(); });
+    scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });
     document.getElementById('script-btn').addEventListener('click', open);
   })();
 

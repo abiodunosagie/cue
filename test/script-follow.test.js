@@ -81,3 +81,25 @@ test('a pasted script is cut into short blocks; blank lines always start a new o
   assert.ok(blocks.every((b) => b.split(/\s+/).length <= 45));
   assert.deepEqual(splitScript('  \n\n '), []);
 });
+
+test('built from the paragraphs as the panel builds it: tokens, paragraphs and a lone dash line up', () => {
+  const text = 'Hi, I am Ada - a full-stack developer.\n\nThanks for watching.';
+  const f = createFollower(splitScript(text));
+  assert.deepEqual(f.tokens, ['Hi,', 'I', 'am', 'Ada', '-', 'a', 'full-stack', 'developer.', 'Thanks', 'for', 'watching.']);
+  assert.deepEqual(f.tokenBlocks, [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]);
+  f.hear('hi I am Ada a full stack developer', true);
+  assert.equal(f.tokens[f.state().token], 'developer.');
+  f.hear('thanks for watching', true);
+  assert.equal(f.state().done, true);
+});
+
+test('a phrase the script says twice carries on forward, word by word, and never jumps back', () => {
+  const f = createFollower('Thank you so much for having me today. Now let me tell you about myself. Thank you so much for the opportunity to speak with you.');
+  f.hear('thank you so much for having me today now let me tell you about myself', true);
+  assert.equal(f.tokens[f.state().token], 'myself.');
+  const trail = [];
+  const third = 'thank you so much for the opportunity to speak'.split(' ');
+  for (let n = 1; n <= third.length; n++) { f.hear(third.slice(0, n).join(' '), n === third.length); trail.push(f.state().token); }
+  // Monotonic, one word per word, inside the third sentence.
+  assert.deepEqual(trail, [15, 16, 17, 18, 19, 20, 21, 22, 23]);
+});

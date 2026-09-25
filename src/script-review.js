@@ -3,6 +3,8 @@
 // suggestions and a better version. Nothing changes unless the candidate
 // presses "Use this version" in the renderer.
 
+const { READING_WPM } = require('../renderer/script-blocks');
+
 const MAX_SUGGESTIONS = 5;
 const REVIEW_MAX_TOKENS = 2000;
 const REVIEW_TIMEOUT_MS = 60000;
@@ -13,7 +15,7 @@ const REVIEW_SYSTEM =
   'Judge it as something SPOKEN: does it open with who they are and what they do, show one or two concrete results, say what they can do for the viewer, ' +
   'and end with a clear, warm close? Is it easy to say out loud: short sentences, plain words, no tongue-twisters, no lists read as lists?\n\n' +
   'Rules for the revised version: keep the candidate\'s own voice, facts, names and numbers. Never invent an employer, a client, a number, a skill or a result ' +
-  'that is not in the script or the background. Keep about the same length (within a fifth), unless the script would run past 2 minutes at 140 words a minute; ' +
+  'that is not in the script or the background. Keep about the same length (within a fifth), unless the script would run past 2 minutes at ' + READING_WPM + ' words a minute; ' +
   'then shorten it. First person. No markdown, no headings, no bullet points, no emojis, no em dashes. Blank lines between paragraphs are fine.\n\n' +
   'Reply with JSON only, no prose and no code fence: ' +
   '{"verdict": string, "suggestions": [{"what": string, "why": string}], "revised": string}.\n' +

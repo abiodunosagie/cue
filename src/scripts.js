@@ -6,8 +6,6 @@ const MAX_SCRIPTS = 20;
 const MAX_TITLE_CHARS = 80;
 // A spoken intro runs 150 to 300 words; this leaves room for a long pitch.
 const MAX_SCRIPT_CHARS = 6000;
-// A calm, clear reading pace for a recorded video.
-const READING_WPM = 140;
 
 // The list as it may be stored: at most MAX_SCRIPTS entries with string
 // fields in bounds and unique ids; anything else is dropped.
@@ -31,10 +29,4 @@ function normalizeScripts(list) {
   return out;
 }
 
-// { words, seconds } for the script at a steady reading pace.
-function readingTime(text) {
-  const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
-  return { words, seconds: Math.round((words / READING_WPM) * 60) };
-}
-
-module.exports = { normalizeScripts, readingTime, MAX_SCRIPTS, MAX_SCRIPT_CHARS, READING_WPM };
+module.exports = { normalizeScripts, MAX_SCRIPTS, MAX_SCRIPT_CHARS };

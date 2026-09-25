@@ -68,15 +68,23 @@
     return a.length >= 5 && b.length >= 5 && editDistanceAtMostOne(a, b);
   }
 
-  // The script as display tokens (what the renderer shows, split on spaces)
-  // and matching words, each word pointing at the token it came from.
+  // The script as display tokens (what the renderer shows, split on spaces),
+  // the paragraph each token is in, and the matching words, each pointing at
+  // the token it came from. A token with no letters or digits (a lone dash)
+  // has no word: it is shown and passed over. `script` is a string or the
+  // paragraphs from script-blocks.js.
   function prepare(script) {
-    const tokens = String(script || '').split(/\s+/).filter(Boolean);
+    const blocks = Array.isArray(script) ? script : [String(script || '')];
+    const tokens = [];
+    const tokenBlocks = [];
+    blocks.forEach((block, b) => {
+      for (const token of String(block).split(/\s+/).filter(Boolean)) { tokens.push(token); tokenBlocks.push(b); }
+    });
     const list = [];
     tokens.forEach((token, t) => {
       for (const w of words(token)) list.push({ w, token: t });
     });
-    return { tokens, words: list };
+    return { tokens, tokenBlocks, words: list };
   }
 
   // Walk the spoken words forward from `from` (the index of the last word
@@ -128,11 +136,14 @@
     function hear(text, isFinal) {
       const spoken = words(text);
       let from = anchor;
-      // A restart: the utterance opens with words already read.
-      if (isFinal || spoken.length >= RESTART_RUN) {
+      // A restart: the utterance opens with words already read, and those
+      // words are NOT what comes next. A script that says a phrase twice
+      // ("thank you so much") carries on forward to its next use.
+      if (spoken.length >= RESTART_RUN) {
         const opening = spoken.slice(0, RESTART_RUN);
-        const back = findRun(list, opening, anchor - RESTART_BACK, anchor);
-        if (back >= 0 && back <= anchor && opening.length === RESTART_RUN) from = back - RESTART_RUN;
+        const ahead = findRun(list, opening, anchor + 1, anchor + RESYNC_AHEAD);
+        const back = ahead >= 0 ? -1 : findRun(list, opening, anchor - RESTART_BACK, anchor);
+        if (back >= 0) from = back - RESTART_RUN;
       }
       const next = walk(list, spoken, from);
       // Interim results can go back when the transcriber rewrites the
@@ -149,7 +160,7 @@
 
     function reset() { anchor = -1; pos = -1; }
 
-    return { tokens: prepared.tokens, wordCount: list.length, hear, state, reset };
+    return { tokens: prepared.tokens, tokenBlocks: prepared.tokenBlocks, wordCount: list.length, hear, state, reset };
   }
 
   const api = { createFollower, words, same, prepare };

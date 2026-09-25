@@ -1,7 +1,8 @@
 // Teleprompter scripts: what is stored, and the "Check it" review.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeScripts, readingTime, MAX_SCRIPTS, MAX_SCRIPT_CHARS } = require('../src/scripts');
+const { normalizeScripts, MAX_SCRIPTS, MAX_SCRIPT_CHARS } = require('../src/scripts');
+const { readingTime } = require('../renderer/script-blocks');
 const { parseReview, reviewPrompt, reviewScript } = require('../src/script-review');
 
 test('stored scripts are cleaned: bad entries, duplicate ids and oversize text are dropped or cut', () => {
@@ -14,6 +15,7 @@ test('stored scripts are cleaned: bad entries, duplicate ids and oversize text a
   assert.deepEqual(out.map((s) => [s.id, s.title, s.text.length, s.updatedAt]), [['a', 'Upwork intro', 2, 5], ['b', 'Untitled script', MAX_SCRIPT_CHARS, 0]]);
   assert.equal(normalizeScripts(Array.from({ length: 30 }, (_, i) => ({ id: 's' + i, text: 't' }))).length, MAX_SCRIPTS);
   assert.deepEqual(normalizeScripts('nope'), []);
+  assert.equal(normalizeScripts([{ id: 'c', title: 't'.repeat(200), text: '' }])[0].title.length, 80);
 });
 
 test('reading time at a calm pace', () => {
