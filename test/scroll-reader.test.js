@@ -57,9 +57,24 @@ test('before any scroll it waits longer, after a scroll it ends sooner', async (
   await before.reader.done;
   const after = run([1, 2, 2], { stillBeforeScrollMs: 5000, stillAfterScrollMs: 2000, tickMs: 1000 });
   await after.reader.done;
-  // Before: ticks at 0..5s. After: last movement at 1s, page 2 kept at 2s, still by 3s.
+  // Before: ticks at 0..5s. After: page 2 kept at 2s counts as movement, still by 4s.
   assert.equal(before.ticks(), 6);
-  assert.equal(after.ticks(), 4);
+  assert.equal(after.ticks(), 5);
+});
+
+test('a slow, smooth scroll still reads every page and does not end early', async () => {
+  // Each tick changes 2 of 10 cells (under the 0.25 movement share), so no
+  // single tick counts as movement; every page kept must keep reading alive.
+  const slow = (step) => {
+    const t = Buffer.alloc(10 * 4, 40);
+    for (let c = 0; c < Math.min(10, step * 2); c++) t.fill(200, c * 4, c * 4 + 4);
+    return t;
+  };
+  const frames = [0, 1, 2, 3, 4, 5, 5, 5, 5, 5, 5].map(slow);
+  const { reader } = run(frames, { stillBeforeScrollMs: 2500, stillAfterScrollMs: 2500, tickMs: 1000 });
+  const got = await reader.done;
+  // Pages at steps 0, 2 (4 cells from page 1) and 4 (4 more): all read.
+  assert.equal(got.length, 3);
 });
 
 test('scrolling back to a page already read does not keep it twice', async () => {

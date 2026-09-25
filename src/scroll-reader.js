@@ -50,6 +50,9 @@ function readScrollPages({
     const keep = (shot) => {
       if (pages.length >= maxPages || pages.some((p) => changedShare(p.thumb, shot.thumb) < pageChange)) return;
       if (pages.length) scrolled = true;
+      // A new page proves the reading is still going: a slow, smooth scroll
+      // can change too little between two ticks to count as movement.
+      lastMoveAt = now();
       pages.push(shot);
       onPage(pages.length);
     };
@@ -72,6 +75,8 @@ function readScrollPages({
       const t = now();
       const stillFor = scrolled ? stillAfterScrollMs : stillBeforeScrollMs;
       if (pages.length >= maxPages || t - startedAt >= maxReadMs || (pages.length && t - lastMoveAt >= stillFor)) return pages;
+      // Cmd+H again during that capture: solve now, without another tick.
+      if (finished) break;
       await pause(tickMs);
     }
     // Finished by key: keep the view the candidate stopped on.

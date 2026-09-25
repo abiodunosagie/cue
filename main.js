@@ -128,6 +128,10 @@ const STREAM_INACTIVITY_MS = 25000; // abort a stalled LLM stream so state.busy 
 // fallback request thinks with no events at all.
 const CODING_STREAM_INACTIVITY_MS = 45000;
 const CODING_FIRST_WORD_SILENCE_MS = 120000;
+// The quick start is only worth having within seconds: a Smart model that is
+// this slow gives way to the full solution instead of holding it back.
+const QUICK_START_FIRST_WORD_MS = 30000;
+const QUICK_START_INACTIVITY_MS = 20000;
 const MIN_BYTES = Math.floor(16000 * 2 * 0.12); // ~0.12s
 const RMS_GATE = 180;
 let flushTimer = null;
@@ -889,31 +893,41 @@ async function runFeature(mode, userText, options = {}) {
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript);
     const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
     opener = openerPromise ? await openerPromise : '';
-    const built = (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
+    // One user turn builder for the answer, the quick start and the full
+    // solution, so none of them can miss the memory, length or opener parts.
+    const buildArgs = {
       transcript,
       userText: userText || '',
       answers: mode === 'report' ? interviewMemory.answers() : [],
       architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode),
       pages: imageDataUrls ? imageDataUrls.length : 1
-    }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
+    };
+    const buildTurn = (extra) => (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') +
+      def.build({ ...buildArgs, ...extra }) +
+      (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
+    const built = buildTurn();
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });
 
     // One model stream under its own watchdog: a provider that stalls would
     // otherwise hang the await forever, leaving state.busy = true and wedging
     // every later question until an app restart. `stage` names it in the log.
+    // On failure the error carries `partial`: the text already on screen.
     const runStream = async (streamLlm, streamSystem, userTurn, stage) => {
       let watchdog = null;
       let rearm = () => {};
       let settled = false;
       let streamedAny = false;
+      let streamed = '';
       let thinkingShown = false;
+      const isQuick = stage === 'quick start';
       const stalled = new Promise((_res, reject) => {
         rearm = () => {
           clearTimeout(watchdog);
-          const limit = def.tier !== 'coding' ? STREAM_INACTIVITY_MS
-            : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_WORD_SILENCE_MS;
+          const limit = isQuick ? (streamedAny ? QUICK_START_INACTIVITY_MS : QUICK_START_FIRST_WORD_MS)
+            : def.tier !== 'coding' ? STREAM_INACTIVITY_MS
+              : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_WORD_SILENCE_MS;
           watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), limit);
         };
         rearm();
@@ -929,7 +943,7 @@ async function runFeature(mode, userText, options = {}) {
             onToken: (t) => {
               if (!live()) return;
               if (!streamedAny && stage) console.log(`[timing] ${mode}: ${stage} first word after ${Date.now() - startedAt}ms (${streamLlm.model})`);
-              firstWord(streamLlm.model); streamedAny = true; rearm(); send('llm:token', { text: t });
+              firstWord(streamLlm.model); streamedAny = true; streamed += t; rearm(); send('llm:token', { text: t });
             },
             // Anthropic only: any stream event (thinking included) keeps the watchdog
             // from killing a request that is working; the thinking summary shows in the wait note.
@@ -943,6 +957,9 @@ async function runFeature(mode, userText, options = {}) {
           }),
           stalled
         ]);
+      } catch (e) {
+        if (e && typeof e === 'object') e.partial = streamed;
+        throw e;
       } finally {
         settled = true;
         clearTimeout(watchdog);
@@ -955,20 +972,19 @@ async function runFeature(mode, userText, options = {}) {
     let quickPlan = '';
     const quick = quickStartLlm(mode, settings, llm);
     if (quick) {
-      const quickBuilt = def.build({ transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), pages: imageDataUrls ? imageDataUrls.length : 1, quickStart: 'plan' });
+      const quickBuilt = buildTurn({ quickStart: 'plan' });
       try {
         quickPlan = (await runStream(quick, system, quickBuilt, 'quick start')).trim();
       } catch (e) {
         // The full answer still comes; the quick start is only a head start.
-        console.log(`[timing] ${mode}: quick start failed after ${Date.now() - startedAt}ms (${quick.model}): ${e && e.message ? e.message : String(e)}`);
+        // Words already shown stay the quick part, so the full solution goes
+        // below them in its own section instead of running on from a cut-off line.
+        quickPlan = String((e && e.partial) || '').trim();
+        console.log(`[timing] ${mode}: quick start failed after ${Date.now() - startedAt}ms (${quick.model})${quickPlan ? ', keeping the part shown' : ''}: ${e && e.message ? e.message : String(e)}`);
       }
       if (quickPlan) send('llm:section', { label: 'Full solution' });
     }
-    const fullBuilt = quickPlan
-      ? (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
-        transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), pages: imageDataUrls ? imageDataUrls.length : 1, quickPlan
-      })
-      : built;
+    const fullBuilt = quickPlan ? buildTurn({ quickPlan }) : built;
     let answer = '';
     try {
       answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');

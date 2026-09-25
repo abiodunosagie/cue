@@ -50,6 +50,41 @@ test('Anthropic gets one image block per page, in scroll order, before the reque
     ['Page 1 of 3:', 'AA', 'Page 2 of 3:', 'BB', 'Page 3 of 3:', 'CC', 'Solve it']);
 });
 
+test('Gemini gets each page as inline data after its label, after the request', async () => {
+  const path = require.resolve('@google/genai');
+  const saved = require.cache[path];
+  let sent = null;
+  require.cache[path] = {
+    id: path, filename: path, loaded: true,
+    exports: { GoogleGenAI: class {
+      constructor() {
+        this.models = { generateContentStream: async (request) => { sent = request; return (async function* () { yield { text: 'ok' }; })(); } };
+      }
+    } }
+  };
+  try {
+    const { _test } = require('../src/llm');
+    await _test.streamGemini({ apiKey: 'k', model: 'm', system: 's', turns: [{ role: 'user', text: 'Solve it' }], imageDataUrls: [png('AA'), png('BB')], maxTokens: 10, onToken: () => {} });
+  } finally {
+    if (saved) require.cache[path] = saved; else delete require.cache[path];
+  }
+  assert.deepEqual(sent.contents[0].parts.map((p) => p.text || p.inlineData.data), ['Solve it', 'Page 1 of 2:', 'AA', 'Page 2 of 2:', 'BB']);
+});
+
+test('Ollama gets every page in scroll order on the last user message', async () => {
+  const { _test } = require('../src/llm');
+  const realFetch = global.fetch;
+  let body = null;
+  // Record the request, then fail it: only the request shape matters here.
+  global.fetch = async (_url, init) => { body = JSON.parse(init.body); throw new Error('stop'); };
+  try {
+    await assert.rejects(_test.streamOllama({ apiKey: '', model: 'm', system: 's', turns: [{ role: 'user', text: 'Solve it' }], imageDataUrls: [png('AA'), png('BB')], maxTokens: 10, onToken: () => {} }), /stop/);
+  } finally {
+    global.fetch = realFetch;
+  }
+  assert.deepEqual(body.messages[1], { role: 'user', content: 'Solve it', images: ['AA', 'BB'] });
+});
+
 test('coding prompt: pages are one task read across screenshots; one page reads as before', () => {
   const one = MODES.leetcode.build({ pages: 1 });
   assert.match(one, /Solve the coding problem shown in the screenshot\.$/);

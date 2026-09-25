@@ -1638,7 +1638,6 @@
     const group = aiEl.parentNode;
     const quickEl = aiEl;
     finalizeAi();
-    quickEl.dataset.quick = '1';
     const pill = document.createElement('div');
     pill.className = 'prepared-pill section-pill';
     pill.textContent = label;

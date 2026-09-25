@@ -860,6 +860,8 @@ button:focus { outline: none; }
   align-self: flex-start;
   color: var(--live); font-size: 12px; font-weight: 600; margin: 8px 0 0;
 }
+/* "Full solution" under a quick start: a part label, not the green "Prepared" meaning. */
+.section-pill { color: var(--accent-hi); }
 .category-pill {
   align-self: flex-start;
   color: rgba(255,255,255,0.38); font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;

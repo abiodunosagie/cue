@@ -603,7 +603,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 }
 
 // Test-only hooks, kept apart from the real API.
-const _test = { resetFastMode: () => fastModePausedUntil.clear(), turnImages, openAIContent };
+const _test = { resetFastMode: () => fastModePausedUntil.clear(), turnImages, openAIContent, streamGemini, streamOllama };
 
 module.exports = {
   _test,
