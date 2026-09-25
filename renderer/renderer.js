@@ -1004,6 +1004,8 @@
   if (!isMac) {
     const hint = document.getElementById('long-question-hint');
     if (hint) hint.textContent = 'for Ctrl+H: keeps reading while you scroll a question taller than the screen, then solves it all. Ctrl+H again solves at once. Ctrl+Alt+Shift+L switches it';
+    const tabs = document.getElementById('question-tabs-note');
+    if (tabs) tabs.textContent = 'Questions with tabs (instructions, tests, the file to edit): open each tab and press Ctrl+Alt+Shift+G to add it, or Ctrl+H on each one. Every Ctrl+H solves with all the tabs added so far. Press Ctrl+Alt+Shift+N when you move to the next question.';
   }
   function showLongQuestion(on) {
     document.querySelectorAll('#long-question-seg button').forEach((button) => {

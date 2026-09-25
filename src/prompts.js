@@ -232,9 +232,10 @@ const MODES = {
         'An import or name that cannot be found usually means the file or class was never created: then the fix is to create it, with the whole file in a fenced block ' +
         'and its full path, never only another import line.\n' +
         '**Issues:** every real problem in the visible code that would stop it compiling or working (a typo, a missing or wrong import, a wrong name, a file that was never created, ' +
-        'a missing bracket, a logic slip, code that does not match the plan), each as one plain sentence naming the line, then the corrected lines in a fenced block ' +
+        'a missing bracket, a logic slip, code that does not match the plan), each as one plain sentence naming the file and line, then the corrected lines (saying which lines they replace) in a fenced block ' +
         'tagged with the language, then **Say:** one sentence the candidate can say while fixing it. When there is nothing wrong, write "None, it looks right." and nothing else here.\n' +
-        '**Next:** the next step of the plan to write, exactly as the plan gives it (its heading, its code blocks and their Say lines), adjusted to fit what is on screen. ' +
+        '**Next:** the next step of the plan to write, exactly as the plan gives it (its heading, its code blocks and their Say lines), adjusted to fit what is on screen, ' +
+        'starting with where it goes: the file as shown on screen and the spot in it (below which line or function, or which lines it replaces). ' +
         'When every step is done, say so and give the plan\'s Run it instead.\n\n' +
         'Never invent problems to have something to say. Code goes only inside fenced blocks, never in inline backticks. No markdown headings.',
         aiRules, 'checkProgress');
@@ -399,6 +400,10 @@ const MODES = {
         'Read everything visible before answering: the instructions, the starter code, the test file and any error or test output. ' +
         'The tests are the specification: the solution must make every visible test pass. ' +
         'Use the exact language, framework and file names shown on screen, else Python. Keep the starter code\'s imports, exports and names. ' +
+        'Always say WHERE each piece of code goes, so the candidate never has to ask: the tab or file by the name shown on screen (or the full path of a new file to create), ' +
+        'and the exact spot in it, using what is visible: "replace the body of function X", "replace lines 12 to 18", "add below line 7, the line that starts with ...", ' +
+        'or "the whole file, replacing what is there". When the platform has its own Run or Run tests button, or a test command in the instructions, name exactly that. ' +
+        'Never assume the candidate knows where an answer belongs.\n\n' +
         'Get it right first time: think through edge cases and check the code for syntax errors before answering.\n\n' +
         'Write for a candidate who may be new to this kind of problem and must type the solution while talking: plain words, short sentences, ' +
         'and when a technical term is needed (sort, loop, hash map, recursion), say in a few words what it does.\n\n' +
@@ -409,7 +414,8 @@ const MODES = {
         '• SMALL TASK (a single function or algorithm problem), in this order:\n' +
         '  **What it asks:** one plain sentence, using the first example to show what goes in and what comes out.\n' +
         '  **The idea:** two or three plain sentences explaining how to solve it, as if to someone who has never seen it, using the example.\n' +
-        '  Then 3 to 6 steps the candidate types one at a time. Each step is a line **Step N: what to type and why, in one plain sentence**, ' +
+        '  **Where it goes:** one plain sentence naming the tab or file and the function or lines to replace, as shown on screen.\n' +
+        '  Then 3 to 6 steps the candidate types one at a time. Each step is a line **Step N: where it goes (the file and the spot in it), what to type and why, in one plain sentence**, ' +
         'then only that step\'s lines in their own fenced block tagged with its language, then one **Say:** line.\n' +
         '  **Check it on the example:** walk the first example through the code in 2 to 4 short plain sentences (no code block), showing the values as they change, so the candidate can say it aloud.\n' +
         '  **Full code to paste:** the complete file in ONE fenced block tagged with its language, identical to the steps put together, ' +
@@ -418,7 +424,7 @@ const MODES = {
         '  **Run it:** a short fenced block tagged with its language, holding only a main function (or the language\'s usual entry point) ' +
         'that calls the solution on the examples on screen and prints each result, with the expected output as a comment on each line. ' +
         'Say to paste it below the full code in the same file. ' +
-        'Then one plain sentence on where to run it: the interview\'s own Run button when there is one, else the exact command ' +
+        'Then one plain sentence on where to run it and which visible tests should now pass: the interview\'s own Run or Run tests button when there is one, else the exact command ' +
         '(for example dart run main.dart, python3 main.py, node main.js) or an online playground such as DartPad for Dart.\n' +
         '• DESIGN TASK (architecture, system design, "brainstorm solutions", little or no code to write): 2 or 3 clarifying questions to ask first, ' +
         'then the design in layers (UI, state, data and sync, services) with why each exists, two real trade-offs with the option you pick and why, ' +
@@ -453,7 +459,7 @@ const MODES = {
       const earlier = prior.length
         ? 'Earlier solves in this session, oldest first, for context only:\n\n' + prior.map((p, i) => '--- Solve ' + (i + 1) + ' ---\n' + p).join('\n\n') + '\n\n'
         : '';
-      const pages = pagesNote(ctx && ctx.pages);
+      const pages = pagesNote(ctx && ctx.pages, ctx && ctx.views);
       if (ctx && ctx.quickStart === 'plan') return earlier + architectureNote(ctx.architecture) + pages + QUICK_START_REQUEST + solveRequest(ctx.pages);
       const quick = ctx && ctx.quickPlan ? continuationRequest(ctx.quickPlan) : '';
       return earlier + architectureNote(ctx && ctx.architecture) + quick + pages + solveRequest(ctx && ctx.pages);
@@ -501,14 +507,22 @@ const MODES = {
 const QUICK_START_REQUEST =
   'QUICK START: write only the first part of the format, and keep it short, so the candidate can start within seconds. ' +
   'A stronger model continues right after you, so stop where this says and never write the rest.\n' +
-  '• SMALL TASK: only **What it asks:** and **The idea:**, then one **Say:** line.\n' +
+  '• SMALL TASK: only **What it asks:**, **The idea:** and **Where it goes:**, then one **Say:** line.\n' +
   '• BUILD TASK: only **What it asks:** (one sentence), **Folders and files:** (the tree and its Say line) and **Files to create:**. No steps and no code files.\n' +
   '• DESIGN TASK: only the clarifying questions, then a short outline of the layers with one Say line.\n';
 
-// A long question read while the candidate scrolled (src/scroll-reader.js):
-// the pages overlap, and must be read as one task, not several.
-function pagesNote(pages) {
+// A long question read while the candidate scrolled (src/scroll-reader.js),
+// or several views of one question gathered across its tabs
+// (src/question-bundle.js): all of it is one task, not several.
+function pagesNote(pages, views) {
   if (!(pages > 1)) return '';
+  if (views > 1) {
+    return 'The task comes as ' + pages + ' screenshots in ' + views + ' views of the SAME question, labelled "View N of ' + views + '": ' +
+      'the candidate showed you its parts one at a time, often separate tabs such as the instructions, the tests and the file to edit. ' +
+      'Pages of one view are one tab scrolled from top to bottom and may overlap at the edges. Read everything together as one task: ' +
+      'the instructions say what to build, the tests are the specification, and the file to edit (with its line numbers) is where the answer goes. ' +
+      'The screens marked "on screen now" are what the candidate sees at this moment, so they show the newest state of that tab.\n\n';
+  }
   return 'The task is taller than the screen, so it comes as ' + pages + ' screenshots of the same page, in scroll order, top first. ' +
     'Next pages overlap: text repeated at the edges is the same text, not new. Read them together as one task, ' +
     'and use the details from every page (constraints, examples and tests are often at the bottom).\n\n';

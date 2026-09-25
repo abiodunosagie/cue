@@ -201,13 +201,18 @@ function stripDataUrl(dataUrl) {
 }
 
 // The screenshots for the last user turn, in order: imageDataUrls (the pages
-// of a long question, in scroll order) or the single imageDataUrl. Each is
+// of a long question in scroll order, or the screens of a gathered question)
+// or the single imageDataUrl. An entry is a data URL, or { url, label } when
+// the caller names it ("View 2 of 3, page 1 of 2"). Each result is
 // { url, mime, b64, label }; label names the page when there is more than one.
 function turnImages(imageDataUrl, imageDataUrls) {
-  const urls = (Array.isArray(imageDataUrls) && imageDataUrls.length ? imageDataUrls : [imageDataUrl]).filter(Boolean);
-  return urls.map((url, i) => {
+  const entries = (Array.isArray(imageDataUrls) && imageDataUrls.length ? imageDataUrls : [imageDataUrl]).filter(Boolean);
+  return entries.map((entry, i) => {
+    const url = typeof entry === 'string' ? entry : entry.url;
     const img = stripDataUrl(url);
-    return img && { url, ...img, label: urls.length > 1 ? `Page ${i + 1} of ${urls.length}:` : '' };
+    const named = typeof entry === 'object' && entry.label;
+    const label = named ? entry.label + ':' : entries.length > 1 ? `Page ${i + 1} of ${entries.length}:` : '';
+    return img && { url, ...img, label };
   }).filter(Boolean);
 }
 

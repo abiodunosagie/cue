@@ -7,6 +7,7 @@ const readingTracker = require('./renderer/reading-tracker');
 const { isExplainRequest, isFixRequest } = require('./renderer/spoken-question');
 const { captureScreenshot, captureMaskedScreen, captureMaskedPage, encodeScreenshot, MAX_DATA_URL_BYTES } = require('./src/screen');
 const { readScrollPages, fitPages } = require('./src/scroll-reader');
+const { createQuestionBundle } = require('./src/question-bundle');
 const { nudge } = require('./src/window-move');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
@@ -217,6 +218,7 @@ if (fs.existsSync(PRACTICE_MARKER)) {
 function clearInterview() {
   transcript.splice(0, transcript.length);
   followUps.clear();
+  questionBundle.clear();
   return interviewMemory.clear();
 }
 
@@ -744,20 +746,88 @@ function priorSolvesFor(def, mode) {
 // keeps reading while the candidate scrolls, and Cmd+H again solves at once.
 let scrollReader = null;
 const cmdH = isMac ? '⌘H' : 'Ctrl+H';
+const noMouseKey = (letter) => (isMac ? 'Ctrl+Option+⌘' : 'Ctrl+Alt+Shift+') + letter;
 
-async function readLongQuestion(startedAt) {
+// The coding question in front of the candidate, across its tabs: every view
+// read by Cmd+H or by the gather key, until Next question (src/question-bundle.js).
+const questionBundle = createQuestionBundle();
+let gathering = false;
+
+// The screens of one view, unencoded ({ thumb, image }): read while the
+// candidate scrolls when Long questions is on, else the screen as it is.
+// `purpose` only words the status line: a solve, or a gather.
+async function readView(startedAt, purpose) {
+  const capture = () => captureMaskedPage(cueWindowBounds(), { keepPanel: true });
+  if (!store.getSettings().longQuestion) {
+    const shot = await capture();
+    return shot ? [shot] : [];
+  }
+  const finishes = purpose === 'gather' ? 'stops reading' : 'solves now';
   const reader = readScrollPages({
-    capture: () => captureMaskedPage(cueWindowBounds(), { keepPanel: true }),
+    capture,
     onPage: (count) => send('status', { message: count === 1
-      ? `Reading the question. Scroll down to the end, then stop; ${cmdH} solves now.`
-      : `Page ${count} read. Keep scrolling, or stop; ${cmdH} solves now.` })
+      ? `Reading this view. Scroll down to the end, then stop; ${cmdH} ${finishes}.`
+      : `Page ${count} read. Keep scrolling, or stop; ${cmdH} ${finishes}.` })
   });
   scrollReader = reader;
   let pages;
   try { pages = await reader.done; } finally { scrollReader = null; }
-  console.log(`[timing] leetcode: ${pages.length} page${pages.length === 1 ? '' : 's'} read after ${Date.now() - startedAt}ms`);
-  if (pages.length > 1) send('status', { message: `Read ${pages.length} pages. Solving the whole question.` });
-  return fitPages(pages.map((p) => p.image), encodeScreenshot, MAX_DATA_URL_BYTES);
+  console.log(`[timing] ${purpose}: ${pages.length} page${pages.length === 1 ? '' : 's'} read after ${Date.now() - startedAt}ms`);
+  return pages;
+}
+
+// The images for a Cmd+H solve: this view added to the question bundle, then
+// every gathered screen, labelled, sized together to fit one request. With
+// only one screen it is a plain screenshot, as before.
+async function solveScreens(startedAt) {
+  const pages = await readView(startedAt, 'leetcode');
+  if (!pages.length) throw new Error('No screen source was available.');
+  const added = questionBundle.add(pages);
+  // A full bundle keeps what it has; the screen now still goes to the model.
+  const screens = added.ok ? questionBundle.labelled()
+    : [...questionBundle.labelled(), ...pages.map((p, i) => ({ image: p.image, label: 'On screen now' + (pages.length > 1 ? `, page ${i + 1} of ${pages.length}` : '') }))];
+  const urls = fitPages(screens.map((x) => x.image), encodeScreenshot, MAX_DATA_URL_BYTES);
+  const views = added.ok ? questionBundle.viewCount() : questionBundle.viewCount() + 1;
+  if (!added.ok) send('status', { message: `This question already holds ${questionBundle.count()} screens, the most cue keeps. Solving with them and the screen now; ${noMouseKey('N')} starts a new question.` });
+  else if (views > 1) send('status', { message: `Solving with ${views} views (${screens.length} screens) of this question.` });
+  else if (urls.length > 1) send('status', { message: `Read ${urls.length} pages. Solving the whole question.` });
+  return { urls: urls.map((url, i) => ({ url, label: screens[i].label })), views };
+}
+
+// Gather key: read this view into the question bundle without solving, so the
+// next Cmd+H knows every tab (instructions, tests, the file to edit).
+async function gatherView() {
+  if (scrollReader || gathering) return;
+  gathering = true;
+  try {
+    const pages = await readView(Date.now(), 'gather');
+    if (!pages.length) throw new Error('No screen source was available.');
+    const added = questionBundle.add(pages);
+    send('status', { message: added.ok
+      ? `Gathered: ${questionBundle.viewCount()} view${questionBundle.viewCount() === 1 ? '' : 's'}, ${questionBundle.count()} screen${questionBundle.count() === 1 ? '' : 's'}. ${cmdH} solves with all of them; ${noMouseKey('N')} starts a new question.`
+      : `This question already holds ${questionBundle.count()} screens, the most cue keeps. ${cmdH} solves with them; ${noMouseKey('N')} starts a new question.` });
+  } catch (e) {
+    recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame: 'gatherView', context: {} });
+    send('status', { message: captureFailedMessage() });
+  } finally {
+    gathering = false;
+  }
+}
+
+// Next question: the gathered screens and the earlier coding solves belong to
+// the last question, so none of them reach the next solve.
+function nextQuestion() {
+  questionBundle.clear();
+  interviewMemory.markNewQuestion();
+  send('status', { message: `New question. The last question's screens and code are forgotten; ${cmdH} or ${noMouseKey('G')} starts reading this one.` });
+}
+
+function captureFailedMessage() {
+  return process.platform === 'darwin'
+    ? 'Screen capture needs permission. Grant Screen Recording to cue in System Settings.'
+    : process.platform === 'win32'
+      ? 'Screen capture failed. Make sure cue is not blocked by Windows privacy or security software, then try again.'
+      : 'Screen capture failed. Check your desktop capture permissions, then try again.';
 }
 
 function toggleLongQuestion() {
@@ -858,13 +928,17 @@ async function runFeature(mode, userText, options = {}) {
     }
 
     let imageDataUrl = options.imageDataUrl || null;
-    let imageDataUrls = null; // the pages of a long question, in scroll order
+    // Several screens, each { url, label }: the pages of a long question, or
+    // every view gathered for this question (Cmd+H only).
+    let imageDataUrls = null;
+    let views = 1;
     if (def.needsScreen && !imageDataUrl) {
       try {
-        if (mode === 'leetcode' && settings.longQuestion) {
-          const pages = await readLongQuestion(startedAt);
-          if (pages.length > 1) imageDataUrls = pages;
-          else imageDataUrl = pages[0] || null;
+        if (mode === 'leetcode') {
+          const screens = await solveScreens(startedAt);
+          views = screens.views;
+          if (screens.urls.length > 1) imageDataUrls = screens.urls;
+          else imageDataUrl = screens.urls[0].url;
         } else {
           imageDataUrl = await captureScreenshot();
         }
@@ -872,12 +946,7 @@ async function runFeature(mode, userText, options = {}) {
       }
       catch (e) {
         recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame: 'captureScreenshot', context: { mode } });
-        const message = process.platform === 'darwin'
-          ? 'Screen capture needs permission — grant Screen Recording to cue in System Settings.'
-          : process.platform === 'win32'
-            ? 'Screen capture failed. Make sure cue is not blocked by Windows privacy or security software, then try again.'
-            : 'Screen capture failed. Check your desktop capture permissions, then try again.';
-        send('status', { message });
+        send('status', { message: captureFailedMessage() });
       }
     }
 
@@ -901,7 +970,8 @@ async function runFeature(mode, userText, options = {}) {
       answers: mode === 'report' ? interviewMemory.answers() : [],
       architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode),
-      pages: imageDataUrls ? imageDataUrls.length : 1
+      pages: imageDataUrls ? imageDataUrls.length : 1,
+      views
     };
     const buildTurn = (extra) => (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') +
       def.build({ ...buildArgs, ...extra }) +
@@ -1390,6 +1460,10 @@ function registerShortcuts() {
   shortcutState.fixCode = globalShortcut.register(moveMods + 'F', () => runFeature('fixCode', ''));
   // L for long question: Cmd+H reads a question taller than the screen while you scroll.
   shortcutState.longQuestion = globalShortcut.register(moveMods + 'L', toggleLongQuestion);
+  // G for gather: add this tab of the question without solving. N for next
+  // question: forget the last question's screens and code.
+  shortcutState.gather = globalShortcut.register(moveMods + 'G', gatherView);
+  shortcutState.nextQuestion = globalShortcut.register(moveMods + 'N', nextQuestion);
   // C for check: what is done on screen, anything wrong, and the next step.
   shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {
@@ -1587,7 +1661,7 @@ function cueWindowBounds() {
 const SCREEN_RECENT_MS = 90000;
 const SCREEN_DETECT_TIMEOUT_MS = 15000;
 const screenWatcher = createScreenWatcher({
-  isActive: () => state.capturing && !state.busy && !practice.isActive() && !!store.getSettings().watchScreen && !!win && !win.isDestroyed(),
+  isActive: () => state.capturing && !state.busy && !gathering && !practice.isActive() && !!store.getSettings().watchScreen && !!win && !win.isDestroyed(),
   capture: () => captureMaskedScreen(cueWindowBounds()),
   detect: async (dataUrl) => {
     const fast = createLLM({ ...store.getSettings(), smart: false });

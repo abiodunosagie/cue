@@ -96,7 +96,9 @@ const PAGE_STEPS = [
   { maxLongEdge: 1568, quality: 70 },
   { maxLongEdge: 1568, quality: 55 },
   { maxLongEdge: 1280, quality: 55 },
-  { maxLongEdge: 1024, quality: 50 }
+  { maxLongEdge: 1024, quality: 50 },
+  // A gathered question can hold up to 24 screens (src/question-bundle.js).
+  { maxLongEdge: 800, quality: 45 }
 ];
 
 function fitPages(images, encode, budget) {

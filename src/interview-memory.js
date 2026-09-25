@@ -124,17 +124,26 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     return parts.join('\n\n');
   }
 
-  // The last few coding solves, so a task spread over several screens or files
-  // builds on what was already worked out.
+  // Next question (Ctrl+Option+Cmd+N): coding solves from before it are
+  // another task, so they stop reaching coding prompts. The interview record
+  // itself is kept (the report still covers the whole interview).
+  function markNewQuestion() {
+    record.questionStartedAt = now();
+    touch();
+  }
+  const sinceQuestion = (a) => !record.questionStartedAt || a.ts >= record.questionStartedAt;
+
+  // The last few coding solves of this question, so a task spread over several
+  // screens or files builds on what was already worked out.
   function codingHistory({ count = CODING_HISTORY_COUNT, maxChars = CODING_HISTORY_CHARS } = {}) {
-    return record.answers.filter((a) => a.mode === 'leetcode').slice(-count).map((a) => a.text.slice(0, maxChars));
+    return record.answers.filter((a) => a.mode === 'leetcode' && sinceQuestion(a)).slice(-count).map((a) => a.text.slice(0, maxChars));
   }
 
   // The newest coding solve, when it is among the last few answers: explaining
   // "your code" only makes sense while the coding round is still going.
   function recentCodingSolve({ withinAnswers = 4, maxChars = MAX_CODING_ANSWER_CHARS } = {}) {
     // Explaining the code is still the coding round, so it does not count toward the window.
-    const recent = record.answers.filter((a) => a.mode !== 'explainCode').slice(-withinAnswers);
+    const recent = record.answers.filter((a) => a.mode !== 'explainCode' && sinceQuestion(a)).slice(-withinAnswers);
     for (let i = recent.length - 1; i >= 0; i--) {
       if (recent[i].mode === 'leetcode') return recent[i].text.slice(0, maxChars);
     }
@@ -150,6 +159,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     flush,
     digest,
     codingHistory,
+    markNewQuestion,
     generation() { return generation; },
     turns() { return record.turns.slice(); },
     answers() { return record.answers.slice(); },
