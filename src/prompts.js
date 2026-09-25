@@ -395,7 +395,7 @@ const MODES = {
     buildSystem(_contextBlock, _aiRules) {
       // Context block AND aiRules intentionally ignored — code answers must
       // stay strict regardless of personal style or context.
-      return 'You are a principal engineer coaching a candidate through a live coding interview. The screenshot shows the task, often in an online IDE. ' +
+      return 'You are a principal engineer coaching a candidate through a live coding interview. The screenshot shows the task, often in an online IDE; a task taller than the screen comes as several screenshots, one per page. ' +
         'Read everything visible before answering: the instructions, the starter code, the test file and any error or test output. ' +
         'The tests are the specification: the solution must make every visible test pass. ' +
         'Use the exact language, framework and file names shown on screen, else Python. Keep the starter code\'s imports, exports and names. ' +
@@ -453,9 +453,10 @@ const MODES = {
       const earlier = prior.length
         ? 'Earlier solves in this session, oldest first, for context only:\n\n' + prior.map((p, i) => '--- Solve ' + (i + 1) + ' ---\n' + p).join('\n\n') + '\n\n'
         : '';
-      if (ctx && ctx.quickStart === 'plan') return earlier + architectureNote(ctx.architecture) + QUICK_START_REQUEST;
+      const pages = pagesNote(ctx && ctx.pages);
+      if (ctx && ctx.quickStart === 'plan') return earlier + architectureNote(ctx.architecture) + pages + QUICK_START_REQUEST + solveRequest(ctx.pages);
       const quick = ctx && ctx.quickPlan ? continuationRequest(ctx.quickPlan) : '';
-      return earlier + architectureNote(ctx && ctx.architecture) + quick + 'Solve the coding problem shown in the screenshot.';
+      return earlier + architectureNote(ctx && ctx.architecture) + quick + pages + solveRequest(ctx && ctx.pages);
     }
   },
 
@@ -502,8 +503,20 @@ const QUICK_START_REQUEST =
   'A stronger model continues right after you, so stop where this says and never write the rest.\n' +
   '• SMALL TASK: only **What it asks:** and **The idea:**, then one **Say:** line.\n' +
   '• BUILD TASK: only **What it asks:** (one sentence), **Folders and files:** (the tree and its Say line) and **Files to create:**. No steps and no code files.\n' +
-  '• DESIGN TASK: only the clarifying questions, then a short outline of the layers with one Say line.\n' +
-  'Solve the coding problem shown in the screenshot.';
+  '• DESIGN TASK: only the clarifying questions, then a short outline of the layers with one Say line.\n';
+
+// A long question read while the candidate scrolled (src/scroll-reader.js):
+// the pages overlap, and must be read as one task, not several.
+function pagesNote(pages) {
+  if (!(pages > 1)) return '';
+  return 'The task is taller than the screen, so it comes as ' + pages + ' screenshots of the same page, in scroll order, top first. ' +
+    'Next pages overlap: text repeated at the edges is the same text, not new. Read them together as one task, ' +
+    'and use the details from every page (constraints, examples and tests are often at the bottom).\n\n';
+}
+
+function solveRequest(pages) {
+  return pages > 1 ? 'Solve the coding problem shown across these screenshots.' : 'Solve the coding problem shown in the screenshot.';
+}
 
 function continuationRequest(quickPlan) {
   return 'The candidate already has this quick start on screen, written by a faster model, and may be reading it aloud:\n' +

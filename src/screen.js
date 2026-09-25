@@ -49,6 +49,15 @@ async function captureScreenshot() {
 // own window (maskBounds, screen points) blacked out, plus a tiny bitmap of the
 // same masked image for the change check.
 async function captureMaskedScreen(maskBounds) {
+  const shot = await captureMaskedPage(maskBounds);
+  return shot && { thumb: shot.thumb, dataUrl: encodeScreenshot(shot.image) };
+}
+
+// The same capture, left unencoded: long question reading takes one every tick
+// and encodes only the pages it keeps (src/scroll-reader.js). keepPanel: the
+// image keeps what is under cue's panel, like a Cmd+H screenshot, and only the
+// change-check thumb is masked (the panel's status line changes every page).
+async function captureMaskedPage(maskBounds, { keepPanel = false } = {}) {
   const primary = screen.getPrimaryDisplay();
   const { width, height } = primary.size;
   const scale = Math.min(1, MAX_LONG_EDGE_PX / Math.max(width, height));
@@ -60,18 +69,19 @@ async function captureMaskedScreen(maskBounds) {
   const src = sources.find((s) => String(s.display_id) === String(primary.id)) || sources[0];
   const img = src.thumbnail;
   if (!img || img.isEmpty()) return null;
-  return maskAndEncode(img, maskBounds, primary.bounds);
+  const masked = maskImage(img, maskBounds, primary.bounds);
+  return keepPanel ? { thumb: masked.thumb, image: img } : masked;
 }
 
 // Black out maskBounds (screen points, on a display at displayBounds) in img,
-// then return the tiny change-check bitmap and the JPEG for the model.
-function maskAndEncode(img, maskBounds, displayBounds) {
+// then return the masked image and its tiny change-check bitmap.
+function maskImage(img, maskBounds, displayBounds) {
   const size = img.getSize();
   const bitmap = img.toBitmap();
   maskRect(bitmap, size.width, size.height, scaleRect(maskBounds, displayBounds, size.width, size.height));
   const masked = nativeImage.createFromBitmap(bitmap, { width: size.width, height: size.height });
   const thumb = masked.resize({ width: THUMB_WIDTH, height: THUMB_HEIGHT, quality: 'good' }).toBitmap();
-  return { thumb, dataUrl: encodeScreenshot(masked) };
+  return { thumb, image: masked };
 }
 
-module.exports = { captureScreenshot, captureMaskedScreen, maskAndEncode, encodeScreenshot, MAX_LONG_EDGE_PX, JPEG_QUALITY, MAX_DATA_URL_BYTES };
+module.exports = { captureScreenshot, captureMaskedScreen, captureMaskedPage, encodeScreenshot, MAX_LONG_EDGE_PX, JPEG_QUALITY, MAX_DATA_URL_BYTES };

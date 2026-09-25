@@ -999,6 +999,26 @@
     showLength(answerLength, true);
   });
 
+  // Long questions: the Settings switch, and Ctrl+Option+Cmd+L in main, which
+  // reports back here so a later Settings save keeps what the key set.
+  if (!isMac) {
+    const hint = document.getElementById('long-question-hint');
+    if (hint) hint.textContent = 'for Ctrl+H: keeps reading while you scroll a question taller than the screen, then solves it all. Ctrl+H again solves at once. Ctrl+Alt+Shift+L switches it';
+  }
+  function showLongQuestion(on) {
+    document.querySelectorAll('#long-question-seg button').forEach((button) => {
+      button.classList.toggle('on', (button.dataset.longQuestion === 'on') === on);
+    });
+  }
+  cue.on('longQuestion:changed', ({ longQuestion }) => {
+    if (settings) settings.longQuestion = longQuestion;
+    showLongQuestion(longQuestion);
+    const solve = isWindows ? 'Ctrl+H' : '⌘H';
+    showToast(longQuestion
+      ? 'Long question on: ' + solve + ' reads while you scroll, ' + solve + ' again solves'
+      : 'Long question off: ' + solve + ' reads one screen', 2600);
+  });
+
   // Hide / collapse
   function toggleHide() {
     const collapsed = $('#panel').classList.toggle('collapsed');
@@ -1704,6 +1724,8 @@
   }
   cue.on('status', ({ message }) => {
     cue.log('[status] ' + message);
+    // Long question reading reports each page here before any token comes.
+    if (busy) armBusyFailsafe();
     showStatus(message);
     if (sttState !== 'disconnected') {
       const lower = message.toLowerCase();
@@ -1969,6 +1991,7 @@
     document.querySelectorAll('#quick-start-seg button').forEach((button) => {
       button.classList.toggle('on', button.dataset.quickStart === (settings.codingQuickStart === false ? 'off' : 'on'));
     });
+    showLongQuestion(!!settings.longQuestion);
     const localWhisper = settings.localWhisper || { modelId: 'base.en', language: 'auto', threads: 0 };
     $('#whisper-language').value = localWhisper.language || 'auto';
     $('#whisper-threads').value = Number(localWhisper.threads) || 0;
@@ -2287,6 +2310,11 @@
   document.querySelectorAll('#quick-start-seg button').forEach((button) => button.addEventListener('click', () => {
     settings.codingQuickStart = button.dataset.quickStart === 'on';
     document.querySelectorAll('#quick-start-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
+  }));
+
+  document.querySelectorAll('#long-question-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.longQuestion = button.dataset.longQuestion === 'on';
+    showLongQuestion(settings.longQuestion);
   }));
 
   document.querySelectorAll('#coding-speed-seg button').forEach((button) => button.addEventListener('click', () => {

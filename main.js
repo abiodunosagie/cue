@@ -5,7 +5,8 @@ const os = require('os');
 const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
 const { isExplainRequest, isFixRequest } = require('./renderer/spoken-question');
-const { captureScreenshot, captureMaskedScreen } = require('./src/screen');
+const { captureScreenshot, captureMaskedScreen, captureMaskedPage, encodeScreenshot, MAX_DATA_URL_BYTES } = require('./src/screen');
+const { readScrollPages, fitPages } = require('./src/scroll-reader');
 const { nudge } = require('./src/window-move');
 const { createScreenWatcher, DETECT_SYSTEM } = require('./src/screen-watch');
 const { synthesize } = require('./src/practice');
@@ -735,6 +736,32 @@ function priorSolvesFor(def, mode) {
   return [];
 }
 
+// Long question reading (Settings > Answer style, or Ctrl+Option+Cmd+L): Cmd+H
+// keeps reading while the candidate scrolls, and Cmd+H again solves at once.
+let scrollReader = null;
+const cmdH = isMac ? '⌘H' : 'Ctrl+H';
+
+async function readLongQuestion(startedAt) {
+  const reader = readScrollPages({
+    capture: () => captureMaskedPage(cueWindowBounds(), { keepPanel: true }),
+    onPage: (count) => send('status', { message: count === 1
+      ? `Reading the question. Scroll down to the end, then stop; ${cmdH} solves now.`
+      : `Page ${count} read. Keep scrolling, or stop; ${cmdH} solves now.` })
+  });
+  scrollReader = reader;
+  let pages;
+  try { pages = await reader.done; } finally { scrollReader = null; }
+  console.log(`[timing] leetcode: ${pages.length} page${pages.length === 1 ? '' : 's'} read after ${Date.now() - startedAt}ms`);
+  if (pages.length > 1) send('status', { message: `Read ${pages.length} pages. Solving the whole question.` });
+  return fitPages(pages.map((p) => p.image), encodeScreenshot, MAX_DATA_URL_BYTES);
+}
+
+function toggleLongQuestion() {
+  const longQuestion = !store.getSettings().longQuestion;
+  store.setSettings({ longQuestion });
+  send('longQuestion:changed', { longQuestion });
+}
+
 // options.imageDataUrl: a screenshot already taken (the screen watcher's, with
 // cue's own panel blacked out), used instead of a fresh capture.
 async function runFeature(mode, userText, options = {}) {
@@ -827,10 +854,17 @@ async function runFeature(mode, userText, options = {}) {
     }
 
     let imageDataUrl = options.imageDataUrl || null;
+    let imageDataUrls = null; // the pages of a long question, in scroll order
     if (def.needsScreen && !imageDataUrl) {
       try {
-        imageDataUrl = await captureScreenshot();
-        if (!imageDataUrl) throw new Error('No screen source was available.');
+        if (mode === 'leetcode' && settings.longQuestion) {
+          const pages = await readLongQuestion(startedAt);
+          if (pages.length > 1) imageDataUrls = pages;
+          else imageDataUrl = pages[0] || null;
+        } else {
+          imageDataUrl = await captureScreenshot();
+        }
+        if (!imageDataUrl && !imageDataUrls) throw new Error('No screen source was available.');
       }
       catch (e) {
         recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame: 'captureScreenshot', context: { mode } });
@@ -860,7 +894,8 @@ async function runFeature(mode, userText, options = {}) {
       userText: userText || '',
       answers: mode === 'report' ? interviewMemory.answers() : [],
       architecture: settingsForPrompt.codeArchitecture,
-      priorSolves: priorSolvesFor(def, mode)
+      priorSolves: priorSolvesFor(def, mode),
+      pages: imageDataUrls ? imageDataUrls.length : 1
     }) + (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
     // The continuation starts after a space so the two read as one paragraph.
     if (opener) send('llm:token', { text: ' ' });
@@ -890,6 +925,7 @@ async function runFeature(mode, userText, options = {}) {
             system: streamSystem,
             turns: [{ role: 'user', text: userTurn }],
             imageDataUrl,
+            imageDataUrls,
             onToken: (t) => {
               if (!live()) return;
               if (!streamedAny && stage) console.log(`[timing] ${mode}: ${stage} first word after ${Date.now() - startedAt}ms (${streamLlm.model})`);
@@ -919,7 +955,7 @@ async function runFeature(mode, userText, options = {}) {
     let quickPlan = '';
     const quick = quickStartLlm(mode, settings, llm);
     if (quick) {
-      const quickBuilt = def.build({ transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), quickStart: 'plan' });
+      const quickBuilt = def.build({ transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), pages: imageDataUrls ? imageDataUrls.length : 1, quickStart: 'plan' });
       try {
         quickPlan = (await runStream(quick, system, quickBuilt, 'quick start')).trim();
       } catch (e) {
@@ -930,7 +966,7 @@ async function runFeature(mode, userText, options = {}) {
     }
     const fullBuilt = quickPlan
       ? (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') + def.build({
-        transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), quickPlan
+        transcript, userText: userText || '', architecture: settingsForPrompt.codeArchitecture, priorSolves: priorSolvesFor(def, mode), pages: imageDataUrls ? imageDataUrls.length : 1, quickPlan
       })
       : built;
     let answer = '';
@@ -1311,7 +1347,8 @@ function cycleAnswerLength() {
 function registerShortcuts() {
   shortcutState.assist = globalShortcut.register('CommandOrControl+Return', () => runFeature('assist', ''));
   shortcutState.say = globalShortcut.register('CommandOrControl+Shift+Return', () => runFeature('say', ''));
-  shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => runFeature('leetcode', ''));
+  // While a long question is being read, Cmd+H again stops reading and solves.
+  shortcutState.leetcode = globalShortcut.register('CommandOrControl+H', () => (scrollReader ? scrollReader.finish() : runFeature('leetcode', '')));
   shortcutState.hide = globalShortcut.register('CommandOrControl+Shift+/', () => send('hide:toggle', {}));
   // H for hide, next to Cmd+H for solve: easier to remember than Cmd+Shift+/,
   // which stays for anyone already used to it. Both do the same thing.
@@ -1335,6 +1372,8 @@ function registerShortcuts() {
   shortcutState.copyCode = globalShortcut.register(moveMods + 'C', () => send('code:copy'));
   // F for fix: read the error on screen and give the fixed file at once.
   shortcutState.fixCode = globalShortcut.register(moveMods + 'F', () => runFeature('fixCode', ''));
+  // L for long question: Cmd+H reads a question taller than the screen while you scroll.
+  shortcutState.longQuestion = globalShortcut.register(moveMods + 'L', toggleLongQuestion);
   // C for check: what is done on screen, anything wrong, and the next step.
   shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {

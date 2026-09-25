@@ -1,0 +1,65 @@
+// Long questions: the pages read while scrolling reach every provider in
+// scroll order, and the coding prompt reads them as one task.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { MODES } = require('../src/prompts');
+
+const png = (b64) => 'data:image/jpeg;base64,' + b64;
+
+test('turnImages: the pages in order with labels, or one unlabeled screenshot', () => {
+  const { _test } = require('../src/llm');
+  const pages = _test.turnImages(null, [png('AA'), png('BB')]);
+  assert.deepEqual(pages.map((p) => [p.b64, p.label]), [['AA', 'Page 1 of 2:'], ['BB', 'Page 2 of 2:']]);
+  const one = _test.turnImages(png('CC'), null);
+  assert.deepEqual(one.map((p) => [p.b64, p.mime, p.label]), [['CC', 'image/jpeg', '']]);
+  assert.deepEqual(_test.turnImages(null, []), []);
+  assert.deepEqual(_test.turnImages('not a data url', null), []);
+});
+
+test('OpenAI-style content: the request, then each page after its label', () => {
+  const { _test } = require('../src/llm');
+  const parts = _test.openAIContent('Solve it', _test.turnImages(null, [png('AA'), png('BB')]));
+  assert.deepEqual(parts.map((p) => p.type === 'text' ? p.text : p.image_url.url), ['Solve it', 'Page 1 of 2:', png('AA'), 'Page 2 of 2:', png('BB')]);
+});
+
+test('Anthropic gets one image block per page, in scroll order, before the request', async () => {
+  const path = require.resolve('@anthropic-ai/sdk');
+  const saved = require.cache[path];
+  let sent = null;
+  require.cache[path] = {
+    id: path, filename: path, loaded: true,
+    exports: class {
+      constructor() {
+        this.messages = {
+          create: async (request) => {
+            sent = request;
+            return (async function* () { yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }; })();
+          }
+        };
+      }
+    }
+  };
+  try {
+    const { streamAnthropic } = require('../src/llm');
+    await streamAnthropic({ apiKey: 'k', model: 'claude-opus-5-5', system: 's', turns: [{ role: 'user', text: 'Solve it' }], imageDataUrls: [png('AA'), png('BB'), png('CC')], maxTokens: 10, onToken: () => {} });
+  } finally {
+    if (saved) require.cache[path] = saved; else delete require.cache[path];
+  }
+  const content = sent.messages[0].content;
+  assert.deepEqual(content.map((c) => c.type === 'image' ? c.source.data : c.text),
+    ['Page 1 of 3:', 'AA', 'Page 2 of 3:', 'BB', 'Page 3 of 3:', 'CC', 'Solve it']);
+});
+
+test('coding prompt: pages are one task read across screenshots; one page reads as before', () => {
+  const one = MODES.leetcode.build({ pages: 1 });
+  assert.match(one, /Solve the coding problem shown in the screenshot\.$/);
+  assert.doesNotMatch(one, /taller than the screen/);
+  const three = MODES.leetcode.build({ pages: 3 });
+  assert.match(three, /comes as 3 screenshots of the same page, in scroll order/);
+  assert.match(three, /Solve the coding problem shown across these screenshots\.$/);
+  const quick = MODES.leetcode.build({ pages: 2, quickStart: 'plan' });
+  assert.match(quick, /QUICK START[\s\S]*Solve the coding problem shown across these screenshots\.$/);
+  const full = MODES.leetcode.build({ pages: 2, quickPlan: 'plan text' });
+  assert.match(full, /<quick_start>[\s\S]*2 screenshots[\s\S]*across these screenshots\.$/);
+  assert.match(MODES.leetcode.buildSystem(null), /several screenshots, one per page/);
+});
