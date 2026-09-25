@@ -21,8 +21,9 @@ function globalGitEmail() {
 }
 
 function registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send }) {
-  // The last scan's README excerpts and folder names, kept in memory for
-  // drafting only. Never stored, never sent to the renderer.
+  // The last scan's README excerpts, session guide intros, structure notes and
+  // folder names, kept in memory for drafting only. Never stored, never sent
+  // to the renderer.
   let lastScan = new Map();
 
   // The folder as the candidate knows it, never an absolute path with their user name.

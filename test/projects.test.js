@@ -265,3 +265,17 @@ test('structure never enters database or backend folders and never reads file co
   assert.doesNotMatch(out, /migrations|schema|prisma|supabase|SECRET_BODY/);
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('review round 3: route files named like page/route, real routes kept, "and N more", infra and people dropped', () => {
+  assert.deepEqual(webStructure(['src/app/login-page.tsx', 'src/app/api/base-route.ts', 'src/app/page.tsx']), ['Pages: /']);
+  assert.deepEqual(webStructure(['src/app/api/users/[id]/route.ts', 'src/app/dashboard/settings/notifications/preferences/page.tsx', 'src/app/forgot-password/page.tsx']),
+    ['Pages: /dashboard/settings/notifications/preferences, /forgot-password', 'API routes: /api/users/[id]']);
+  const many = Array.from({ length: 105 }, (_, i) => 'src/app/p' + String(i).padStart(3, '0') + '/page.tsx');
+  assert.match(webStructure(many)[0], /, and 5 more$/);
+  assert.deepEqual(webStructure(['src/app/' + 'a'.repeat(40) + '/page.tsx']), []);
+  const guide = (line) => guideIntro('## 0. What\n\nShop is a web app for Lagos buyers. ' + line);
+  for (const bad of ['The backend uses supabase-evvyhairs for its project.', 'Project ref is pfnoitbslezwofthnvzo for the store.',
+    'Set SUPABASE_SERVICE_ROLE_KEY in Vercel for this to run.', 'It runs at shop-demo.vercel.app for now.', 'Owner is the user\'s spouse.',
+    'It shipped on 2026-08-12 to the client.']) assert.equal(guide(bad), 'Shop is a web app for Lagos buyers.', bad);
+  assert.equal(guideIntro('## 0. X\n\nThe client reviews on 2026-09-01, which is also the delivery date.'), '');
+});
