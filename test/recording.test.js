@@ -183,10 +183,15 @@ test('captions spoken fast never overlap, and a long last word does not stand al
   assert.ok(cues.every((c) => c.text.split(' ').length > 1), JSON.stringify(cues.map((c) => c.text)));
 });
 
-test('words after the last one heard get no caption, and a take cut short drops captions after it', () => {
+test('the last words said before Done are captioned even if not yet heard; words never read are not', () => {
   const { buildCues } = require('../renderer/subtitles');
-  const cues = buildCues(['One', 'two.', 'Three', 'four.'], [1000, 1300], 0);
-  assert.equal(cues.map((c) => c.text).join(' '), 'One two.');
+  // Done pressed 1.5 s after the last word heard: the next few words were said.
+  const tail = buildCues(['One', 'two', 'three', 'four.'], [1000, 1300], 2900);
+  assert.equal(tail.map((c) => c.text).join(' '), 'One two three four.');
+  // A long script stopped early: only about 3 s of words past the last heard one.
+  const words = Array.from({ length: 40 }, (_, i) => 'w' + i);
+  const cut = buildCues(words, [1000], 60000).map((c) => c.text).join(' ').split(' ');
+  assert.ok(cut.length <= 12, cut.length + ' words');
   assert.deepEqual(buildCues(['A.', 'B.'], [1000, 9000], 5000).map((c) => c.text), ['A.']);
 });
 

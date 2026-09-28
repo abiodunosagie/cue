@@ -13,14 +13,20 @@
   // The word is lit once speech recognition returns it, a little after it was
   // said; captions are moved this much earlier to sit on the voice.
   const HEARD_LAG_MS = 400;
-  // Words said before the first one heard: placed this far apart just before it.
+  // Words said before the first one heard, or after the last one heard before
+  // the take ended: placed this far apart, at speaking pace.
   const LEAD_WORD_MS = 300;
+  // Recognition runs this far behind at most: words later than this after the
+  // last one heard were not read before the take stopped.
+  const TAIL_CATCHUP_MS = 3000;
 
   // When each word is on screen, in ms, or null when no word was heard.
   // Words between two heard words sit evenly between them; words before the
-  // first heard word lead into it; words after the last heard word were not
-  // read (the take ended first) and get no caption.
-  function wordTimes(count, times) {
+  // first heard word lead into it; words after the last heard word follow it at
+  // speaking pace while they fit before the take ended and within recognition's
+  // catch-up time (said but not yet heard when Done was pressed). Words past
+  // that were not read and get no caption.
+  function wordTimes(count, times, takeMs) {
     const heard = [];
     let last = -1;
     for (let i = 0; i < count; i++) {
@@ -31,12 +37,17 @@
       last = t;
     }
     if (!heard.length) return null;
-    const at = new Array(heard[heard.length - 1].i + 1);
+    const at = [];
     for (let i = 0; i < heard[0].i; i++) at[i] = Math.max(0, heard[0].t - (heard[0].i - i) * LEAD_WORD_MS);
     for (let k = 0; k < heard.length; k++) {
       at[heard[k].i] = heard[k].t;
       const next = heard[k + 1];
-      if (!next) break;
+      if (!next) {
+        const lastT = heard[k].t;
+        const limit = Math.min(lastT + TAIL_CATCHUP_MS, takeMs > 0 ? takeMs - HEARD_LAG_MS : Infinity);
+        for (let i = heard[k].i + 1; i < count && lastT + (i - heard[k].i) * LEAD_WORD_MS <= limit; i++) at[i] = lastT + (i - heard[k].i) * LEAD_WORD_MS;
+        break;
+      }
       const gap = next.i - heard[k].i;
       for (let j = 1; j < gap; j++) at[heard[k].i + j] = heard[k].t + ((next.t - heard[k].t) * j) / gap;
     }
@@ -81,7 +92,7 @@
   // (0 if unknown). Returns [{ start, end, text }] in ms, never overlapping,
   // or [] when nothing was heard.
   function buildCues(tokens, times, takeMs) {
-    const at = wordTimes(tokens.length, times || []);
+    const at = wordTimes(tokens.length, times || [], takeMs || 0);
     if (!at) return [];
     // Sentences first, so a caption never runs across two.
     const sentences = [];
