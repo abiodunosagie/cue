@@ -56,7 +56,8 @@ module.exports = {
       LSUIElement: true,
       NSMicrophoneUsageDescription:
         "cue transcribes your microphone so it can help you in conversations.",
-      NSCameraUsageDescription: "cue does not use the camera.",
+      NSCameraUsageDescription:
+        "cue uses the camera only when you record yourself reading a script, and saves the video on this Mac.",
       NSAudioCaptureUsageDescription:
         "cue captures system audio to transcribe the other participant in a call.",
     },

@@ -19,6 +19,10 @@
        after the user grants permission. -->
   <key>com.apple.security.device.audio-input</key>
   <true/>
+  <!-- Script > Record films the candidate reading their script; the hardened
+       runtime refuses the camera without this. -->
+  <key>com.apple.security.device.camera</key>
+  <true/>
 
   <!-- Not sandboxed: the always-on-top overlay and screen capture need it off.
        Screen Recording is a TCC prompt, not an entitlement. -->

@@ -6,6 +6,7 @@ const { normalizeBaseUrl } = require('./openai-compatible');
 const { normalizeLength } = require('../renderer/answer-length');
 const Profiles = require('./profiles');
 const { normalizeScripts } = require('./scripts');
+const { normalizeRecording } = require('./recording');
 const { normalizeProjects } = require('./projects');
 const PanelOpacity = require('../renderer/panel-opacity');
 
@@ -88,6 +89,10 @@ const DEFAULTS = {
   scrollReading: true,
   // Teleprompter scripts (the Script button), cleaned by src/scripts.js.
   scripts: [],
+  // Script > Record: camera, microphone and video shape (renderer/record-presets.js).
+  recording: { cameraId: '', micId: '', on: false, preset: 'landscape' },
+  // Where videos go; '' = ~/Downloads. Set only through record:choose-folder.
+  recordingFolder: '',
   // The candidate's real projects (Settings > Projects), cleaned by
   // src/projects.js. Only ticked ones with a summary reach a prompt.
   projects: [],
@@ -131,7 +136,7 @@ const DEFAULTS = {
 // stripRendererPatch; settings:get hands out redactForRenderer's view.
 // profiles: changed only through the profile:* IPC, so a stale renderer copy never overwrites them.
 // projects: changed only through the projects:* IPC for the same reason.
-const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile', 'projects'];
+const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile', 'projects', 'recordingFolder'];
 
 let data = null;
 
@@ -239,6 +244,7 @@ module.exports = {
     nextSettings.panelOpacity = PanelOpacity.normalize(nextSettings.panelOpacity);
     nextSettings.answerLength = normalizeLength(nextSettings.answerLength);
     nextSettings.scripts = normalizeScripts(nextSettings.scripts);
+    nextSettings.recording = normalizeRecording(nextSettings.recording);
     nextSettings.projects = normalizeProjects(nextSettings.projects);
     data = nextSettings;
     save();

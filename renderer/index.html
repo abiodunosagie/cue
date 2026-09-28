@@ -44,6 +44,7 @@
               <button id="practice-end-btn" class="s-action">End practice</button>
             </div>
             <div id="script-bar" class="hidden" aria-live="polite">
+              <span id="rec-badge" class="hidden" aria-live="off"><span class="rec-dot"></span><span id="rec-time">0:00</span></span>
               <span id="script-label">Script</span>
               <button id="script-restart-btn" class="s-action">Start over</button>
               <button id="script-done-btn" class="s-action">Done</button>
@@ -473,6 +474,28 @@
             <button id="script-keep" class="s-action">Keep mine</button>
           </div>
         </div>
+        <!-- Record (renderer/recorder.js, src/ipc/recording.js) -->
+        <label class="sc-check"><input type="checkbox" id="rec-on" /> Record my face while I read</label>
+        <div id="rec-options" class="hidden">
+          <div class="rec-grid">
+            <label class="sc-label" for="rec-preset">Video shape</label>
+            <select id="rec-preset" class="rec-select"></select>
+            <label class="sc-label" for="rec-camera">Camera</label>
+            <select id="rec-camera" class="rec-select"></select>
+            <label class="sc-label" for="rec-mic">Microphone</label>
+            <select id="rec-mic" class="rec-select"></select>
+          </div>
+          <p class="rec-advice" id="rec-advice"></p>
+          <div class="rec-frame" id="rec-frame">
+            <video id="rec-preview" muted playsinline aria-label="Camera preview"></video>
+            <div class="rec-eyes" aria-hidden="true"></div>
+          </div>
+          <p class="sc-meta" id="rec-size"></p>
+          <div class="sc-row">
+            <span class="sc-meta" id="rec-folder">Saves to ~/Downloads</span>
+            <button id="rec-folder-btn" class="s-action">Change folder</button>
+          </div>
+        </div>
         <div class="sc-row sc-actions">
           <button id="script-check" class="s-action">Check it</button>
           <span id="script-status" class="sc-status"></span>
@@ -524,6 +547,8 @@
   <script src="script-follow.js"></script>
   <script src="project-limits.js"></script>
   <script src="projects-panel.js"></script>
+  <script src="record-presets.js"></script>
+  <script src="recorder.js"></script>
   <script src="coding-library-panel.js"></script>
   <script src="renderer.js"></script>
 </body>

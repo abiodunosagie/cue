@@ -522,6 +522,9 @@
   const teleprompter = (() => {
     const COUNTDOWN_S = 5;
     const READ_LINE = 0.35;       // the word being said sits this far down the view
+    // Recording: the word being said sits at the top, just under the lens,
+    // so reading it looks like looking into the camera.
+    const RECORD_READ_LINE = 0.04;
     const MANUAL_PAUSE_MS = 3000; // a manual scroll wins for a moment
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     const bar = document.getElementById('script-bar');
@@ -537,6 +540,13 @@
     let lastToken = -1;
     let pausedUntil = 0;
     let countTimer = null;
+    let record = null;       // { preset, scriptName } while recording, else null
+    let take = 0;
+    let taking = null;       // the take being started or finished (a promise)
+    let recTimer = null;
+    const recBadge = document.getElementById('rec-badge');
+    const recTime = document.getElementById('rec-time');
+    const films = () => !!(record && record.preset !== 'prompter');
 
     // The script as blocks of word spans, one span per display token, in the
     // follower's token order.
@@ -584,7 +594,8 @@
     function scrollTo(span) {
       if (!span || Date.now() < pausedUntil) return;
       const viewTop = messages.getBoundingClientRect().top;
-      const target = Math.max(0, messages.scrollTop + (span.getBoundingClientRect().top - viewTop) - messages.clientHeight * READ_LINE);
+      const line = record ? RECORD_READ_LINE : READ_LINE;
+      const target = Math.max(0, messages.scrollTop + (span.getBoundingClientRect().top - viewTop) - messages.clientHeight * line);
       if (Math.abs(target - messages.scrollTop) < 8) return;
       messages.scrollTo({ top: target, behavior: reduceMotion.matches ? 'auto' : 'smooth' });
     }
@@ -594,7 +605,7 @@
       clearInterval(countTimer);
       counting = true;
       let left = COUNTDOWN_S;
-      label.textContent = 'Start recording now';
+      label.textContent = films() ? 'Recording starts after the count. Look at the camera.' : 'Start recording now';
       countEl.textContent = String(left);
       countTimer = setInterval(() => {
         left -= 1;
@@ -603,13 +614,71 @@
         countEl.textContent = '';
         counting = false;
         label.textContent = 'Reading: it follows your voice';
+        if (films()) beginTake();
       }, 1000);
     }
 
-    async function start(scriptText) {
+    // One take: a new file, the REC badge and its clock.
+    function beginTake() {
+      take += 1;
+      const started = Date.now();
+      taking = window.CueRecorder.start({ scriptName: record.scriptName, preset: record.preset, take })
+        .then(() => {
+          recBadge.classList.remove('hidden');
+          recTime.textContent = '0:00';
+          clearInterval(recTimer);
+          recTimer = setInterval(() => {
+            const s = Math.floor((Date.now() - started) / 1000);
+            recTime.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+          }, 500);
+        })
+        .catch((e) => { showStatus('Recording did not start: ' + (e && e.message ? e.message : String(e))); });
+      return taking;
+    }
+
+    // Ends the take in progress, if any, and says where the video went.
+    async function finishTake() {
+      if (taking) await taking.catch(() => {});
+      clearInterval(recTimer);
+      recBadge.classList.add('hidden');
+      if (!window.CueRecorder.recording()) return;
+      const res = await window.CueRecorder.stop();
+      if (res) showSaved(res);
+    }
+
+    // A line under the answers: the file and a Show in Finder button.
+    function showSaved(res) {
+      const box = document.createElement('div');
+      box.className = 'rec-saved' + (res.error ? ' failed' : '');
+      const text = document.createElement('span');
+      if (res.error) text.textContent = res.error;
+      else {
+        const mb = res.bytes ? ` (${Math.max(1, Math.round(res.bytes / 1048576))} MB)` : '';
+        text.textContent = `Saved ${res.file}${mb} in ${res.folder}.` + (res.remuxed ? '' : ' Install ffmpeg (brew install ffmpeg) for files that stream and show their length everywhere.') + (res.warning ? ' Part of it may be missing: ' + res.warning : '');
+      }
+      box.appendChild(text);
+      if (res.path) {
+        const btn = document.createElement('button');
+        btn.className = 's-action';
+        btn.textContent = 'Show in Finder';
+        btn.addEventListener('click', async () => { const r = await cue.recordReveal(res.path); if (r && r.error) text.textContent = r.error; });
+        box.appendChild(btn);
+      }
+      messages.appendChild(box);
+      if (!active) messages.scrollTop = messages.scrollHeight;
+    }
+
+    // opts.record: { preset, scriptName } to film the reading (Script > Record).
+    async function start(scriptText, opts = {}) {
       if (active) stop();
       text = scriptText;
       active = true;
+      record = opts.record || null;
+      take = 0;
+      if (record) {
+        document.body.classList.add('record-mode');
+        cue.recordPlace(true);
+      }
       cue.scriptActive(true);
       try {
         // It follows the mic, so listening must be on; it is turned off again at Done.
@@ -633,7 +702,10 @@
       }
     }
 
-    function restart() {
+    // Start over: while filming, the take so far is saved and a new one starts after the count.
+    async function restart() {
+      if (!active) return;
+      if (films()) await finishTake();
       if (!active) return;
       follower.reset();
       spans.forEach((s) => s.classList.remove('said', 'now'));
@@ -649,6 +721,13 @@
       active = false;
       counting = false;
       clearInterval(countTimer);
+      if (record) {
+        record = null;
+        // The camera goes off once the last take is on disk.
+        finishTake().finally(() => { window.CueRecorder.close(); });
+        document.body.classList.remove('record-mode');
+        cue.recordPlace(false);
+      }
       cue.scriptActive(false);
       if (startedListening) cue.captureToggle();
       startedListening = false;
@@ -664,7 +743,7 @@
       if (!active || counting || !follower) return;
       const st = follower.hear(said, isFinal);
       if (st.token !== lastToken) paint(st.token);
-      if (st.done) label.textContent = 'End of script. Stop recording, then press Done.';
+      if (st.done) label.textContent = films() ? 'End of script. Press Done to save the video.' : 'End of script. Stop recording, then press Done.';
     }
 
     messages.addEventListener('wheel', () => { if (active) pausedUntil = Date.now() + MANUAL_PAUSE_MS; }, { passive: true });
@@ -745,14 +824,96 @@
     }
     const saveSoon = () => { clearTimeout(saveTimer); saveTimer = setTimeout(save, 600); };
 
+    // ---- Record: camera, microphone, video shape and the framing preview ----
+    const recOn = document.getElementById('rec-on');
+    const recOptions = document.getElementById('rec-options');
+    const recPreset = document.getElementById('rec-preset');
+    const recCamera = document.getElementById('rec-camera');
+    const recMic = document.getElementById('rec-mic');
+    const recPreview = document.getElementById('rec-preview');
+    const recFrame = document.getElementById('rec-frame');
+    const recSize = document.getElementById('rec-size');
+    const recAdvice = document.getElementById('rec-advice');
+    const recFolder = document.getElementById('rec-folder');
+    const Presets = window.CueRecordPresets;
+    const recPrefs = () => ({ cameraId: '', micId: '', on: false, preset: Presets.DEFAULT_PRESET, ...((settings && settings.recording) || {}) });
+    let previewSeq = 0;
+
+    function fillSelect(sel, items, value) {
+      sel.replaceChildren(...items.map((it) => { const o = document.createElement('option'); o.value = it.id; o.textContent = it.label; return o; }));
+      if (items.some((it) => it.id === value)) sel.value = value;
+    }
+
+    async function saveRecPrefs(patch) {
+      const next = { ...recPrefs(), ...patch };
+      const saved = await cue.settingsSet({ recording: next });
+      settings.recording = (saved && saved.recording) || next;
+    }
+
+    // Shows the camera for framing (and fills the device lists: their names
+    // appear only once the camera may be used). Off: the camera light goes out.
+    async function refreshRecord() {
+      const seq = ++previewSeq;
+      const prefs = recPrefs();
+      recOn.checked = prefs.on;
+      recOptions.classList.toggle('hidden', !prefs.on);
+      document.getElementById('script-start').textContent = prefs.on && prefs.preset !== 'prompter' ? 'Start recording' : 'Start';
+      if (!recPreset.options.length) {
+        fillSelect(recPreset, Presets.PRESET_IDS.map((id) => ({ id, label: Presets.PRESETS[id].label })), prefs.preset);
+      }
+      recPreset.value = prefs.preset;
+      const p = Presets.PRESETS[prefs.preset];
+      recAdvice.textContent = p.usual + ' ' + p.camera;
+      if (!prefs.on) { window.CueRecorder.close(); recPreview.srcObject = null; return; }
+      const info = await cue.recordInfo().catch(() => null);
+      if (info && info.folder) recFolder.textContent = 'Saves to ' + info.folder;
+      const films = !!p.request;
+      recFrame.classList.toggle('hidden', !films);
+      recCamera.disabled = !films; recMic.disabled = !films;
+      if (!films) { window.CueRecorder.close(); recPreview.srcObject = null; recSize.textContent = 'Nothing is recorded in this mode.'; return; }
+      recSize.textContent = 'Turning the camera on...';
+      try {
+        const got = await window.CueRecorder.preview(recPreview, prefs);
+        if (seq !== previewSeq) return;
+        const { cameras, mics } = await window.CueRecorder.devices();
+        fillSelect(recCamera, cameras, prefs.cameraId);
+        fillSelect(recMic, mics, prefs.micId);
+        recSize.textContent = got
+          ? `Records ${got.width}x${got.height} at ${got.fps} fps` + (got.cropped ? ', cut from this camera\'s wider picture.' : ', the camera\'s own picture.') + ' Line your eyes up with the dashed line.'
+          : '';
+      } catch (e) {
+        if (seq !== previewSeq) return;
+        recSize.textContent = e && e.name === 'NotAllowedError'
+          ? 'cue may not use the camera. Allow it in System Settings > Privacy & Security > Camera, then open Script again.'
+          : 'The camera did not start: ' + (e && e.message ? e.message : String(e));
+      }
+    }
+
+    recOn.addEventListener('change', async () => { await saveRecPrefs({ on: recOn.checked }); refreshRecord(); });
+    recPreset.addEventListener('change', async () => { await saveRecPrefs({ preset: recPreset.value }); refreshRecord(); });
+    recCamera.addEventListener('change', async () => { await saveRecPrefs({ cameraId: recCamera.value }); refreshRecord(); });
+    recMic.addEventListener('change', async () => { await saveRecPrefs({ micId: recMic.value }); refreshRecord(); });
+    document.getElementById('rec-folder-btn').addEventListener('click', async () => {
+      const res = await cue.recordChooseFolder().catch(() => null);
+      if (res && res.folder) recFolder.textContent = 'Saves to ' + res.folder;
+    });
+
     function open() {
       if (!settings) return;
       scrim.classList.remove('hidden');
       const newest = [...scripts()].sort((a, b) => b.updatedAt - a.updatedAt)[0];
       load(currentId || (newest ? newest.id : ''));
       area.focus();
+      refreshRecord();
     }
-    async function close() { await save(); scrim.classList.add('hidden'); }
+    // keepCamera: Start is taking the camera into the recording.
+    async function close(keepCamera = false) {
+      await save();
+      scrim.classList.add('hidden');
+      previewSeq++;
+      recPreview.srcObject = null;
+      if (!keepCamera) window.CueRecorder.close();
+    }
 
     area.addEventListener('input', () => { showMeta(); saveSoon(); });
     name.addEventListener('input', saveSoon);
@@ -804,10 +965,12 @@
 
     document.getElementById('script-start').addEventListener('click', async () => {
       if (!area.value.trim()) { status.textContent = 'Write or paste your script first.'; return; }
-      await close();
-      teleprompter.start(area.value);
+      const prefs = recPrefs();
+      const record = prefs.on ? { preset: prefs.preset, scriptName: name.value.trim() || 'cue recording' } : null;
+      await close(!!record);
+      teleprompter.start(area.value, { record });
     });
-    document.getElementById('script-close').addEventListener('click', close);
+    document.getElementById('script-close').addEventListener('click', () => close());
     // Like Settings: Escape anywhere, or a click on the dimmed backdrop, closes it.
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !scrim.classList.contains('hidden')) close(); });
     scrim.addEventListener('click', (e) => { if (e.target === scrim) close(); });

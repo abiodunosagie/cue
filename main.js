@@ -26,6 +26,7 @@ const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('.
 const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
 const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
+const { registerRecordingIpc } = require('./src/ipc/recording');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
@@ -420,6 +421,8 @@ function createWindow() {
 
   let moveSaveTimer = null;
   win.on('moved', () => {
+    // Under the camera for a recording: not where the candidate keeps cue.
+    if (recording.isPlaced()) return;
     clearTimeout(moveSaveTimer);
     moveSaveTimer = setTimeout(() => {
       if (win && !win.isDestroyed()) {
@@ -436,6 +439,7 @@ function createWindow() {
     // running: never keep dropping interview speech for one.
     announceQuestion();
     scriptActive = false;
+    recording.reset();
     win.showInactive();
     win.setTitle('Microsoft Edge Update');
     // Warn about missing content protection on old Windows builds
@@ -1290,6 +1294,7 @@ registerProfileIpc({
 });
 registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send });
 registerCodingLibraryIpc({ ipcMain, codingLibrary });
+const recording = registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin: () => win });
 ipcMain.handle('practice:start', () => practice.start());
 ipcMain.handle('practice:next', () => practice.next());
 ipcMain.handle('practice:end', () => practice.end());
@@ -1923,7 +1928,7 @@ app.on('will-quit', () => {
 });
 app.on('window-all-closed', () => app.quit());
 
-app.on('will-quit', () => { globalShortcut.unregisterAll(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); recording.reset(); });
 app.on('window-all-closed', (e) => {
   // Don't quit while the permissions window is open — the user may be in System Settings
   if (permWin) { e.preventDefault(); return; }
