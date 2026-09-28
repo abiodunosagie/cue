@@ -49,13 +49,15 @@ test('a take is written chunk by chunk and renamed when it ends', async () => {
   const files = createRecorderFiles({ folder: () => dir, ffmpeg: '' });
   const { id, file } = files.begin({ scriptName: 'Intro', preset: 'landscape', take: 1 });
   assert.ok(fs.existsSync(path.join(dir, file.replace(/\.mp4$/, '.recording.mp4'))), 'written next to the final file while recording');
-  assert.equal(files.chunk(id, new Uint8Array([1, 2, 3])).ok, true);
-  assert.equal(files.chunk('other', new Uint8Array([9])).ok, false);
-  files.chunk(id, new Uint8Array([4]));
+  assert.equal((await files.chunk(id, new Uint8Array([1, 2, 3]))).ok, true);
+  assert.equal((await files.chunk('other', new Uint8Array([9]))).ok, false);
+  await files.chunk(id, new Uint8Array([4]));
   const res = await files.end(id);
   assert.equal(res.remuxed, false);
   assert.deepEqual([...fs.readFileSync(res.path)], [1, 2, 3, 4]);
   assert.equal(path.basename(res.path), file);
+  assert.equal(fs.statSync(res.path).mode & 0o777, 0o600, 'only the candidate can read their video');
+  assert.deepEqual(fs.readdirSync(dir), [file], 'no part file left behind');
   assert.deepEqual(await files.end(id), { error: 'No recording in progress.' });
 });
 
@@ -87,4 +89,39 @@ test('the microphone check calls quiet, good and loud at the right levels', () =
 test('auto-stop is on unless turned off', () => {
   assert.equal(normalizeRecording({}).autoStop, true);
   assert.equal(normalizeRecording({ autoStop: false }).autoStop, false);
+});
+
+test('a link planted at the video name is never written through', async () => {
+  const dir = tmpDir();
+  const target = path.join(dir, 'victim.txt');
+  fs.writeFileSync(target, 'keep me');
+  const now = new Date(2026, 8, 28, 9, 5);
+  const name = fileNameFor({ scriptName: 'Intro', preset: 'landscape', take: 1, now });
+  fs.symlinkSync(target, path.join(dir, name));
+  assert.notEqual(path.basename(freePath(dir, name)), name, 'a dangling or live link counts as taken');
+  const files = createRecorderFiles({ folder: () => dir, ffmpeg: '' });
+  const { id, file } = files.begin({ scriptName: 'Intro', preset: 'landscape', take: 1 });
+  assert.notEqual(file, name);
+  await files.chunk(id, new Uint8Array([1]));
+  await files.end(id);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'keep me');
+});
+
+test('a take stops at its size cap and keeps what came before', async () => {
+  const dir = tmpDir();
+  const files = createRecorderFiles({ folder: () => dir, ffmpeg: '', maxTakeBytes: 4 });
+  const { id } = files.begin({ scriptName: 'Cap', preset: 'landscape', take: 1 });
+  assert.equal((await files.chunk(id, new Uint8Array([1, 2, 3]))).ok, true);
+  assert.equal((await files.chunk(id, new Uint8Array([4, 5]))).ok, false);
+  const res = await files.end(id);
+  assert.deepEqual([...fs.readFileSync(res.path)], [1, 2, 3]);
+  assert.match(res.warning, /size limit/);
+});
+
+test('a take thrown away on reload keeps its part file and frees the final name', () => {
+  const dir = tmpDir();
+  const files = createRecorderFiles({ folder: () => dir, ffmpeg: '' });
+  const { file } = files.begin({ scriptName: 'Reload', preset: 'landscape', take: 1 });
+  files.abort();
+  assert.deepEqual(fs.readdirSync(dir), [file.replace(/\.mp4$/, '.recording.mp4')]);
 });

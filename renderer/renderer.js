@@ -545,6 +545,8 @@
     let taking = null;       // the take being started or finished (a promise)
     let recTimer = null;
     let autoStopTimer = null;
+    let cameraOwner = 0;     // the recorder's camera generation this reading uses
+    const CONFIRM_MS = 3000; // a second press within this deletes a take
     const AUTO_STOP_S = 4;   // after the last word: time to smile and look at the lens before it ends
     const recBadge = document.getElementById('rec-badge');
     const recTime = document.getElementById('rec-time');
@@ -637,7 +639,9 @@
     function beginTake() {
       take += 1;
       const started = Date.now();
-      taking = window.CueRecorder.start({ scriptName: record.scriptName, preset: record.preset, take })
+      // A camera unplugged or a recorder failure mid-take: say so and save what there is.
+      const onProblem = (message) => { showStatus(message); stop(); };
+      taking = window.CueRecorder.start({ scriptName: record.scriptName, preset: record.preset, take, onProblem })
         .then(() => {
           recBadge.classList.remove('hidden');
           recTime.textContent = '0:00';
@@ -685,13 +689,15 @@
         del.addEventListener('click', async () => {
           if (!armed) {
             del.textContent = 'Press again to delete';
-            armed = setTimeout(() => { armed = null; del.textContent = 'Delete take'; }, 3000);
+            armed = setTimeout(() => { armed = null; del.textContent = 'Delete take'; }, CONFIRM_MS);
             return;
           }
           clearTimeout(armed);
+          armed = null;
+          del.disabled = true;
           const r = await cue.recordDiscard(res.path);
-          if (r && r.error) { text.textContent = r.error; return; }
-          box.classList.add('failed');
+          if (r && r.error) { text.textContent = r.error; del.disabled = false; del.textContent = 'Delete take'; return; }
+          box.classList.add('removed');
           text.textContent = `Moved ${res.file} to the Trash.`;
           btn.remove(); del.remove();
         });
@@ -709,6 +715,7 @@
       record = opts.record || null;
       take = 0;
       if (record) {
+        cameraOwner = window.CueRecorder.generation();
         document.body.classList.add('record-mode');
         cue.recordPlace(true);
       }
@@ -759,7 +766,9 @@
       if (record) {
         record = null;
         // The camera goes off once the last take is on disk.
-        finishTake().finally(() => { window.CueRecorder.close(); });
+        // Only this reading's camera: a preview opened for the next take meanwhile stays on.
+        const owner = cameraOwner;
+        finishTake().finally(() => { window.CueRecorder.close(owner); });
         document.body.classList.remove('record-mode');
         cue.recordPlace(false);
       }
@@ -934,26 +943,32 @@
       recAdvice.textContent = p.usual + ' ' + p.camera;
       if (!prefs.on) { window.CueRecorder.close(); recPreview.srcObject = null; return; }
       const info = await cue.recordInfo().catch(() => null);
-      if (info && info.folder) recFolder.textContent = 'Saves to ' + info.folder;
-      const films = !!p.request;
-      recFrame.classList.toggle('hidden', !films);
-      recCamera.disabled = !films; recMic.disabled = !films;
-      recMeter.classList.toggle('hidden', !films);
-      recAutoStop.parentElement.classList.toggle('hidden', !films);
-      if (!films) { window.CueRecorder.close(); recPreview.srcObject = null; recSize.textContent = 'Nothing is recorded in this mode.'; return; }
+      if (info && info.folder) recFolder.textContent = 'Saves to ' + info.folder + (info.ffmpeg ? '' : '. Install ffmpeg (brew install ffmpeg) so every player shows the video\'s length.');
+      const willFilm = !!p.request;
+      recFrame.classList.toggle('hidden', !willFilm);
+      recCamera.disabled = !willFilm; recMic.disabled = !willFilm;
+      recMeter.classList.toggle('hidden', !willFilm);
+      recAutoStop.parentElement.classList.toggle('hidden', !willFilm);
+      if (!willFilm) { window.CueRecorder.close(); recPreview.srcObject = null; recSize.textContent = 'Nothing is recorded in this mode.'; return; }
       recSize.textContent = 'Turning the camera on...';
       try {
         const got = await window.CueRecorder.preview(recPreview, prefs);
         if (seq !== previewSeq) return;
         const { cameras, mics } = await window.CueRecorder.devices();
-        fillSelect(recCamera, cameras, prefs.cameraId);
-        fillSelect(recMic, mics, prefs.micId);
+        fillSelect(recCamera, cameras, (got && got.cameraId) || prefs.cameraId);
+        fillSelect(recMic, mics, (got && got.micId) || prefs.micId);
         startMeter();
         recSize.textContent = got
           ? `Records ${got.width}x${got.height} at ${got.fps} fps` + (got.cropped ? ', cut from this camera\'s wider picture.' : ', the camera\'s own picture.') + ' Line your eyes up with the dashed line.'
           : '';
       } catch (e) {
         if (seq !== previewSeq) return;
+        // The saved camera or microphone is not connected now: forget it and use the default.
+        if (e && (e.name === 'OverconstrainedError' || e.name === 'NotFoundError') && (prefs.cameraId || prefs.micId)) {
+          await saveRecPrefs({ cameraId: '', micId: '' });
+          if (seq === previewSeq) refreshRecord();
+          return;
+        }
         recSize.textContent = e && e.name === 'NotAllowedError'
           ? 'cue may not use the camera. Allow it in System Settings > Privacy & Security > Camera, then open Script again.'
           : 'The camera did not start: ' + (e && e.message ? e.message : String(e));

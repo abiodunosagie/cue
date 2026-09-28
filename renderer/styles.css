@@ -881,6 +881,7 @@ button:focus { outline: none; }
 .rec-dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; }
 .rec-saved { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0; padding: 10px 12px; border-radius: 9px; border: 1px solid rgba(74, 222, 128, 0.35); background: rgba(74, 222, 128, 0.07); color: var(--tx-1); font-size: 13px; line-height: 1.45; }
 .rec-saved.failed { border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08); }
+.rec-saved.removed { border-color: var(--bd-hair); background: rgba(255,255,255,0.03); color: var(--tx-2); }
 .rec-saved span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 /* Reading for the camera: no toolbar between the lens and the text, a narrow
    column of big type, and the word being said held just under the lens. */
@@ -888,7 +889,8 @@ body.record-mode #toolbar, body.record-mode #action-row, body.record-mode #compo
 body.record-mode .script-view { max-width: 460px; margin: 0 auto; padding-top: 2px; }
 body.record-mode .script-view p { font-size: 30px; line-height: 1.45; margin-bottom: 18px; }
 /* While a script is read, the panel shows only the script. */
-#messages.script-mode > :not(.script-view) { display: none; }
+/* A saved take's line stays visible, so each take is confirmed as it is saved. */
+#messages.script-mode > :not(.script-view):not(.rec-saved) { display: none; }
 #panel-main.scripting #question-bar { display: none; }
 .script-view { padding: 6vh 4px 45vh; }
 .script-view p { margin: 0 0 22px; font-size: 24px; line-height: 1.6; font-weight: 500; color: rgba(255,255,255,0.92); }

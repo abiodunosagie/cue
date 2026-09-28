@@ -29,21 +29,36 @@ function normalizeRecording(value) {
 // A name the candidate can find in Downloads: the script's name, the date and
 // time, the preset and the take, e.g. "Upwork intro 2026-09-28 14.05 landscape take 2.mp4".
 function fileNameFor({ scriptName, preset, take, now = new Date() }) {
-  const clean = String(scriptName || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'cue recording';
+  // No path separators or control characters, and no leading dot (a hidden file in Finder).
+  const clean = String(scriptName || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+/, '').trim().slice(0, 60) || 'cue recording';
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}.${pad(now.getMinutes())}`;
-  return `${clean} ${stamp} ${PRESETS[preset] ? preset : DEFAULT_PRESET}${take > 1 ? ' take ' + take : ''}.mp4`;
+  return `${clean} ${stamp} ${PRESET_IDS.includes(preset) ? preset : DEFAULT_PRESET}${take > 1 ? ' take ' + take : ''}.mp4`;
 }
 
-// A path that does not exist yet: "name.mp4", else "name (2).mp4", ...
+// Videos are the candidate's face and voice: readable by them only, even in a shared folder.
+const FILE_MODE = 0o600;
+
+// A path that nothing is at, not even a dangling link: "name.mp4", else "name (2).mp4", ...
 function freePath(dir, name) {
   const ext = path.extname(name);
   const base = name.slice(0, name.length - ext.length);
+  const taken = (p) => { try { fs.lstatSync(p); return true; } catch { return false; } };
   for (let i = 1; i < 1000; i++) {
     const p = path.join(dir, i === 1 ? name : `${base} (${i})${ext}`);
-    if (!fs.existsSync(p)) return p;
+    if (!taken(p)) return p;
   }
   return path.join(dir, `${base} ${Date.now()}${ext}`);
+}
+
+// Creates `name` in `dir` exclusively (fails rather than follow or replace
+// anything already there, a link included) and returns its path.
+function reserve(dir, name) {
+  for (let i = 0; i < 5; i++) {
+    const p = freePath(dir, name);
+    try { fs.closeSync(fs.openSync(p, 'wx', FILE_MODE)); return p; } catch (e) { if (e.code !== 'EEXIST') throw e; }
+  }
+  throw new Error('No free file name in ' + dir);
 }
 
 const FFMPEG_PATHS = ['/opt/homebrew/bin/ffmpeg', '/usr/local/bin/ffmpeg', '/usr/bin/ffmpeg'];
@@ -60,47 +75,71 @@ function remux(ffmpeg, input, out) {
   });
 }
 
+// A MediaRecorder chunk is about a second of video (a few MB); anything far
+// bigger is not one. A take stops growing at the cap rather than fill the disk.
+const MAX_CHUNK_BYTES = 64 * 1024 * 1024;
+const MAX_TAKE_BYTES = 40 * 1024 * 1024 * 1024;
+
 // One take at a time. `folder()` is where videos go (Downloads unless changed).
-function createRecorderFiles({ folder, ffmpeg = findFfmpeg() } = {}) {
-  let take = null; // { id, path, part, stream, bytes, failed }
+function createRecorderFiles({ folder, ffmpeg = findFfmpeg(), maxTakeBytes = MAX_TAKE_BYTES } = {}) {
+  let take = null; // { id, final, part, fd, bytes, failed }
   let seq = 0;
 
   function begin({ scriptName, preset, take: takeNo }) {
     if (take) abort();
     const dir = folder();
     fs.mkdirSync(dir, { recursive: true });
-    const final = freePath(dir, fileNameFor({ scriptName, preset, take: takeNo }));
-    // Written next to the final file, so a crash leaves the take where it is looked for.
-    const part = final.replace(/\.mp4$/, '.recording.mp4');
-    // Opened here, not lazily, so a folder that cannot be written fails Start, not the take.
-    const stream = fs.createWriteStream(part, { fd: fs.openSync(part, 'wx', 0o644) });
+    // Both names are created here, exclusively, so a folder that cannot be
+    // written fails Start, not the take, and nothing else can sit at either
+    // name when the take ends. The part file sits next to the final one, so a
+    // crash leaves the take where it is looked for.
+    const final = reserve(dir, fileNameFor({ scriptName, preset, take: takeNo }));
+    let part;
+    try { part = reserve(dir, path.basename(final).replace(/\.mp4$/, '.recording.mp4')); } catch (e) { removeQuietly(final); throw e; }
+    // Written synchronously: each chunk is on disk before the next arrives, and
+    // a quit (abort) closes the file with nothing left in a buffer.
+    const fd = fs.openSync(part, 'r+');
     const id = String(++seq);
-    take = { id, final, part, stream, bytes: 0, failed: '' };
-    stream.on('error', (e) => { if (take && take.id === id) take.failed = e.message; });
+    take = { id, final, part, fd, bytes: 0, failed: '' };
     return { id, file: path.basename(final) };
   }
 
   function chunk(id, data) {
     if (!take || take.id !== id || take.failed) return { ok: false, error: take && take.failed ? take.failed : 'No recording in progress.' };
     const buf = Buffer.from(data);
-    take.bytes += buf.length;
-    take.stream.write(buf);
-    return { ok: true };
+    if (buf.length > MAX_CHUNK_BYTES) return { ok: false, error: 'A piece of the video was too large to be real.' };
+    if (take.bytes + buf.length > maxTakeBytes) { take.failed = 'The take reached its size limit; what came before it is saved.'; return { ok: false, error: take.failed }; }
+    try {
+      fs.writeSync(take.fd, buf, 0, buf.length, take.bytes);
+      take.bytes += buf.length;
+      return { ok: true };
+    } catch (e) {
+      take.failed = e.message;
+      return { ok: false, error: e.message };
+    }
   }
 
   async function end(id) {
     if (!take || take.id !== id) return { error: 'No recording in progress.' };
     const t = take;
     take = null;
-    await new Promise((resolve) => t.stream.end(resolve));
-    if (t.failed) return { error: 'The video could not be written: ' + t.failed, path: t.part };
-    if (!t.bytes) { try { fs.unlinkSync(t.part); } catch { /* nothing written */ } return { error: 'Nothing was recorded.' }; }
-    if (ffmpeg && await remux(ffmpeg, t.part, t.final)) {
-      try { fs.unlinkSync(t.part); } catch { /* the remuxed copy is what counts */ }
-      return { path: t.final, bytes: fs.statSync(t.final).size, remuxed: true };
+    fs.closeSync(t.fd);
+    if (!t.bytes) { removeQuietly(t.part); removeQuietly(t.final); return { error: 'Nothing was recorded.' }; }
+    // A take cut short by an error or the size cap still keeps what it has.
+    const warning = t.failed ? 'The recording stopped early: ' + t.failed : '';
+    if (ffmpeg) {
+      // ffmpeg writes into a file this process just created, never a name it did not.
+      const tmp = reserve(path.dirname(t.final), path.basename(t.final).replace(/\.mp4$/, '.remux.mp4'));
+      if (await remux(ffmpeg, t.part, tmp)) {
+        fs.chmodSync(tmp, FILE_MODE);
+        fs.renameSync(tmp, t.final);
+        removeQuietly(t.part);
+        return { path: t.final, bytes: fs.statSync(t.final).size, remuxed: true, warning };
+      }
+      removeQuietly(tmp);
     }
     fs.renameSync(t.part, t.final);
-    return { path: t.final, bytes: t.bytes, remuxed: false };
+    return { path: t.final, bytes: t.bytes, remuxed: false, warning };
   }
 
   // A take thrown away (the page reloaded, cue quit): keep what was recorded.
@@ -108,10 +147,16 @@ function createRecorderFiles({ folder, ffmpeg = findFfmpeg() } = {}) {
     if (!take) return;
     const t = take;
     take = null;
-    t.stream.end();
+    try { fs.closeSync(t.fd); } catch { /* already closed */ }
+    // The reserved final name is still empty: only the part file holds the take.
+    removeQuietly(t.final);
   }
 
-  return { begin, chunk, end, abort, active: () => !!take, hasFfmpeg: () => !!ffmpeg };
+  return { begin, chunk, end, abort, hasFfmpeg: () => !!ffmpeg };
+}
+
+function removeQuietly(p) {
+  try { fs.unlinkSync(p); } catch { /* already gone */ }
 }
 
 function defaultFolder() {

@@ -1,12 +1,12 @@
 // The camera side of Script > Record (main owns the file, src/recording.js).
 // One camera stream is opened for the preview and kept for the take, so the
 // framing the candidate saw is what gets recorded. When the camera's own mode
-// already has the preset's shape it is recorded as is; otherwise a canvas cuts
-// the centred part out first (the iPhone through the Mac is landscape only).
-// The preview is mirrored like a mirror; the file never is.
+// already has the preset's shape it is recorded as is; otherwise the centred
+// part is cut out of every frame first (the iPhone through the Mac is
+// landscape only). The preview is mirrored like a mirror; the file never is.
 (function () {
   // Measured on the owner's Mac: the encoder settles near 7 Mbps from the MacBook
-  // camera and 18 Mbps from the iPhone whatever is asked; this is the ceiling.
+  // camera and 18 to 24 Mbps from the iPhone whatever is asked; this is the ceiling.
   const VIDEO_BPS = 24000000;
   const AUDIO_BPS = 192000;
   const CHUNK_MS = 1000;
@@ -14,9 +14,11 @@
 
   let stream = null;      // camera + mic, as opened
   let streamKey = '';
-  let crop = null;        // { sx, sy, sw, sh } when a canvas cuts the frame
-  let canvasStream = null;
-  let drawing = 0;
+  // Moves on every preview request and every close, so a request or a
+  // delayed close from before cannot act on the camera a newer one owns.
+  let generation = 0;
+  let crop = null;        // { sx, sy, sw, sh } when frames are cut
+  let cutting = null;     // the running cut: { stop() }
   let recorder = null;
   let takeId = '';
   let queue = Promise.resolve();
@@ -58,12 +60,14 @@
     meterCtx = null;
   }
 
+  function stopCut() {
+    if (cutting) cutting.stop();
+    cutting = null;
+  }
+
   function stopStream() {
     stopMeter();
-    cancelAnimationFrame(drawing);
-    drawing = 0;
-    if (canvasStream) canvasStream.getTracks().forEach((t) => t.stop());
-    canvasStream = null;
+    stopCut();
     if (stream) stream.getTracks().forEach((t) => t.stop());
     stream = null;
     streamKey = '';
@@ -71,19 +75,25 @@
   }
 
   // Opens (or keeps) the camera and mic for this preset and shows them in
-  // `video`. Resolves { width, height, fps, cropped } of what will be recorded.
+  // `video`. Resolves { width, height, fps, cropped } of what will be recorded,
+  // or null when a newer request took over meanwhile.
   async function preview(video, { cameraId, micId, preset }) {
+    const mine = ++generation;
     const p = window.CueRecordPresets.PRESETS[preset];
     if (!p || !p.request) { stopStream(); video.srcObject = null; return null; }
     const key = [cameraId, micId, preset].join('|');
     if (!stream || streamKey !== key) {
       stopStream();
-      stream = await navigator.mediaDevices.getUserMedia({
+      const opened = await navigator.mediaDevices.getUserMedia({
         // resizeMode none: the camera's own modes, never a copy Chromium scaled.
         video: { deviceId: cameraId ? { exact: cameraId } : undefined, width: { ideal: p.request.width }, height: { ideal: p.request.height }, frameRate: { ideal: 60 }, resizeMode: 'none' },
         // A voice recording: no echo cancelling (nothing plays back), noise kept down.
         audio: { deviceId: micId ? { exact: micId } : undefined, echoCancellation: false, noiseSuppression: true, autoGainControl: true, sampleRate: 48000 }
       });
+      // Overtaken while the camera opened: this stream is nobody's, so it goes off.
+      if (mine !== generation) { opened.getTracks().forEach((t) => t.stop()); return null; }
+      stopStream();
+      stream = opened;
       streamKey = key;
     }
     const s = stream.getVideoTracks()[0].getSettings();
@@ -93,33 +103,49 @@
     video.style.aspectRatio = String(p.aspect);
     video.style.objectFit = 'cover';
     await video.play().catch(() => {});
-    return { width: crop ? crop.sw : s.width, height: crop ? crop.sh : s.height, fps: Math.round(s.frameRate || 30), cropped: !!crop };
+    const mic = stream.getAudioTracks()[0];
+    // The devices really in use: with no choice saved, the system default, which the lists must show.
+    return { width: crop ? crop.sw : s.width, height: crop ? crop.sh : s.height, fps: Math.round(s.frameRate || 30), cropped: !!crop,
+      cameraId: s.deviceId || '', micId: mic ? mic.getSettings().deviceId || '' : '' };
   }
 
-  // The stream the recorder takes: the camera as is, or the canvas cut.
+  // A video track of the cut frames. Each camera frame is cut as it arrives
+  // (insertable streams), so nothing depends on the page being painted: a
+  // canvas redrawn on animation frames would freeze while audio kept going.
+  function cutTrack(source) {
+    const processor = new MediaStreamTrackProcessor({ track: source });
+    const generator = new MediaStreamTrackGenerator({ kind: 'video' });
+    // Each frame is drawn cut into its own canvas and sent on with its own
+    // timestamp. (Passing the cut as a visibleRect recorded black frames.)
+    const canvas = new OffscreenCanvas(crop.sw, crop.sh);
+    const ctx = canvas.getContext('2d');
+    const c = crop;
+    const abort = new AbortController();
+    processor.readable
+      .pipeThrough(new TransformStream({
+        transform(frame, controller) {
+          try {
+            ctx.drawImage(frame, c.sx, c.sy, c.sw, c.sh, 0, 0, c.sw, c.sh);
+            controller.enqueue(new VideoFrame(canvas, { timestamp: frame.timestamp }));
+          } finally { frame.close(); }
+        }
+      }), { signal: abort.signal })
+      .pipeTo(generator.writable, { signal: abort.signal })
+      .catch(() => { /* stopped */ });
+    cutting = { stop: () => { abort.abort(); generator.stop(); } };
+    return generator;
+  }
+
+  // The stream the recorder takes: the camera as is, or its cut frames.
   function recordStream() {
     if (!crop) return stream;
-    const video = document.createElement('video');
-    video.muted = true;
-    video.srcObject = new MediaStream(stream.getVideoTracks());
-    video.play().catch(() => {});
-    const canvas = document.createElement('canvas');
-    canvas.width = crop.sw;
-    canvas.height = crop.sh;
-    const ctx = canvas.getContext('2d');
-    const fps = Math.round(stream.getVideoTracks()[0].getSettings().frameRate || 30);
-    const draw = () => {
-      if (video.readyState >= 2) ctx.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, crop.sw, crop.sh);
-      drawing = requestAnimationFrame(draw);
-    };
-    draw();
-    canvasStream = canvas.captureStream(fps);
-    return new MediaStream([...canvasStream.getVideoTracks(), ...stream.getAudioTracks()]);
+    return new MediaStream([cutTrack(stream.getVideoTracks()[0]), ...stream.getAudioTracks()]);
   }
 
   // Starts a take. Resolves { file } or throws with a message to show.
-  async function start({ scriptName, preset, take }) {
-    if (!stream) throw new Error('The camera is not on.');
+  // onProblem(message): the camera or recorder failed mid-take.
+  async function start({ scriptName, preset, take, onProblem }) {
+    if (!stream) throw new Error('The camera is not on. Close the Script window, open it again and check the preview.');
     if (recorder) throw new Error('Already recording.');
     const mimeType = TYPES.find((t) => MediaRecorder.isTypeSupported(t));
     if (!mimeType) throw new Error('This computer cannot record MP4 video.');
@@ -130,15 +156,21 @@
     queue = Promise.resolve();
     recorder = new MediaRecorder(recordStream(), { mimeType, videoBitsPerSecond: VIDEO_BPS, audioBitsPerSecond: AUDIO_BPS });
     const id = takeId;
+    const r = recorder;
     // Chunks go to disk in order, one at a time.
-    recorder.ondataavailable = (e) => {
+    r.ondataavailable = (e) => {
       if (!e.data || !e.data.size) return;
       queue = queue.then(async () => {
         const res = await window.cue.recordChunk(id, await e.data.arrayBuffer());
         if (res && !res.ok && !writeError) writeError = res.error || 'The video could not be written.';
       });
     };
-    recorder.start(CHUNK_MS);
+    const problem = (message) => { if (recorder === r && onProblem) onProblem(message); };
+    r.onerror = (e) => problem('The recording stopped: ' + (e && e.error && e.error.message ? e.error.message : 'the recorder failed') + '.');
+    for (const t of stream.getTracks()) {
+      t.onended = () => problem(t.kind === 'video' ? 'The camera stopped (unplugged, asleep, or taken by another app).' : 'The microphone stopped.');
+    }
+    r.start(CHUNK_MS);
     return { file: begun.file };
   }
 
@@ -153,13 +185,10 @@
       r.stop();
     });
     await queue;
-    cancelAnimationFrame(drawing);
-    drawing = 0;
-    if (canvasStream) canvasStream.getTracks().forEach((t) => t.stop());
-    canvasStream = null;
+    stopCut();
     const res = await window.cue.recordEnd(takeId);
     takeId = '';
-    if (writeError && res && !res.error) res.warning = writeError;
+    if (writeError && res && !res.error && !res.warning) res.warning = writeError;
     return res;
   }
 
@@ -170,8 +199,16 @@
     stopMeter,
     start,
     stop,
-    // Everything off: the camera light goes out.
-    close: () => { if (!recorder) stopStream(); },
+    // The camera owner right now: pass it back to close() from a delayed step.
+    generation: () => generation,
+    // Everything off: the camera light goes out. With `owner`, only if no
+    // newer preview has taken the camera since.
+    close: (owner) => {
+      if (recorder) return;
+      if (owner !== undefined && owner !== generation) return;
+      generation++;
+      stopStream();
+    },
     recording: () => !!recorder
   };
 })();

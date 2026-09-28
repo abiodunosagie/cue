@@ -3,7 +3,7 @@
 // top centre of the screen, just under the camera, while the script is read.
 const fs = require('fs');
 const path = require('path');
-const { createRecorderFiles, defaultFolder, PRESETS } = require('../recording');
+const { createRecorderFiles, defaultFolder } = require('../recording');
 
 function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin }) {
   const folder = () => store.getSettings().recordingFolder || defaultFolder();
@@ -19,7 +19,9 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
     return f.startsWith(home + path.sep) ? '~' + f.slice(home.length) : f;
   };
 
-  ipcMain.handle('record:info', () => ({ presets: PRESETS, folder: shownFolder(), ffmpeg: files.hasFfmpeg() }));
+  const failed = (what, e) => ({ ok: false, error: what + ': ' + (e && e.message ? e.message : String(e)) });
+
+  ipcMain.handle('record:info', () => ({ folder: shownFolder(), ffmpeg: files.hasFfmpeg() }));
 
   ipcMain.handle('record:begin', (_e, opts) => {
     try {
@@ -32,7 +34,7 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
 
   ipcMain.handle('record:chunk', (_e, id, data) => {
     if (typeof id !== 'string' || !(data instanceof ArrayBuffer || ArrayBuffer.isView(data))) return { ok: false, error: 'Bad chunk.' };
-    return files.chunk(id, data);
+    try { return files.chunk(id, data); } catch (e) { return failed('The video could not be written', e); }
   });
 
   ipcMain.handle('record:end', async (_e, id) => {
@@ -50,8 +52,7 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
 
   ipcMain.handle('record:reveal', (_e, p) => {
     if (typeof p !== 'string' || !saved.has(p) || !fs.existsSync(p)) return { error: 'That video is no longer there.' };
-    shell.showItemInFolder(p);
-    return { ok: true };
+    try { shell.showItemInFolder(p); return { ok: true }; } catch (e) { return failed('Finder could not show it', e); }
   });
 
   // A take the candidate threw away: to the Trash, so a wrong press can be undone.
@@ -78,6 +79,15 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
   ipcMain.handle('record:place', (_e, on) => {
     const win = getWin();
     if (!win || win.isDestroyed()) return { ok: false };
+    try {
+      place(win, on);
+      return { ok: true };
+    } catch (e) {
+      return failed('cue could not move', e);
+    }
+  });
+
+  function place(win, on) {
     if (on) {
       const b = win.getBounds();
       if (!placedFrom) placedFrom = { x: b.x, y: b.y };
@@ -87,8 +97,7 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
       win.setPosition(placedFrom.x, placedFrom.y);
       placedFrom = null;
     }
-    return { ok: true };
-  });
+  }
 
   return {
     // The page reloaded or cue is quitting: keep what was recorded, move back.
