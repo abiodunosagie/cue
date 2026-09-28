@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('cue', {
   projectsScan: () => ipcRenderer.invoke('projects:scan'),
   projectsSave: (list) => ipcRenderer.invoke('projects:save', list),
   projectsDraft: (ids) => ipcRenderer.invoke('projects:draft', ids),
+  codingLibraryGet: () => ipcRenderer.invoke('codingLibrary:get'),
+  codingLibraryDelete: (id) => ipcRenderer.invoke('codingLibrary:delete', id),
   memoryState: () => ipcRenderer.invoke('memory:state'),
   preparedState: () => ipcRenderer.invoke('prepared:state'),
   preparedRun: () => ipcRenderer.invoke('prepared:run'),

@@ -355,6 +355,15 @@
         </div>
         <div class="s-note">Start listening first. Uses your ElevenLabs key for the voice, or the Mac's voice without one. Practice needs an empty interview memory and clears it when it ends.</div>
 
+        <!-- Coding library (src/coding-library.js, src/ipc/coding-library.js, renderer/coding-library-panel.js) -->
+        <label class="s-label" for="lib-search">Coding library <span class="s-hint">coding questions cue has solved; the same question later shows its saved solution in seconds</span></label>
+        <div class="s-note">Every coding solve is saved here, on this Mac only. A saved solution is shown only after the Fast model checks that the question on screen is the same task; any changed detail means a fresh solve. When Check my progress finds a saved solution wrong, it is marked here and the next solve replaces it.</div>
+        <div class="proj-filter">
+          <input id="lib-search" type="search" placeholder="Search solved questions" autocomplete="off" aria-label="Search solved questions" />
+        </div>
+        <div class="s-status" id="lib-status" role="status"></div>
+        <div id="lib-list" class="proj-list"></div>
+
         <label class="s-label">Company research <span class="s-hint">paste the company's website; cue writes company notes and drafts Why this company</span></label>
         <div class="s-field s-upload">
           <input id="company-url" type="text" placeholder="e.g. acme.com or acme.com/about" autocomplete="off" aria-label="Company website" />
@@ -515,6 +524,7 @@
   <script src="script-follow.js"></script>
   <script src="project-limits.js"></script>
   <script src="projects-panel.js"></script>
+  <script src="coding-library-panel.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

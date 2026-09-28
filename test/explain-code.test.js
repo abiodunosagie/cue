@@ -52,7 +52,7 @@ test('checking progress works from the plan and the editor, and is never stored 
   assert.equal(def.notAnswer, true);
   assert.equal(def.codingFollowUp, true);
   const system = def.buildSystem('', '');
-  const order = ['**Where you are:**', '**Issues:**', '**Next:**'].map((p) => system.indexOf(p));
+  const order = ['**Verdict:**', '**Where you are:**', '**Issues:**', '**Next:**'].map((p) => system.indexOf(p));
   assert.ok(order.every((i) => i >= 0));
   assert.deepEqual([...order].sort((a, b) => a - b), order);
   assert.match(system, /None, it looks right\./);
@@ -122,4 +122,17 @@ test('fix my code reads the error on screen against the plan and gives whole fil
   assert.match(prompt, /What I see, in my words: it cannot find ContactsRepository/);
   assert.match(def.buildSystem('', ''), /never created: then the fix is to create it/);
   assert.match(def.buildSystem('', ''), /the whole corrected file in one fenced block/);
+});
+
+test('a progress check doubts cue\'s own plan, runs on the Coding model and reads the question screens', () => {
+  const def = MODES.checkProgress;
+  assert.equal(def.tier, 'coding');
+  const system = def.buildSystem('', '');
+  assert.match(system, /cue's plan can be wrong/);
+  assert.match(system, /read the question again yourself/);
+  assert.match(system, /starts with exactly "cue's solution is right" or "cue's solution is wrong:"/);
+  const withScreens = def.build({ priorSolves: ['PLAN'], pages: 4 });
+  assert.match(withScreens, /4 screens, labelled/);
+  assert.match(withScreens, /"on screen now" are the candidate's editor/);
+  assert.doesNotMatch(def.build({ priorSolves: ['PLAN'], pages: 1 }), /screens, labelled/);
 });

@@ -215,6 +215,7 @@ const MODES = {
 
   // ── Check my progress: what is done, what is wrong, and what to write next ──
   checkProgress: {
+    tier: 'coding',       // re-solving the question in its head: the Coding model, the one that can find a logic slip
     codingFollowUp: true, // see explainCode
     skipMemory: true,
     notAnswer: true,      // a checkpoint for the candidate, not something said in the interview
@@ -224,17 +225,22 @@ const MODES = {
     buildSystem(_contextBlock, aiRules) {
       return applyRules(
         'You are cue, checking a candidate\'s progress in the middle of a live coding task. ' + BASE_RULES +
-        'You get the step-by-step plan cue gave them and a screenshot of their editor now (and the file tree, when it is visible). ' +
-        'Read the screen carefully: judge only what is visible, and say which file you are looking at.\n\n' +
+        'You get the step-by-step plan cue gave them, the screens of the question when cue has them, and a screenshot of their editor now (and the file tree, when it is visible). ' +
+        'cue\'s plan can be wrong: a typo, a wrong name, a missed edge case or rule, code that does not do what the question asks. ' +
+        'So first read the question again yourself, from its screens (or from what is visible when there are none): what goes in, what comes out, every rule and constraint, the examples and tests. ' +
+        'Then check the plan against the question, and the code on screen against both. Judge only what is visible, and say which file you are looking at.\n\n' +
         'Answer in this order:\n' +
+        '**Verdict:** one plain sentence that starts with exactly "cue\'s solution is right" or "cue\'s solution is wrong:" followed by what is wrong with it and why, against the question. ' +
+        'Only call it wrong for a real mistake that would give a wrong result, fail a test or not compile, never for style.\n' +
         '**Where you are:** one or two plain sentences: which steps of the plan look done, based on the screen, and which step they are on.\n' +
         'When an error is visible (a red underline, a problems panel, a terminal or run output) or the candidate describes one, find its real cause first. ' +
         'An import or name that cannot be found usually means the file or class was never created: then the fix is to create it, with the whole file in a fenced block ' +
         'and its full path, never only another import line.\n' +
-        '**Issues:** every real problem in the visible code that would stop it compiling or working (a typo, a missing or wrong import, a wrong name, a file that was never created, ' +
-        'a missing bracket, a logic slip, code that does not match the plan), each as one plain sentence naming the file and line, then the corrected lines (saying which lines they replace) in a fenced block ' +
-        'tagged with the language, then **Say:** one sentence the candidate can say while fixing it. When there is nothing wrong, write "None, it looks right." and nothing else here.\n' +
-        '**Next:** the next step of the plan to write, exactly as the plan gives it (its heading, its code blocks and their Say lines), adjusted to fit what is on screen, ' +
+        '**Issues:** every real problem, each as one plain sentence naming the file and line, then the corrected lines (saying which lines they replace) in a fenced block ' +
+        'tagged with the language, then **Say:** one sentence the candidate can say while fixing it. First the mistakes in cue\'s plan that are already typed or still to come ' +
+        '(say it is cue\'s mistake, so the candidate knows the plan changed), then the problems in what they typed (a typo, a missing or wrong import, a wrong name, a file that was never created, ' +
+        'a missing bracket, a logic slip, code that does not match the plan where the plan is right). When there is nothing wrong, write "None, it looks right." and nothing else here.\n' +
+        '**Next:** the next step of the plan to write, exactly as the plan gives it (its heading, its code blocks and their Say lines), corrected where the plan was wrong and adjusted to fit what is on screen, ' +
         'starting with where it goes: the file as shown on screen and the spot in it (below which line or function, or which lines it replaces). ' +
         'When every step is done, say so and give the plan\'s Run it instead.\n\n' +
         'Never invent problems to have something to say. Code goes only inside fenced blocks, never in inline backticks. No markdown headings.',
@@ -244,8 +250,9 @@ const MODES = {
       const plan = (ctx.priorSolves || [])[0] || '';
       const said = String(ctx.userText || '').trim();
       return (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : 'There is no earlier plan: judge the code on screen on its own.\n\n') +
+        (ctx.pages > 1 ? checkPagesNote(ctx.pages) : '') +
         (said ? 'What I am stuck on, in my words: ' + said + '\n\n' : '') +
-        'Check my progress on screen: what is done, anything wrong, and what I write next.';
+        'Check cue\'s solution against the question, then my progress on screen: is the solution right, what is done, anything wrong, and what I write next.';
     }
   },
 
@@ -523,6 +530,13 @@ function pagesNote(pages, views) {
     'and the file to edit (with its line numbers) is where the answer goes.' +
     (views > 1 ? ' Screens from a later read (a higher View number) show the newer state of a tab; those marked "on screen now" are what the candidate sees at this moment.' : '') +
     '\n\n';
+}
+
+// A progress check with the question's screens: which ones are the question
+// and which one is the editor now.
+function checkPagesNote(pages) {
+  return 'The screenshots are ' + pages + ' screens, labelled. The earlier views are the question as cue read it when solving (instructions, examples, tests, starter code). ' +
+    'Those marked "on screen now" are the candidate\'s editor at this moment: that is the code to check.\n\n';
 }
 
 function solveRequest(pages) {

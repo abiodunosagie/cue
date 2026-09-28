@@ -13,3 +13,11 @@ test('a stalled call rejects after the timeout instead of hanging', async () => 
   const llm = { stream: () => new Promise(() => {}) };
   await assert.rejects(quickAsk({ llm, system: '', text: '', maxTokens: 1, timeoutMs: 20 }), /took too long/);
 });
+
+test('quick ask passes several labelled screens through', async () => {
+  let args = null;
+  const llm = { stream: async (a) => { args = a; return 'ok'; } };
+  const shots = [{ url: 'data:a', label: 'View 1 of 2' }, { url: 'data:b', label: 'View 2 of 2' }];
+  await quickAsk({ llm, system: 'S', text: 'T', imageDataUrls: shots, maxTokens: 9, timeoutMs: 100 });
+  assert.deepEqual(args.imageDataUrls, shots);
+});

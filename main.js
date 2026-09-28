@@ -24,6 +24,8 @@ const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
+const { createCodingLibrary, identifyTask, confirmSameTask } = require('./src/coding-library');
+const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
@@ -118,6 +120,15 @@ interviewMemory.load();
 // Answers to the likely questions, made before the interview (cue-prepared.json).
 const preparedStore = createPreparedStore({ file: path.join(app.getPath('userData'), 'cue-prepared.json') });
 preparedStore.load();
+// Every coding question solved with Cmd+H, so the same one later shows its
+// saved solution instead of a new Coding model solve (src/coding-library.js).
+const codingLibrary = createCodingLibrary({ file: path.join(app.getPath('userData'), 'cue-coding-library.json') });
+codingLibrary.load();
+// The library entry behind the question in front of the candidate (the saved
+// solution shown, or the one just saved), so a progress check that finds it
+// wrong can flag it. Cleared with the question. Declared up here because
+// clearInterview() can run while this file is still loading.
+let currentLibraryId = null;
 const preparing = { running: false, error: '' };
 // Answers to the likely follow-ups of this interview's last few answers (src/follow-ups.js).
 const followUps = createFollowUpBank();
@@ -236,6 +247,7 @@ function clearInterview() {
   transcript.splice(0, transcript.length);
   followUps.clear();
   questionBundle.clear();
+  currentLibraryId = null;
   announceQuestion();
   return interviewMemory.clear();
 }
@@ -761,9 +773,10 @@ function quickStartLlm(mode, settings, codingLlm) {
 }
 
 function priorSolvesFor(def, mode) {
-  if (def.tier === 'coding') return interviewMemory.codingHistory();
   // The whole solve: a progress check needs the plan's later steps, not its first few thousand characters.
+  // Checked before the tier: a progress check runs on the Coding model too.
   if (mode === 'explainCode' || mode === 'checkProgress' || mode === 'fixCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
+  if (def.tier === 'coding') return interviewMemory.codingHistory();
   return [];
 }
 
@@ -781,6 +794,38 @@ const questionBundle = createQuestionBundle();
 // moves on, so a read that started before it never lands in the new question.
 let gathering = null;
 let questionEpoch = 0;
+
+// Which saved coding task, if any, is the one on screen: the Fast model reads
+// the screens, the closest saved task in the same language is the candidate,
+// and the Fast model must call the two the same task before its solution is
+// used. Resolves { task, hit, replaceId }: task is null when the screen could
+// not be read (nothing is saved then); hit is the saved item to show;
+// replaceId is a saved item this solve replaces (a flagged one). Never throws.
+async function lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt }) {
+  const fast = createLLM({ ...settings, smart: false });
+  if (!fast.ready) return { task: null };
+  const task = await identifyTask({ llm: fast, imageDataUrl, imageDataUrls });
+  console.log(`[timing] library: ${task ? 'read the task' : 'no task read'} after ${Date.now() - startedAt}ms (${fast.model})`);
+  if (!task) return { task: null };
+  const found = codingLibrary.candidate(task);
+  if (!found) return { task };
+  const check = await confirmSameTask({ llm: fast, now: task, saved: found.item });
+  console.log(`[timing] library: ${check.same ? 'same task' : 'different task'} (overlap ${found.score.toFixed(2)}) after ${Date.now() - startedAt}ms`);
+  if (!check.same) {
+    if (check.reason) send('status', { message: `A saved solution was close, but this question differs: ${check.reason} Solving it fresh.` });
+    return { task };
+  }
+  if (found.item.flagged) {
+    send('status', { message: 'The saved solution for this question was found wrong in a progress check. Solving it fresh.' });
+    return { task, replaceId: found.item.id };
+  }
+  return { task, hit: found.item };
+}
+
+function savedSolutionLabel(item) {
+  const date = new Date(item.updatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+  return `Saved solution, from ${date}`;
+}
 
 // The screens of one view, unencoded ({ thumb, image }): read while the
 // candidate scrolls and switches tabs when reading is on, else the screen as it is.
@@ -865,6 +910,7 @@ async function gatherView() {
 // the last question, so none of them reach the next solve.
 function nextQuestion() {
   questionEpoch++;
+  currentLibraryId = null;
   questionBundle.clear();
   announceQuestion();
   interviewMemory.markNewQuestion();
@@ -911,6 +957,8 @@ async function runFeature(mode, userText, options = {}) {
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
+  // Next question pressed during this answer: it no longer belongs to the question on screen.
+  const epochAtStart = questionEpoch;
   // An answer that started before Clear must not write the old interview back.
   const memoryGeneration = interviewMemory.generation();
   // Timing, for the log: how long until the first word shows, and from where.
@@ -997,6 +1045,15 @@ async function runFeature(mode, userText, options = {}) {
           views = screens.views;
           if (screens.urls.length > 1) imageDataUrls = screens.urls;
           else imageDataUrl = screens.urls[0].url;
+        } else if (mode === 'checkProgress' && questionBundle.count()) {
+          // The question's screens as cue read them, then the editor now, so
+          // the check can test cue's solution against the question itself.
+          const editor = await captureMaskedPage(cueWindowBounds(), { keepPanel: true });
+          if (editor) {
+            const screens = questionBundle.labelled([editor]);
+            const urls = fitPages(screens.map((x) => x.image), encodeScreenshot, MAX_DATA_URL_BYTES);
+            imageDataUrls = urls.map((url, i) => ({ url, label: screens[i].label }));
+          }
         } else {
           imageDataUrl = await captureScreenshot();
         }
@@ -1006,6 +1063,14 @@ async function runFeature(mode, userText, options = {}) {
         reportCaptureFailure(e, 'captureScreenshot', { mode });
       }
     }
+
+    // Cmd+H: is this question in the coding library? Read alongside the quick
+    // start. With nothing saved there is nothing to find, so the solve never
+    // waits for it and the reading only files the solution afterwards.
+    const libraryLookup = mode === 'leetcode' && (imageDataUrl || imageDataUrls)
+      ? lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt })
+      : null;
+    const libraryFirst = !!libraryLookup && codingLibrary.count() > 0;
 
     const settingsForPrompt = store.getSettings();
     // Modes that read the whole interview themselves skip the digest; coding memory
@@ -1109,20 +1174,44 @@ async function runFeature(mode, userText, options = {}) {
         quickPlan = String((e && e.partial) || '').trim();
         console.log(`[timing] ${mode}: quick start failed after ${Date.now() - startedAt}ms (${quick.model})${quickPlan ? ', keeping the part shown' : ''}: ${e && e.message ? e.message : String(e)}`);
       }
-      if (quickPlan) send('llm:section', { label: 'Full solution' });
+      if (quickPlan && !libraryFirst) send('llm:section', { label: 'Full solution' });
     }
-    const fullBuilt = quickPlan ? buildTurn({ quickPlan }) : built;
+    // A saved solution the Fast model called the same task replaces the Coding model solve.
+    const library = libraryFirst ? await libraryLookup : null;
+    const saved = library && library.hit;
+    if (quickPlan && libraryFirst) send('llm:section', { label: saved ? savedSolutionLabel(saved) : 'Full solution' });
+    else if (saved) send('llm:tag', { label: savedSolutionLabel(saved) });
     let answer = '';
-    try {
-      answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');
-    } catch (e) {
-      // The quick start is on screen and may already be typed: keep it for Check and Explain.
-      if (quickPlan && !def.notAnswer) interviewMemory.addAnswer({ mode, text: quickPlan, generation: memoryGeneration, ts: startedAt });
-      throw e;
+    if (saved) {
+      firstWord('saved solution');
+      for (const chunk of saved.solution.match(/\S+\s*/g) || []) send('llm:token', { text: chunk });
+      answer = saved.solution;
+      codingLibrary.markUsed(saved.id);
+      if (questionEpoch === epochAtStart) currentLibraryId = saved.id;
+    } else {
+      const fullBuilt = quickPlan ? buildTurn({ quickPlan }) : built;
+      try {
+        answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');
+      } catch (e) {
+        // The quick start is on screen and may already be typed: keep it for Check and Explain.
+        if (quickPlan && !def.notAnswer) interviewMemory.addAnswer({ mode, text: quickPlan, generation: memoryGeneration, ts: startedAt });
+        throw e;
+      }
     }
     send('llm:done', {});
+    // A progress check that found cue's saved solution wrong: solve it fresh next time.
+    if (mode === 'checkProgress' && currentLibraryId && questionEpoch === epochAtStart) {
+      const wrong = /\*\*Verdict:\*\*\s*cue.s solution is wrong:?\s*([^\n]*)/i.exec(answer);
+      if (wrong) codingLibrary.flag(currentLibraryId, wrong[1]);
+    }
     // Quick start and full solution are one plan to later progress checks.
     if (quickPlan) answer = quickPlan + '\n\n' + answer;
+    // A fresh solve is filed, whole (quick start included), for the next time this question comes.
+    if (libraryLookup && !saved) {
+      const found = library || await libraryLookup;
+      const item = found.task ? codingLibrary.save({ ...found.task, id: found.replaceId, solution: answer }) : null;
+      if (item && questionEpoch === epochAtStart) currentLibraryId = item.id;
+    }
     if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration, ts: startedAt });
     // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
     if (LENGTH_MODES.has(mode)) prepareFollowUps(openerQuestion(mode, userText, transcript), (opener ? opener + ' ' : '') + answer, memoryGeneration);
@@ -1186,6 +1275,7 @@ registerProfileIpc({
   }
 });
 registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send });
+registerCodingLibraryIpc({ ipcMain, codingLibrary });
 ipcMain.handle('practice:start', () => practice.start());
 ipcMain.handle('practice:next', () => practice.next());
 ipcMain.handle('practice:end', () => practice.end());
