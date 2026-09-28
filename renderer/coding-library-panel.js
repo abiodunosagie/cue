@@ -61,7 +61,7 @@
       clearTimeout(armed);
       armed = null;
       del.disabled = true;
-      apply(await window.cue.codingLibraryDelete(it.id));
+      try { apply(await window.cue.codingLibraryDelete(it.id)); } catch { status('Could not delete. Try again.'); }
       render();
     });
     head.append(name, del);
@@ -98,7 +98,7 @@
   }
 
   async function load() {
-    apply(await window.cue.codingLibraryGet());
+    try { apply(await window.cue.codingLibraryGet()); } catch { status('Could not load the coding library.'); }
     render();
   }
 

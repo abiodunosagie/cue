@@ -66,11 +66,26 @@ function createQuestionBundle({ maxScreens = MAX_SCREENS, sameScreen = SAME_SCRE
     });
   }
 
+  // For a progress check: every screen labelled, with `page` (the editor now)
+  // as the one on screen now. A kept screen of the same tab is swapped for it
+  // in place, so an editor the candidate has not changed is not sent twice.
+  // The bundle itself is not changed.
+  function labelledWithScreenNow(page) {
+    const i = screens.findIndex((s) => changedShare(s.thumb, page.thumb) < sameScreen);
+    if (i < 0) return labelled([page]);
+    const saved = { screens, latest };
+    screens = screens.slice();
+    screens[i] = { ...page, view: screens[i].view };
+    latest = new Set([screens[i]]);
+    try { return labelled(); } finally { ({ screens, latest } = saved); }
+  }
+
   function clear() { screens = []; views = 0; latest = new Set(); }
 
   return {
     add,
     labelled,
+    labelledWithScreenNow,
     clear,
     count: () => screens.length,
     viewCount: () => new Set(screens.map((s) => s.view)).size

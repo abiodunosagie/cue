@@ -121,3 +121,17 @@ test('coding prompt: gathered views read as one question; every answer says wher
   assert.match(MODES.leetcode.build({ quickStart: 'plan' }), /\*\*Where it goes:\*\*/);
   assert.match(MODES.checkProgress.buildSystem('', ''), /starting with where it goes/);
 });
+
+test('a progress check swaps an unchanged editor in place instead of sending it twice', () => {
+  const { createQuestionBundle } = require('../src/question-bundle');
+  const px = (v) => Buffer.alloc(64 * 36 * 4, v);
+  const b = createQuestionBundle({ sameScreen: 0.12 });
+  b.add([{ thumb: px(10), image: 'INSTRUCTIONS' }, { thumb: px(200), image: 'EDITOR_OLD' }]);
+  const same = b.labelledWithScreenNow({ thumb: px(200), image: 'EDITOR_NOW' });
+  assert.deepEqual(same.map((s) => s.image), ['INSTRUCTIONS', 'EDITOR_NOW']);
+  assert.match(same[1].label, /on screen now/);
+  assert.doesNotMatch(same[0].label, /on screen now/);
+  assert.deepEqual(b.labelled().map((s) => s.image), ['INSTRUCTIONS', 'EDITOR_OLD']); // bundle untouched
+  const other = b.labelledWithScreenNow({ thumb: px(120), image: 'NEW_TAB' });
+  assert.deepEqual(other.map((s) => s.image), ['INSTRUCTIONS', 'EDITOR_OLD', 'NEW_TAB']);
+});

@@ -19,6 +19,7 @@ const { quickAsk } = require('./quick-ask');
 const MAX_ITEMS = 300;
 // A whole Coding model answer (8192 tokens) with room to spare.
 const MAX_SOLUTION_CHARS = 60000;
+// The identify prompt asks for under 2500; the extra is room for a model that runs over.
 const MAX_STATEMENT_CHARS = 3000;
 const MAX_TITLE_CHARS = 160;
 const MAX_LANGUAGE_CHARS = 40;
@@ -94,6 +95,16 @@ function confirmSameTask({ llm, now, saved, timeoutMs = CONFIRM_TIMEOUT_MS }) {
       const reason = /^different\b/i.test(r) ? clip(r.replace(/^different\b[\s:.,-]*/i, ''), MAX_REASON_CHARS) : '';
       return { same: false, reason };
     }, () => ({ same: false, reason: '' }));
+}
+
+// A progress check's verdict line (src/prompts.js checkProgress):
+// { found, wrong, reason }. Only a clear "wrong" flags a saved solution.
+function checkVerdict(answer) {
+  // Bold or not, colon inside or outside it: "**Verdict:**", "**Verdict**:", "Verdict:".
+  const line = /^[\s*_]*Verdict[*_]*\s*:[*_]*\s*([^\n]*)/im.exec(String(answer || ''));
+  if (!line) return { found: false, wrong: false, reason: '' };
+  const wrong = /^cue.s solution is wrong\b:?\s*(.*)$/i.exec(line[1].trim());
+  return { found: true, wrong: !!wrong, reason: wrong ? clip(wrong[1], MAX_REASON_CHARS) : '' };
 }
 
 function taskWords(task) {
@@ -212,6 +223,6 @@ function createCodingLibrary({ file, now = Date.now } = {}) {
 }
 
 module.exports = {
-  createCodingLibrary, parseIdentified, identifyTask, confirmSameTask, findCandidate,
+  createCodingLibrary, parseIdentified, identifyTask, confirmSameTask, findCandidate, checkVerdict,
   MAX_ITEMS, MAX_SOLUTION_CHARS
 };

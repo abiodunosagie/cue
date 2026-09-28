@@ -24,7 +24,7 @@ const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
-const { createCodingLibrary, identifyTask, confirmSameTask } = require('./src/coding-library');
+const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
 const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
@@ -803,12 +803,16 @@ let questionEpoch = 0;
 // used. Resolves { task, hit, replaceId }: task is null when the screen could
 // not be read (nothing is saved then); hit is the saved item to show;
 // replaceId is a saved item this solve replaces (a flagged one). Never throws.
-async function lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt }) {
+// resolvingId: this question was already solved (or shown) since Next question,
+// so another Cmd+H means "solve it again with what I show you now": the
+// library is not searched, and the fresh solve replaces that entry.
+async function lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt, resolvingId }) {
   const fast = createLLM({ ...settings, smart: false });
   if (!fast.ready) return { task: null };
   const task = await identifyTask({ llm: fast, imageDataUrl, imageDataUrls });
   console.log(`[timing] library: ${task ? 'read the task' : 'no task read'} after ${Date.now() - startedAt}ms (${fast.model})`);
   if (!task) return { task: null };
+  if (resolvingId) return { task, replaceId: resolvingId };
   const found = codingLibrary.candidate(task);
   if (!found) return { task };
   const check = await confirmSameTask({ llm: fast, now: task, saved: found.item });
@@ -1052,7 +1056,7 @@ async function runFeature(mode, userText, options = {}) {
           // the check can test cue's solution against the question itself.
           const editor = await captureMaskedPage(cueWindowBounds(), { keepPanel: true });
           if (editor) {
-            const screens = questionBundle.labelled([editor]);
+            const screens = questionBundle.labelledWithScreenNow(editor);
             const urls = fitPages(screens.map((x) => x.image), encodeScreenshot, MAX_DATA_URL_BYTES);
             imageDataUrls = urls.map((url, i) => ({ url, label: screens[i].label }));
           }
@@ -1069,10 +1073,12 @@ async function runFeature(mode, userText, options = {}) {
     // Cmd+H: is this question in the coding library? Read alongside the quick
     // start. With nothing saved there is nothing to find, so the solve never
     // waits for it and the reading only files the solution afterwards.
+    // A second Cmd+H on the same question is a fresh solve that replaces its entry.
+    const resolvingId = questionEpoch === epochAtStart ? currentLibraryId : null;
     const libraryLookup = mode === 'leetcode' && (imageDataUrl || imageDataUrls)
-      ? lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt })
+      ? lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt, resolvingId })
       : null;
-    const libraryFirst = !!libraryLookup && codingLibrary.count() > 0;
+    const libraryFirst = !!libraryLookup && !resolvingId && codingLibrary.count() > 0;
 
     const settingsForPrompt = store.getSettings();
     // Modes that read the whole interview themselves skip the digest; coding memory
@@ -1203,16 +1209,22 @@ async function runFeature(mode, userText, options = {}) {
     send('llm:done', {});
     // A progress check that found cue's saved solution wrong: solve it fresh next time.
     if (mode === 'checkProgress' && currentLibraryId && questionEpoch === epochAtStart) {
-      const wrong = /\*\*Verdict:\*\*\s*cue.s solution is wrong:?\s*([^\n]*)/i.exec(answer);
-      if (wrong) codingLibrary.flag(currentLibraryId, wrong[1]);
+      const verdict = checkVerdict(answer);
+      if (verdict.wrong) codingLibrary.flag(currentLibraryId, verdict.reason);
+      // The model drifted from the verdict wording: say so, or a wrong saved solution is reused unnoticed.
+      else if (!verdict.found) console.log('[library] progress check: no verdict line found, saved solution not judged');
     }
     // Quick start and full solution are one plan to later progress checks.
     if (quickPlan) answer = quickPlan + '\n\n' + answer;
     // A fresh solve is filed, whole (quick start included), for the next time this question comes.
+    // Not awaited: the answer is done, and waiting for the Fast model's reading
+    // here would keep cue busy (every key ignored) for up to its timeout.
     if (libraryLookup && !saved) {
-      const found = library || await libraryLookup;
-      const item = found.task ? codingLibrary.save({ ...found.task, id: found.replaceId, solution: answer }) : null;
-      if (item && questionEpoch === epochAtStart) currentLibraryId = item.id;
+      const solution = answer;
+      Promise.resolve(library || libraryLookup).then((found) => {
+        const item = found.task ? codingLibrary.save({ ...found.task, id: found.replaceId, solution }) : null;
+        if (item && questionEpoch === epochAtStart) currentLibraryId = item.id;
+      }).catch((e) => console.log(`[library] could not save the solve: ${e && e.message ? e.message : String(e)}`));
     }
     if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration, ts: startedAt });
     // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
