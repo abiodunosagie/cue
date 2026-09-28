@@ -2882,11 +2882,16 @@
   });
 
   // ---- click-through: only the UI blocks the mouse; empty gaps pass to your screen ----
+  // Every part of the window that takes the mouse. A sheet missing here is
+  // see-through to clicks, which land in the app behind (the Script window
+  // did: clicks and pastes went to the terminal). Kept in step with the
+  // pointer-events rule in styles.css by test/click-through.test.js.
+  const UI_SELECTOR = '#toolbar, #panel-wrap, #transcript-sidebar, #settings-scrim, #onboard-scrim, #consent-scrim, #script-scrim';
   let ignoring = null;
   function setIgnore(v) { if (v !== ignoring) { ignoring = v; cue.setIgnoreMouse(v); } }
   document.addEventListener('mousemove', (e) => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
-    const overUI = !!(el && el.closest && el.closest('#toolbar, #panel-wrap, #transcript-sidebar, #settings-scrim, #onboard-scrim, #consent-scrim'));
+    const overUI = !!(el && el.closest && el.closest(UI_SELECTOR));
     setIgnore(!overUI);
   });
   setIgnore(true); // start fully click-through; hovering the panel re-enables it

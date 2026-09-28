@@ -129,6 +129,11 @@ codingLibrary.load();
 // wrong can flag it. Cleared with the question. Declared up here because
 // clearInterview() can run while this file is still loading.
 let currentLibraryId = null;
+// The coding question in front of the candidate, across its tabs: every view
+// read by Cmd+H or by the gather key, until Next question (src/question-bundle.js).
+// Up here too: a practice that crashed is cleared (clearInterview) while this
+// file is still loading, and a const declared below that call is not usable yet.
+const questionBundle = createQuestionBundle();
 const preparing = { running: false, error: '' };
 // Answers to the likely follow-ups of this interview's last few answers (src/follow-ups.js).
 const followUps = createFollowUpBank();
@@ -786,9 +791,6 @@ let scrollReader = null;
 const cmdH = isMac ? '⌘H' : 'Ctrl+H';
 const noMouseKey = (letter) => (isMac ? 'Ctrl+Option+⌘' : 'Ctrl+Alt+Shift+') + letter;
 
-// The coding question in front of the candidate, across its tabs: every view
-// read by Cmd+H or by the gather key, until Next question (src/question-bundle.js).
-const questionBundle = createQuestionBundle();
 // The gather in progress (a promise), so a Cmd+H solve waits for it instead of
 // reading the screen at the same time; and questionEpoch, which Next question
 // moves on, so a read that started before it never lands in the new question.
