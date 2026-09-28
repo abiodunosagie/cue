@@ -249,7 +249,7 @@ const MODES = {
     build(ctx) {
       const plan = (ctx.priorSolves || [])[0] || '';
       const said = String(ctx.userText || '').trim();
-      return (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : 'There is no earlier plan: judge the code on screen on its own.\n\n') +
+      return projectNote(ctx) + (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : 'There is no earlier plan: judge the code on screen on its own.\n\n') +
         (ctx.pages > 1 ? checkPagesNote(ctx.pages) : '') +
         (said ? 'What I am stuck on, in my words: ' + said + '\n\n' : '') +
         'Check cue\'s solution against the question, then my progress on screen: is the solution right, what is done, anything wrong, and what I write next.';
@@ -501,12 +501,35 @@ const MODES = {
     build(ctx) {
       const plan = (ctx.priorSolves || [])[0] || '';
       const said = String(ctx.userText || '').trim();
-      return (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : '') +
+      return projectNote(ctx) + (plan ? 'The plan cue gave for this task:\n\n' + plan + '\n\n' : '') +
         (said ? 'What I see, in my words: ' + said + '\n\n' : '') +
         'Fix the error on my screen.';
     }
+  },
+
+  // Follow-ups about a project reviewed in this interview (src/project-review):
+  // "fix issue 3", "where is auth handled", "is this change safe". main builds
+  // the turn: the review, the map and the named files read from disk now.
+  projectAsk: {
+    tier: 'coding',
+    codingFollowUp: true,
+    skipMemory: true,
+    notAnswer: true,
+    needsScreen: false,
+    userBubble: null,
+    small: false,
+    buildSystem(_contextBlock, aiRules) { return applyRules(require('./project-review/prompts').ASK_SYSTEM, aiRules, 'projectAsk'); },
+    build(ctx) { return ctx.projectTurn || String(ctx.userText || ''); }
   }
 };
+
+// The project review, when one was done this interview: fixes and progress
+// checks keep to the project's own structure and the problems already found.
+const PROJECT_NOTE_CHARS = 30000;
+function projectNote(ctx) {
+  const report = ctx && ctx.projectReport;
+  return report ? 'The review of this project done earlier in the interview, for context:\n\n' + String(report).slice(0, PROJECT_NOTE_CHARS) + '\n\n' : '';
+}
 
 // Quick start: a faster model writes only the first part of a coding answer,
 // so the candidate has something to read and say within seconds. The strong

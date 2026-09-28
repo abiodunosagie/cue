@@ -63,7 +63,7 @@ html, body {
 /* The panel always fits under the toolbar: the answer area shrinks and scrolls
    instead of the panel growing past the bottom of the window. */
 #toolbar { flex-shrink: 0; }
-#toolbar, #panel-wrap, #settings-scrim, #onboard-scrim, #consent-scrim, #script-scrim { pointer-events: auto; }
+#toolbar, #panel-wrap, #settings-scrim, #onboard-scrim, #consent-scrim, #script-scrim, #project-scrim { pointer-events: auto; }
 #toolbar { -webkit-app-region: drag; }   /* drag the top pill to move the window */
 #panel-wrap, #panel, #messages, #action-row, #composer, #input, textarea, button, .act, .smart-pill, .more-btn, #send-btn, .s-close, .s-seg button, .ob-buttons button, .ob-ghost, .ob-primary { -webkit-app-region: no-drag; }
 
@@ -835,6 +835,23 @@ button:focus { outline: none; }
 #practice-label, #question-label, #script-label { flex: 1; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600; }
 
 /* ============================ Teleprompter ============================ */
+/* Project review sheet */
+#project-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
+#project-scrim.hidden { display: none; }
+#project-sheet { width: min(560px, 94vw); max-height: 90vh; display: flex; flex-direction: column; padding: 0; background: var(--surface-solid); overflow: hidden; -webkit-app-region: no-drag; }
+#project-sheet .s-head { grid-column: auto; }
+.project-list { display: flex; flex-direction: column; gap: 6px; }
+.project-row { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--bd-hair); background: rgba(255,255,255,0.03); cursor: pointer; }
+.project-row.on { border-color: rgba(60,131,245,0.5); background: rgba(60,131,245,0.08); }
+.project-row input { accent-color: var(--accent); }
+.project-row .p-name { color: var(--tx-1); font-size: 13px; font-weight: 600; }
+.project-row .p-meta { color: var(--tx-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-row .p-text { display: flex; flex-direction: column; min-width: 0; }
+.project-empty { color: var(--tx-2); font-size: 12.5px; }
+#project-path { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--bd-hair); background: var(--field); color: var(--tx-1); font: 13px/1.5 var(--font); outline: none; -webkit-user-select: text; user-select: text; }
+#project-path:focus { border-color: rgba(255,255,255,0.3); }
+.project-loaded { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 9px; border: 1px solid rgba(74, 222, 128, 0.35); background: rgba(74, 222, 128, 0.07); color: var(--tx-1); font-size: 12.5px; }
+.project-loaded span { flex: 1; min-width: 0; }
 #script-scrim { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
 #script-scrim.hidden { display: none; }
 #script-editor { width: min(620px, 94vw); max-height: 90vh; display: flex; flex-direction: column; padding: 0; background: var(--surface-solid); overflow: hidden; -webkit-app-region: no-drag; }

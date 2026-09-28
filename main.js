@@ -27,6 +27,9 @@ const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./ren
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
 const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
 const { registerRecordingIpc } = require('./src/ipc/recording');
+const { registerProjectReviewIpc } = require('./src/ipc/project-review');
+const { createProjectMemory } = require('./src/project-review/memory');
+const { isProjectQuestion, askTurn } = require('./src/project-review/review');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
@@ -130,6 +133,10 @@ codingLibrary.load();
 // wrong can flag it. Cleared with the question. Declared up here because
 // clearInterview() can run while this file is still loading.
 let currentLibraryId = null;
+// The codebase reviewed in this interview (src/project-review/memory.js):
+// kept across New question, cleared with the interview.
+const projectMemory = createProjectMemory({ file: path.join(app.getPath('userData'), 'cue-project-review.json') });
+projectMemory.load();
 // The coding question in front of the candidate, across its tabs: every view
 // read by Cmd+H or by the gather key, until Next question (src/question-bundle.js).
 // Up here too: a practice that crashed is cleared (clearInterview) while this
@@ -254,6 +261,7 @@ function clearInterview() {
   followUps.clear();
   questionBundle.clear();
   currentLibraryId = null;
+  projectMemory.clear();
   announceQuestion();
   return interviewMemory.clear();
 }
@@ -964,6 +972,9 @@ async function runFeature(mode, userText, options = {}) {
   // The candidate typing about an error in the code they are writing: read the
   // editor and the error on screen against the plan, instead of guessing.
   if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'fixCode';
+  // A typed question about the codebase reviewed earlier: answered from that
+  // project's review and its files as they are on disk now.
+  if (mode === 'ask' && userText && projectMemory.has() && isProjectQuestion(userText, projectMemory.get().index)) mode = 'projectAsk';
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -990,7 +1001,7 @@ async function runFeature(mode, userText, options = {}) {
     modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
-      : (mode === 'ask' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
+      : (mode === 'ask' || mode === 'projectAsk' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
     send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, showWait: def.tier === 'coding' });
 
@@ -1104,6 +1115,8 @@ async function runFeature(mode, userText, options = {}) {
       answers: mode === 'report' ? interviewMemory.answers() : [],
       architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode),
+      projectReport: (mode === 'fixCode' || mode === 'checkProgress') && projectMemory.has() ? projectMemory.get().report : '',
+      projectTurn: mode === 'projectAsk' ? askTurn({ memory: projectMemory.get(), question: userText || '' }) : '',
       pages: imageDataUrls ? imageDataUrls.length : 1,
       views
     };
@@ -1295,6 +1308,10 @@ registerProfileIpc({
 registerProjectsIpc({ ipcMain, store, createLLM, quickAsk, send });
 registerCodingLibraryIpc({ ipcMain, codingLibrary });
 const recording = registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin: () => win });
+registerProjectReviewIpc({
+  ipcMain, createLLM, getSettings: () => store.getSettings(), send, state, projectMemory,
+  cloneDir: path.join(app.getPath('userData'), 'cue-projects')
+});
 ipcMain.handle('practice:start', () => practice.start());
 ipcMain.handle('practice:next', () => practice.next());
 ipcMain.handle('practice:end', () => practice.end());

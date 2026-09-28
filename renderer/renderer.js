@@ -30,6 +30,7 @@
   document.querySelector('.act[data-mode="followup"] .ic').innerHTML = icon('message-circle', { size: 16 });
   document.querySelector('.act[data-mode="recap"] .ic').innerHTML = icon('refresh-cw', { size: 16 });
   $('#script-btn .ic').innerHTML = icon('scroll-text', { size: 16 });
+  $('#project-btn .ic').innerHTML = icon('folder-code', { size: 16 });
   $('#smart-toggle .ic').innerHTML = icon('zap', { size: 14 });
   $('#more-btn').innerHTML = icon('more-horizontal', { size: 18 });
   $('#send-btn').innerHTML = icon('play', { size: 15 });
@@ -3162,7 +3163,7 @@
   // see-through to clicks, which land in the app behind (the Script window
   // did: clicks and pastes went to the terminal). Kept in step with the
   // pointer-events rule in styles.css by test/click-through.test.js.
-  const UI_SELECTOR = '#toolbar, #panel-wrap, #transcript-sidebar, #settings-scrim, #onboard-scrim, #consent-scrim, #script-scrim';
+  const UI_SELECTOR = '#toolbar, #panel-wrap, #transcript-sidebar, #settings-scrim, #onboard-scrim, #consent-scrim, #script-scrim, #project-scrim';
   let ignoring = null;
   function setIgnore(v) { if (v !== ignoring) { ignoring = v; cue.setIgnoreMouse(v); } }
   document.addEventListener('mousemove', (e) => {
