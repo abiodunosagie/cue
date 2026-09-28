@@ -11,6 +11,7 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
   // Only videos cue saved this run can be shown in Finder: the renderer never
   // gets to point Finder at an arbitrary path.
   const saved = new Set();
+  const captionsOf = new Map(); // a saved video's .srt, deleted with it
   let placedFrom = null; // the window's position before it moved under the camera
 
   const shownFolder = () => {
@@ -37,11 +38,12 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
     try { return files.chunk(id, data); } catch (e) { return failed('The video could not be written', e); }
   });
 
-  ipcMain.handle('record:end', async (_e, id) => {
+  ipcMain.handle('record:end', async (_e, id, opts) => {
     try {
-      const res = await files.end(String(id || ''));
+      const res = await files.end(String(id || ''), { srt: opts && typeof opts.srt === 'string' ? opts.srt : '' });
       if (res && res.path) {
         saved.add(res.path);
+        if (res.srt) captionsOf.set(res.path, res.srt);
         return { ...res, file: path.basename(res.path), folder: shownFolder() };
       }
       return res;
@@ -61,6 +63,9 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
     try {
       await shell.trashItem(p);
       saved.delete(p);
+      const srt = captionsOf.get(p);
+      captionsOf.delete(p);
+      if (srt && fs.existsSync(srt)) await shell.trashItem(srt).catch(() => {});
       return { ok: true };
     } catch (e) {
       return { error: 'Could not move it to the Trash: ' + (e && e.message ? e.message : String(e)) };

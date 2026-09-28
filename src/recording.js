@@ -22,6 +22,7 @@ function normalizeRecording(value) {
     micId: id(v.micId),
     on: v.on === true,
     autoStop: v.autoStop !== false,
+    subtitles: v.subtitles === true,
     preset: PRESET_IDS.includes(v.preset) ? v.preset : DEFAULT_PRESET
   };
 }
@@ -68,11 +69,23 @@ function findFfmpeg() {
 
 // Chromium writes a fragmented MP4; copying it into a plain one with the
 // index first fixes the length some players show and lets it stream. Nothing
-// is re-encoded. Resolves true when `out` was written.
-function remux(ffmpeg, input, out) {
+// is re-encoded. With `srt`, the subtitles go in as a track players can switch
+// on and off (mov_text, the MP4 subtitle format). Resolves true when `out` was written.
+function remux(ffmpeg, input, out, srt) {
+  const args = ['-y', '-v', 'error', '-i', input];
+  if (srt) args.push('-i', srt, '-map', '0', '-map', '1', '-c', 'copy', '-c:s', 'mov_text', '-metadata:s:s:0', 'language=eng');
+  else args.push('-c', 'copy');
+  args.push('-movflags', '+faststart', out);
   return new Promise((resolve) => {
-    execFile(ffmpeg, ['-y', '-v', 'error', '-i', input, '-c', 'copy', '-movflags', '+faststart', out], { timeout: 300000 }, (err) => resolve(!err));
+    execFile(ffmpeg, args, { timeout: 300000 }, (err) => resolve(!err));
   });
+}
+
+// SubRip text from the renderer: only what a caption file holds, and bounded.
+const MAX_SRT_CHARS = 1024 * 1024;
+function cleanSrt(srt) {
+  if (typeof srt !== 'string' || !srt.trim() || srt.length > MAX_SRT_CHARS) return '';
+  return /^1\n\d\d:\d\d:\d\d,\d{3} --> \d\d:\d\d:\d\d,\d{3}\n/.test(srt) ? srt.replace(/\u0000/g, '') : '';
 }
 
 // A MediaRecorder chunk is about a second of video (a few MB); anything far
@@ -119,7 +132,9 @@ function createRecorderFiles({ folder, ffmpeg = findFfmpeg(), maxTakeBytes = MAX
     }
   }
 
-  async function end(id) {
+  // opts.srt: subtitles for this take (SubRip). Saved beside the video as
+  // name.srt, and put inside it as a track when ffmpeg is there.
+  async function end(id, opts = {}) {
     if (!take || take.id !== id) return { error: 'No recording in progress.' };
     const t = take;
     take = null;
@@ -127,19 +142,29 @@ function createRecorderFiles({ folder, ffmpeg = findFfmpeg(), maxTakeBytes = MAX
     if (!t.bytes) { removeQuietly(t.part); removeQuietly(t.final); return { error: 'Nothing was recorded.' }; }
     // A take cut short by an error or the size cap still keeps what it has.
     const warning = t.failed ? 'The recording stopped early: ' + t.failed : '';
+    const srt = cleanSrt(opts.srt);
+    let srtPath = '';
+    if (srt) {
+      try {
+        srtPath = reserve(path.dirname(t.final), path.basename(t.final).replace(/\.mp4$/, '.srt'));
+        fs.writeFileSync(srtPath, srt);
+      } catch { srtPath = ''; }
+    }
     if (ffmpeg) {
       // ffmpeg writes into a file this process just created, never a name it did not.
       const tmp = reserve(path.dirname(t.final), path.basename(t.final).replace(/\.mp4$/, '.remux.mp4'));
-      if (await remux(ffmpeg, t.part, tmp)) {
+      // Subtitles in if they can be, else the video alone: a caption problem never costs the take.
+      const muxed = srtPath && await remux(ffmpeg, t.part, tmp, srtPath);
+      if (muxed || await remux(ffmpeg, t.part, tmp)) {
         fs.chmodSync(tmp, FILE_MODE);
         fs.renameSync(tmp, t.final);
         removeQuietly(t.part);
-        return { path: t.final, bytes: fs.statSync(t.final).size, remuxed: true, warning };
+        return { path: t.final, bytes: fs.statSync(t.final).size, remuxed: true, warning, srt: srtPath, subtitleTrack: !!muxed };
       }
       removeQuietly(tmp);
     }
     fs.renameSync(t.part, t.final);
-    return { path: t.final, bytes: t.bytes, remuxed: false, warning };
+    return { path: t.final, bytes: t.bytes, remuxed: false, warning, srt: srtPath, subtitleTrack: false };
   }
 
   // A take thrown away (the page reloaded, cue quit): keep what was recorded.

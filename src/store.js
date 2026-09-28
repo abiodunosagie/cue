@@ -90,7 +90,7 @@ const DEFAULTS = {
   // Teleprompter scripts (the Script button), cleaned by src/scripts.js.
   scripts: [],
   // Script > Record: camera, microphone and video shape (renderer/record-presets.js).
-  recording: { cameraId: '', micId: '', on: false, autoStop: true, preset: 'landscape' },
+  recording: { cameraId: '', micId: '', on: false, autoStop: true, subtitles: false, preset: 'landscape' },
   // Where videos go; '' = ~/Downloads. Set only through record:choose-folder.
   recordingFolder: '',
   // The candidate's real projects (Settings > Projects), cleaned by

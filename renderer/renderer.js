@@ -546,6 +546,10 @@
     let recTimer = null;
     let autoStopTimer = null;
     let cameraOwner = 0;     // the recorder's camera generation this reading uses
+    // Subtitles: when each word of the script was lit in the take being
+    // recorded (ms from its start), or null when this take has none.
+    let wordTimes = null;
+    let takeStartedAt = 0;
     const CONFIRM_MS = 3000; // a second press within this deletes a take
     const AUTO_STOP_S = 4;   // after the last word: time to smile and look at the lens before it ends
     const recBadge = document.getElementById('rec-badge');
@@ -591,6 +595,9 @@
         span.classList.toggle('said', i < lit);
         span.classList.toggle('now', i === lit);
       });
+      // Only the word lit gets a time; words the follower jumped over are placed
+      // between their neighbours when the captions are made.
+      if (wordTimes && token > lastToken && takeStartedAt && !Number.isFinite(wordTimes[token])) wordTimes[token] = Date.now() - takeStartedAt;
       lastToken = token;
       scrollTo(spans[lit]);
     }
@@ -643,6 +650,8 @@
       const onProblem = (message) => { showStatus(message); stop(); };
       taking = window.CueRecorder.start({ scriptName: record.scriptName, preset: record.preset, take, onProblem })
         .then(() => {
+          takeStartedAt = Date.now();
+          wordTimes = record && record.subtitles ? [] : null;
           recBadge.classList.remove('hidden');
           recTime.textContent = '0:00';
           clearInterval(recTimer);
@@ -657,23 +666,34 @@
 
     // Ends the take in progress, if any, and says where the video went.
     async function finishTake() {
+      // The words and their times now: stop() clears the script right after calling this.
+      const tokens = follower ? follower.tokens.slice() : [];
+      const times = wordTimes;
+      const length = takeStartedAt ? Date.now() - takeStartedAt : 0;
+      wordTimes = null;
+      takeStartedAt = 0;
       if (taking) await taking.catch(() => {});
       clearInterval(recTimer);
       recBadge.classList.add('hidden');
       if (!window.CueRecorder.recording()) return;
-      const res = await window.CueRecorder.stop();
-      if (res) showSaved(res);
+      const cues = times ? window.CueSubtitles.buildCues(tokens, times, length) : [];
+      const res = await window.CueRecorder.stop(cues.length ? window.CueSubtitles.toSrt(cues) : '');
+      if (res) showSaved(res, !!times && !cues.length);
     }
 
     // A line under the answers: the file and a Show in Finder button.
-    function showSaved(res) {
+    // noWordsHeard: subtitles were on but no word was followed, so there are none.
+    function showSaved(res, noWordsHeard = false) {
       const box = document.createElement('div');
       box.className = 'rec-saved' + (res.error ? ' failed' : '');
       const text = document.createElement('span');
       if (res.error) text.textContent = res.error;
       else {
         const mb = res.bytes ? ` (${Math.max(1, Math.round(res.bytes / 1048576))} MB)` : '';
-        text.textContent = `Saved ${res.file}${mb} in ${res.folder}.` + (res.remuxed ? '' : ' Install ffmpeg (brew install ffmpeg) for files that stream and show their length everywhere.') + (res.warning ? ' Part of it may be missing: ' + res.warning : '');
+        const subs = res.subtitleTrack ? ' Subtitles are inside it (switch them on in the player) and in the .srt beside it.'
+          : res.srt ? ' Subtitles are in the .srt file beside it.'
+            : noWordsHeard ? ' No subtitles: cue did not hear the script being read.' : '';
+        text.textContent = `Saved ${res.file}${mb} in ${res.folder}.` + subs + (res.remuxed ? '' : ' Install ffmpeg (brew install ffmpeg) for files that stream and show their length everywhere.') + (res.warning ? ' Part of it may be missing: ' + res.warning : '');
       }
       box.appendChild(text);
       if (res.path) {
@@ -881,12 +901,13 @@
     const recAdvice = document.getElementById('rec-advice');
     const recFolder = document.getElementById('rec-folder');
     const recAutoStop = document.getElementById('rec-autostop');
+    const recSubtitles = document.getElementById('rec-subtitles');
     const recMeter = document.getElementById('rec-meter');
     const recMeterTrack = document.getElementById('rec-meter-track');
     const recMeterFill = document.getElementById('rec-meter-fill');
     const recMeterText = document.getElementById('rec-meter-text');
     const Presets = window.CueRecordPresets;
-    const recPrefs = () => ({ cameraId: '', micId: '', on: false, autoStop: true, preset: Presets.DEFAULT_PRESET, ...((settings && settings.recording) || {}) });
+    const recPrefs = () => ({ cameraId: '', micId: '', on: false, autoStop: true, subtitles: false, preset: Presets.DEFAULT_PRESET, ...((settings && settings.recording) || {}) });
     const METER_WINDOW_MS = 1200; // the verdict is on the loudest moment of about a second of speech
 
     // The bar moves with every frame; the words change only a few times a second.
@@ -933,6 +954,7 @@
       const prefs = recPrefs();
       recOn.checked = prefs.on;
       recAutoStop.checked = prefs.autoStop;
+      recSubtitles.checked = prefs.subtitles;
       recOptions.classList.toggle('hidden', !prefs.on);
       document.getElementById('script-start').textContent = prefs.on && prefs.preset !== 'prompter' ? 'Start recording' : 'Start';
       if (!recPreset.options.length) {
@@ -949,6 +971,7 @@
       recCamera.disabled = !willFilm; recMic.disabled = !willFilm;
       recMeter.classList.toggle('hidden', !willFilm);
       recAutoStop.parentElement.classList.toggle('hidden', !willFilm);
+      recSubtitles.parentElement.classList.toggle('hidden', !willFilm);
       if (!willFilm) { window.CueRecorder.close(); recPreview.srcObject = null; recSize.textContent = 'Nothing is recorded in this mode.'; return; }
       recSize.textContent = 'Turning the camera on...';
       try {
@@ -980,6 +1003,7 @@
     recCamera.addEventListener('change', async () => { await saveRecPrefs({ cameraId: recCamera.value }); refreshRecord(); });
     recMic.addEventListener('change', async () => { await saveRecPrefs({ micId: recMic.value }); refreshRecord(); });
     recAutoStop.addEventListener('change', () => saveRecPrefs({ autoStop: recAutoStop.checked }));
+    recSubtitles.addEventListener('change', () => saveRecPrefs({ subtitles: recSubtitles.checked }));
     document.getElementById('rec-folder-btn').addEventListener('click', async () => {
       const res = await cue.recordChooseFolder().catch(() => null);
       if (res && res.folder) recFolder.textContent = 'Saves to ' + res.folder;
@@ -1054,7 +1078,7 @@
     document.getElementById('script-start').addEventListener('click', async () => {
       if (!area.value.trim()) { status.textContent = 'Write or paste your script first.'; return; }
       const prefs = recPrefs();
-      const record = prefs.on ? { preset: prefs.preset, autoStop: prefs.autoStop, scriptName: name.value.trim() || 'cue recording' } : null;
+      const record = prefs.on ? { preset: prefs.preset, autoStop: prefs.autoStop, subtitles: prefs.subtitles, scriptName: name.value.trim() || 'cue recording' } : null;
       await close(!!record);
       teleprompter.start(area.value, { record });
     });

@@ -174,8 +174,9 @@
     return { file: begun.file };
   }
 
-  // Ends the take. Resolves main's result: { path, bytes, remuxed } or { error }.
-  async function stop() {
+  // Ends the take. srt: this take's subtitles, or ''. Resolves main's result:
+  // { path, bytes, remuxed, srt, subtitleTrack } or { error }.
+  async function stop(srt = '') {
     if (!recorder) return null;
     const r = recorder;
     recorder = null;
@@ -186,7 +187,7 @@
     });
     await queue;
     stopCut();
-    const res = await window.cue.recordEnd(takeId);
+    const res = await window.cue.recordEnd(takeId, { srt });
     takeId = '';
     if (writeError && res && !res.error && !res.warning) res.warning = writeError;
     return res;

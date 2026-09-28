@@ -29,8 +29,8 @@ test('the crop keeps the preset shape, centred, in even pixels', () => {
 });
 
 test('recording settings are cleaned', () => {
-  assert.deepEqual(normalizeRecording(null), { cameraId: '', micId: '', on: false, autoStop: true, preset: 'landscape' });
-  assert.deepEqual(normalizeRecording({ cameraId: 'c', micId: 7, on: 'yes', preset: 'nope' }), { cameraId: 'c', micId: '', on: false, autoStop: true, preset: 'landscape' });
+  assert.deepEqual(normalizeRecording(null), { cameraId: '', micId: '', on: false, autoStop: true, subtitles: false, preset: 'landscape' });
+  assert.deepEqual(normalizeRecording({ cameraId: 'c', micId: 7, on: 'yes', preset: 'nope' }), { cameraId: 'c', micId: '', on: false, autoStop: true, subtitles: false, preset: 'landscape' });
   assert.equal(normalizeRecording({ on: true, preset: 'portrait' }).preset, 'portrait');
 });
 
@@ -124,4 +124,51 @@ test('a take thrown away on reload keeps its part file and frees the final name'
   const { file } = files.begin({ scriptName: 'Reload', preset: 'landscape', take: 1 });
   files.abort();
   assert.deepEqual(fs.readdirSync(dir), [file.replace(/\.mp4$/, '.recording.mp4')]);
+});
+
+test('subtitles follow the script, one sentence per caption at most, with skipped words placed between', () => {
+  const { buildCues, toSrt, HEARD_LAG_MS } = require('../renderer/subtitles');
+  const tokens = 'Hello, I am a Flutter developer. I build apps people use every day and I love clean architecture in every project I ship.'.split(' ');
+  const times = tokens.map((_, i) => (i === 5 ? undefined : 1000 + i * 350));
+  const cues = buildCues(tokens, times, 12000);
+  assert.equal(cues.map((c) => c.text).join(' '), tokens.join(' '), 'every word, in order, exactly as written');
+  assert.equal(cues[0].text, 'Hello, I am a Flutter developer.');
+  assert.equal(cues[0].start, 1000 - HEARD_LAG_MS);
+  for (const c of cues) {
+    assert.ok(c.text.length <= 50, c.text);
+    assert.ok(c.text.split(' ').length > 1, 'no word alone: ' + c.text);
+    assert.ok(c.end > c.start);
+  }
+  for (let k = 1; k < cues.length; k++) assert.ok(cues[k].start >= cues[k - 1].end, 'no overlap');
+  assert.ok(cues[cues.length - 1].end <= 12000);
+  assert.match(toSrt(cues), /^1\n00:00:00,600 --> 00:00:02,700\nHello, I am a Flutter developer\.\n\n2\n/);
+});
+
+test('no words heard means no subtitles, and times never run backwards', () => {
+  const { buildCues } = require('../renderer/subtitles');
+  assert.deepEqual(buildCues(['a', 'b'], [], 5000), []);
+  const cues = buildCues(['One', 'two.', 'Three', 'four.'], [3000, 2000, 4000, 4500], 0);
+  assert.ok(cues[1].start >= cues[0].start);
+});
+
+test('a take keeps its subtitles beside the video, and bad caption text is ignored', async () => {
+  const dir = tmpDir();
+  const files = createRecorderFiles({ folder: () => dir, ffmpeg: '' });
+  let { id } = files.begin({ scriptName: 'Subs', preset: 'landscape', take: 1 });
+  await files.chunk(id, new Uint8Array([1]));
+  let res = await files.end(id, { srt: '1\n00:00:00,500 --> 00:00:02,000\nHello there.\n' });
+  assert.equal(path.basename(res.srt), path.basename(res.path).replace(/\.mp4$/, '.srt'));
+  assert.equal(fs.readFileSync(res.srt, 'utf8'), '1\n00:00:00,500 --> 00:00:02,000\nHello there.\n');
+  assert.equal(fs.statSync(res.srt).mode & 0o777, 0o600);
+  ({ id } = files.begin({ scriptName: 'Junk', preset: 'landscape', take: 1 }));
+  await files.chunk(id, new Uint8Array([1]));
+  res = await files.end(id, { srt: 'rm -rf /' });
+  assert.equal(res.srt, '');
+});
+
+test('the opening words are captioned even when the first word heard came later', () => {
+  const { buildCues } = require('../renderer/subtitles');
+  const cues = buildCues(['Hello,', 'I', 'am', 'here.'], [undefined, undefined, 2000, 2400], 0);
+  assert.equal(cues.map((c) => c.text).join(' '), 'Hello, I am here.');
+  assert.ok(cues[0].start < 2000);
 });

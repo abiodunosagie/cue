@@ -32,7 +32,7 @@ contextBridge.exposeInMainWorld('cue', {
   recordInfo: () => ipcRenderer.invoke('record:info'),
   recordBegin: (opts) => ipcRenderer.invoke('record:begin', opts),
   recordChunk: (id, data) => ipcRenderer.invoke('record:chunk', id, data),
-  recordEnd: (id) => ipcRenderer.invoke('record:end', id),
+  recordEnd: (id, opts) => ipcRenderer.invoke('record:end', id, opts),
   recordReveal: (p) => ipcRenderer.invoke('record:reveal', p),
   recordDiscard: (p) => ipcRenderer.invoke('record:discard', p),
   recordChooseFolder: () => ipcRenderer.invoke('record:choose-folder'),
