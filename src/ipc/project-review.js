@@ -1,43 +1,64 @@
 // IPC for the Project sheet: the projects the candidate's editors have open,
 // and a review of one of them (or of a pasted folder or GitHub link) streamed
 // into the panel like an answer. The review itself is src/project-review/.
+const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { detectProjects, resolveFolder, parseGitHub, cloneGitHub } = require('../project-review/locate');
 const { collectProject, treeOf, kindOf } = require('../project-review/collect');
 const { runTools } = require('../project-review/tools');
 const { review } = require('../project-review/review');
 
-function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state, projectMemory, cloneDir, log = console.log }) {
-  // The folder to review, from the sheet's choice. Throws with a message to show.
-  async function folderFor(source) {
-    const value = source && typeof source.value === 'string' ? source.value.trim() : '';
+const message = (e) => (e && e.message ? e.message : String(e));
+const BUSY = 'cue is answering something. Try again when it is done.';
+
+// The folder as the candidate knows it, never an absolute path with their user name.
+function shown(p, home = os.homedir()) {
+  return p === home || p.startsWith(home + path.sep) ? '~' + p.slice(home.length) : p;
+}
+
+// userDataDir: cue's own data (API keys); never reviewable. cloneDir: where
+// GitHub links are downloaded, inside it.
+function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state, projectMemory, userDataDir, cloneDir, log = console.log }) {
+  // The folder to review. Throws with a message to show.
+  async function folderFor(value) {
     if (parseGitHub(value)) {
       send('status', { message: 'Downloading the repository from GitHub...' });
       return cloneGitHub(value, cloneDir);
     }
-    return resolveFolder(value);
+    return resolveFolder(value, { protected: [userDataDir], allowed: [cloneDir] });
   }
 
-  ipcMain.handle('review:detect', () => {
+  ipcMain.handle('project:detect', () => {
     try {
       const current = projectMemory.get();
-      return { projects: detectProjects(), loaded: current ? { name: current.name, reviewedAt: current.reviewedAt } : null };
+      return {
+        projects: detectProjects().map((p) => ({ ...p, shown: shown(p.path) })),
+        loaded: current ? { name: current.name, reviewedAt: current.reviewedAt } : null
+      };
     } catch (e) {
-      return { projects: [], error: e && e.message ? e.message : String(e) };
+      return { projects: [], error: message(e) };
     }
   });
 
-  ipcMain.handle('review:clear', () => { projectMemory.clear(); return { ok: true }; });
+  ipcMain.handle('project:clear', () => { projectMemory.clear(); return { ok: true }; });
 
   // Starts the review and resolves at once; the report streams into the panel.
-  ipcMain.handle('review:start', async (_e, source) => {
-    if (state.busy) return { error: 'cue is answering something. Try again when it is done.' };
+  // cue is busy from the first step (a GitHub download can take a minute), so
+  // nothing else starts meanwhile.
+  ipcMain.handle('project:start', async (_e, source) => {
+    const value = source && typeof source.value === 'string' ? source.value.trim().slice(0, 2000) : '';
+    if (state.busy) return { error: BUSY };
     const llm = createLLM(getSettings(), { tier: 'coding' });
     if (!llm.ready) return { error: llm.configurationError || 'Set up the Coding model in Settings > Keys first.' };
-    let root;
-    try { root = await folderFor(source); } catch (e) { return { error: e && e.message ? e.message : String(e) }; }
-    if (state.busy) return { error: 'cue is answering something. Try again when it is done.' };
     state.busy = true;
+    let root;
+    try {
+      root = await folderFor(value);
+    } catch (e) {
+      state.busy = false;
+      return { error: message(e) };
+    }
     run(llm, root).finally(() => { state.busy = false; });
     return { ok: true, name: path.basename(root) };
   });
@@ -45,10 +66,11 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
   async function run(llm, root) {
     const name = path.basename(root);
     const startedAt = Date.now();
+    const generation = projectMemory.generation();
     let firstWord = false;
     // Each step also goes to the wait note, and a beat every minute keeps the
     // panel from giving up on a long, quiet read.
-    const status = (message) => { send('status', { message }); if (!firstWord) send('llm:thinking', { text: '\n' + message + '\n' }); };
+    const status = (text) => { send('status', { message: text }); if (!firstWord) send('llm:thinking', { text: '\n' + text + '\n' }); };
     const beat = setInterval(() => { if (!firstWord) send('llm:thinking', { text: '' }); }, 60000);
     send('llm:start', { userBubble: `Review the ${name} codebase`, small: false, coding: true, showWait: true });
     try {
@@ -73,12 +95,17 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
         }
       });
       send('llm:done', {});
+      // Cleared or replaced while it ran: the review is shown but not kept.
+      if (projectMemory.generation() !== generation) return;
       projectMemory.set({ root, name, kind, tree, index: collected.files.map((f) => f.rel), report: String(report || ''), reviewedAt: Date.now() });
-      send('status', { message: `Review done in ${Math.round((Date.now() - startedAt) / 1000)}s. Ask about it any time: "fix issue 2", "where is login handled".` });
+      send('status', { message: `Review done in ${Math.round((Date.now() - startedAt) / 1000)}s. Type questions about it in the ask box.` });
       log(`[timing] review: done after ${Date.now() - startedAt}ms`);
     } catch (e) {
-      log(`[timing] review: failed after ${Date.now() - startedAt}ms: ${e && e.message ? e.message : String(e)}`);
-      send('llm:error', { message: 'The review stopped: ' + (e && e.message ? e.message : String(e)) });
+      log(`[timing] review: failed after ${Date.now() - startedAt}ms: ${message(e)}`);
+      send('llm:error', { message: 'The review stopped: ' + message(e) });
+      // A download nobody will review goes too.
+      const base = path.resolve(cloneDir) + path.sep;
+      if (root.startsWith(base) && (!projectMemory.get() || projectMemory.get().root !== root)) fs.rmSync(path.dirname(root), { recursive: true, force: true });
     } finally {
       clearInterval(beat);
     }

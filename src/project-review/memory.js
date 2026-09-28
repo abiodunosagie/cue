@@ -7,6 +7,7 @@
 // needed, never stored.
 
 const fs = require('fs');
+const path = require('path');
 const { writeFileAtomic, removeFileAndTemp } = require('../atomic-file');
 
 const MAX_REPORT_CHARS = 120000;
@@ -28,25 +29,44 @@ function clean(m) {
   };
 }
 
-function createProjectMemory({ file } = {}) {
+// cloneDir: where GitHub links are downloaded; a review of one is deleted
+// with it, so a third party's code does not stay on the disk.
+function createProjectMemory({ file, cloneDir = '' } = {}) {
   let current = null;
+  let generation = 0;
+  const dropClone = (m) => {
+    if (!m || !cloneDir) return;
+    // Resolved first, so a stored root like <cloneDir>/../x can never point the delete outside it.
+    const base = path.resolve(cloneDir) + path.sep;
+    const clone = path.dirname(path.resolve(m.root));
+    if (clone.startsWith(base)) fs.rmSync(clone, { recursive: true, force: true });
+  };
   return {
     load() {
       current = null;
       if (!file) return null;
-      try { current = clean(JSON.parse(fs.readFileSync(file, 'utf8'))); } catch { /* none yet */ }
+      // None yet, or unreadable: the interview goes on without a review.
+      try { current = clean(JSON.parse(fs.readFileSync(file, 'utf8'))); } catch { current = null; }
       return current;
     },
     set(m) {
-      current = clean(m);
+      const next = clean(m);
+      if (current && next && current.root !== next.root) dropClone(current);
+      generation++;
+      current = next;
       if (file && current) writeFileAtomic(file, JSON.stringify(current));
       return current;
     },
     clear() {
+      dropClone(current);
+      generation++;
       current = null;
       return file ? removeFileAndTemp(file) : true;
     },
     get: () => current,
+    // Moves on every set and clear: a review that finishes after the interview
+    // was cleared (or another review replaced it) is not kept.
+    generation: () => generation,
     has: () => !!current
   };
 }

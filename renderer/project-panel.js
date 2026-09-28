@@ -8,11 +8,6 @@
 
   function status(text) { $('project-status').textContent = text || ''; }
 
-  function shortPath(p) {
-    const m = /^\/Users\/[^/]+\/(.*)$/.exec(p);
-    return m ? '~/' + m[1] : p;
-  }
-
   function when(ms) {
     if (!ms) return '';
     const mins = Math.round((Date.now() - ms) / 60000);
@@ -26,8 +21,8 @@
     list.replaceChildren();
     if (!projects.length) {
       const empty = document.createElement('div');
-      empty.className = 'project-empty';
-      empty.textContent = 'No recent projects found in IntelliJ, Android Studio or VS Code. Paste the folder path below.';
+      empty.className = 'proj-empty';
+      empty.textContent = 'No recent projects found in your editors (IntelliJ, Android Studio, PyCharm, WebStorm, VS Code, Cursor). Paste the folder path below.';
       list.append(empty);
       picked = '';
       return;
@@ -47,7 +42,7 @@
       name.textContent = p.name;
       const meta = document.createElement('span');
       meta.className = 'p-meta';
-      meta.textContent = [p.open ? `open in ${p.editor}` : `${p.editor}, ${when(p.at)}`, shortPath(p.path)].filter(Boolean).join(' · ');
+      meta.textContent = [p.open ? `open in ${p.editor}` : `${p.editor}, ${when(p.at)}`, p.shown || p.path].filter(Boolean).join(' · ');
       text.append(name, meta);
       row.append(radio, text);
       radio.addEventListener('change', () => {
@@ -61,14 +56,14 @@
 
   function showLoaded(loaded) {
     $('project-loaded').classList.toggle('hidden', !loaded);
-    if (loaded) $('project-loaded-text').textContent = `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "where is login handled".`;
+    if (loaded) $('project-loaded-text').textContent = `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`;
   }
 
   async function open() {
     $('project-scrim').classList.remove('hidden');
     status('');
     $('project-review').disabled = false;
-    const res = await window.cue.reviewDetect().catch(() => null);
+    const res = await window.cue.projectDetect().catch(() => null);
     render((res && res.projects) || []);
     showLoaded(res && res.loaded);
     if (res && res.error) status(res.error);
@@ -77,12 +72,13 @@
   function close() { $('project-scrim').classList.add('hidden'); }
 
   async function start() {
+    if ($('project-review').disabled) return; // one review at a time, Enter or click
     const typed = $('project-path').value.trim();
     const value = typed || picked;
     if (!value) { status('Pick a project or paste its folder path.'); return; }
     $('project-review').disabled = true;
     status('Starting...');
-    const res = await window.cue.reviewStart({ value }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
+    const res = await window.cue.projectStart({ value }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
     $('project-review').disabled = false;
     if (!res || res.error) { status((res && res.error) || 'The review could not start.'); return; }
     close();
@@ -98,7 +94,7 @@
       const typing = !!$('project-path').value.trim();
       document.querySelectorAll('.project-row').forEach((r) => r.classList.toggle('on', !typing && r.querySelector('input').checked));
     });
-    $('project-forget').addEventListener('click', async () => { await window.cue.reviewClear(); showLoaded(null); });
+    $('project-forget').addEventListener('click', async () => { await window.cue.projectClear(); showLoaded(null); });
     $('project-scrim').addEventListener('click', (e) => { if (e.target === $('project-scrim')) close(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('project-scrim').classList.contains('hidden')) close(); });
   }

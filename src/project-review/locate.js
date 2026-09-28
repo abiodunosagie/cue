@@ -31,7 +31,7 @@ function listDirs(dir, re) {
 const unescapeXml = (s) => s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 // JetBrains recentProjects.xml text: [{ path, at, open, editor }].
-function parseJetBrains(xml, { home = os.homedir(), editor = 'IntelliJ' } = {}) {
+function parseJetBrains(xml, { home = os.homedir(), editor = 'IntelliJ IDEA' } = {}) {
   const out = [];
   const entryRe = /<entry key="([^"]+)">([\s\S]*?)<\/entry>/g;
   let m;
@@ -55,7 +55,8 @@ function parseVsCode(json, { mtime = 0 } = {}) {
   const toPath = (u) => { try { return u && u.startsWith('file://') ? decodeURIComponent(new URL(u).pathname) : ''; } catch { return ''; } };
   const out = [];
   const last = toPath(ws.lastActiveWindow && ws.lastActiveWindow.folder);
-  if (last) out.push({ path: last, at: mtime, open: false, editor: 'VS Code' });
+  // The window in front is open too; whether VS Code runs at all is checked later.
+  if (last) out.push({ path: last, at: mtime, open: true, editor: 'VS Code' });
   for (const w of Array.isArray(ws.openedWindows) ? ws.openedWindows : []) {
     const p = toPath(w && w.folder);
     if (p && p !== last) out.push({ path: p, at: mtime - 1, open: true, editor: 'VS Code' });
@@ -112,18 +113,35 @@ function detectProjects({ home = os.homedir(), running = runningEditors() } = {}
     .map((p) => ({ ...p, name: path.basename(p.path) }));
 }
 
-// A pasted folder path: resolved, existing, and never the whole disk, the
-// system, or the home folder itself. Resolves the real path or throws.
-function resolveFolder(input, { home = os.homedir() } = {}) {
-  const raw = String(input || '').trim().replace(/^file:\/\//, '');
+const isInside = (child, parent) => child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
+
+// A pasted folder path: resolved, existing, and a project, never a disk, a
+// system folder, the home folder or a big personal folder in it, anything in
+// ~/Library (Keychains, every app's data) or ~/.ssh, and never cue's own data
+// folder or one that contains it (`protected`), except inside `allowed` (the
+// folder GitHub links are downloaded into). Resolves the real path or throws.
+function resolveFolder(input, { home = os.homedir(), protected: guarded = [], allowed = [] } = {}) {
+  let raw = String(input || '').trim();
+  if (raw.startsWith('file://')) { try { raw = decodeURIComponent(new URL(raw).pathname); } catch { raw = raw.slice(7); } }
   if (!raw) throw new Error('Paste a folder path or a GitHub link.');
   const expanded = raw === '~' || raw.startsWith('~/') ? path.join(home, raw.slice(1)) : raw;
   if (!path.isAbsolute(expanded)) throw new Error('Use the full path, for example ~/Downloads/their-app.');
   let real;
   try { real = fs.realpathSync(expanded); } catch { throw new Error('That folder does not exist.'); }
   if (!fs.statSync(real).isDirectory()) throw new Error('That is a file, not a folder.');
-  const blocked = ['/', '/System', '/Library', '/Applications', '/Users', '/private', '/usr', '/bin', '/etc', fs.realpathSync(home)];
-  if (blocked.includes(real)) throw new Error('Pick the project folder itself, not a whole disk or home folder.');
+  const realHome = fs.realpathSync(home);
+  const real0 = (p) => { try { return fs.realpathSync(p); } catch { return path.resolve(p); } };
+  if (allowed.map(real0).some((a) => isInside(real, a) && real !== a)) return real;
+  const refuse = () => { throw new Error('Pick the project folder itself, not a whole disk, a system folder or a personal folder.'); };
+  if (path.parse(real).root === real) refuse();
+  const exact = ['/System', '/Library', '/Applications', '/Users', '/private', '/usr', '/bin', '/sbin', '/etc', '/var', '/opt', '/Volumes',
+    realHome, ...['Downloads', 'Desktop', 'Documents', 'Pictures', 'Movies', 'Music', 'Projects', 'IdeaProjects', 'StudioProjects'].map((d) => path.join(realHome, d))];
+  if (exact.includes(real)) refuse();
+  for (const d of [path.join(realHome, 'Library'), path.join(realHome, '.ssh')]) if (isInside(real, d)) refuse();
+  // System folders, unless the folder is in the home folder (a home can itself live under one).
+  if (!isInside(real, realHome)) for (const d of ['/System', '/Library', '/private', '/usr', '/bin', '/sbin', '/etc']) if (isInside(real, d)) refuse();
+  // cue's own data (API keys): not the folder, not inside it, not a folder holding it.
+  for (const d of guarded.map(real0)) if (isInside(real, d) || isInside(d, real)) refuse();
   return real;
 }
 
@@ -157,4 +175,4 @@ function cloneGitHub(input, dir) {
   });
 }
 
-module.exports = { parseJetBrains, parseVsCode, detectProjects, runningEditors, resolveFolder, parseGitHub, cloneGitHub };
+module.exports = { parseJetBrains, parseVsCode, detectProjects, resolveFolder, parseGitHub, cloneGitHub };

@@ -847,7 +847,6 @@ button:focus { outline: none; }
 .project-row .p-name { color: var(--tx-1); font-size: 13px; font-weight: 600; }
 .project-row .p-meta { color: var(--tx-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-row .p-text { display: flex; flex-direction: column; min-width: 0; }
-.project-empty { color: var(--tx-2); font-size: 12.5px; }
 #project-path { padding: 7px 10px; border-radius: 7px; border: 1px solid var(--bd-hair); background: var(--field); color: var(--tx-1); font: 13px/1.5 var(--font); outline: none; -webkit-user-select: text; user-select: text; }
 #project-path:focus { border-color: rgba(255,255,255,0.3); }
 .project-loaded { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 9px; border: 1px solid rgba(74, 222, 128, 0.35); background: rgba(74, 222, 128, 0.07); color: var(--tx-1); font-size: 12.5px; }

@@ -135,7 +135,10 @@ codingLibrary.load();
 let currentLibraryId = null;
 // The codebase reviewed in this interview (src/project-review/memory.js):
 // kept across New question, cleared with the interview.
-const projectMemory = createProjectMemory({ file: path.join(app.getPath('userData'), 'cue-project-review.json') });
+const projectMemory = createProjectMemory({
+  file: path.join(app.getPath('userData'), 'cue-project-review.json'),
+  cloneDir: path.join(app.getPath('userData'), 'cue-projects')
+});
 projectMemory.load();
 // The coding question in front of the candidate, across its tabs: every view
 // read by Cmd+H or by the gather key, until Next question (src/question-bundle.js).
@@ -974,7 +977,8 @@ async function runFeature(mode, userText, options = {}) {
   if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'fixCode';
   // A typed question about the codebase reviewed earlier: answered from that
   // project's review and its files as they are on disk now.
-  if (mode === 'ask' && userText && projectMemory.has() && isProjectQuestion(userText, projectMemory.get().index)) mode = 'projectAsk';
+  const reviewed = projectMemory.get();
+  if (mode === 'ask' && userText && reviewed && isProjectQuestion(userText, reviewed.index)) mode = 'projectAsk';
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -1116,7 +1120,7 @@ async function runFeature(mode, userText, options = {}) {
       architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode),
       projectReport: (mode === 'fixCode' || mode === 'checkProgress') && projectMemory.has() ? projectMemory.get().report : '',
-      projectTurn: mode === 'projectAsk' ? askTurn({ memory: projectMemory.get(), question: userText || '' }) : '',
+      projectTurn: mode === 'projectAsk' ? askTurn({ memory: reviewed, question: userText || '' }) : '',
       pages: imageDataUrls ? imageDataUrls.length : 1,
       views
     };
@@ -1310,6 +1314,7 @@ registerCodingLibraryIpc({ ipcMain, codingLibrary });
 const recording = registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin: () => win });
 registerProjectReviewIpc({
   ipcMain, createLLM, getSettings: () => store.getSettings(), send, state, projectMemory,
+  userDataDir: app.getPath('userData'),
   cloneDir: path.join(app.getPath('userData'), 'cue-projects')
 });
 ipcMain.handle('practice:start', () => practice.start());

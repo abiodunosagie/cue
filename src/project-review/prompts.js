@@ -56,8 +56,12 @@ function mapBlock({ name, kind, tree, analyzer, note, skippedNote }) {
     (skippedNote ? `Not read: ${skippedNote}\n\n` : '');
 }
 
+// Each file fenced by its path; a file's own text cannot close the fence
+// early (a literal </file> inside it is broken up), so it cannot pose as
+// another file.
 function filesBlock(files) {
-  return files.map((f) => `<file path="${f.rel}">\n${f.text}\n</file>`).join('\n\n');
+  const attr = (s) => String(s).replace(/[<>"&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;' }[c]));
+  return files.map((f) => `<file path="${attr(f.rel)}">\n${String(f.text).replace(/<\/file>/gi, '</ file>')}\n</file>`).join('\n\n');
 }
 
 module.exports = { REVIEW_SYSTEM, NOTES_SYSTEM, MERGE_SYSTEM, ASK_SYSTEM, mapBlock, filesBlock };
