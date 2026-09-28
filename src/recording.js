@@ -73,6 +73,7 @@ function findFfmpeg() {
 // on and off (mov_text, the MP4 subtitle format). Resolves true when `out` was written.
 function remux(ffmpeg, input, out, srt) {
   const args = ['-y', '-v', 'error', '-i', input];
+  // Tagged English: the script is the candidate's own words and cue answers in English.
   if (srt) args.push('-i', srt, '-map', '0', '-map', '1', '-c', 'copy', '-c:s', 'mov_text', '-metadata:s:s:0', 'language=eng');
   else args.push('-c', 'copy');
   args.push('-movflags', '+faststart', out);
@@ -144,27 +145,33 @@ function createRecorderFiles({ folder, ffmpeg = findFfmpeg(), maxTakeBytes = MAX
     const warning = t.failed ? 'The recording stopped early: ' + t.failed : '';
     const srt = cleanSrt(opts.srt);
     let srtPath = '';
+    // Subtitles asked for but not written: said, never silently dropped.
+    let subtitleError = opts.srt && !srt ? 'the subtitle text was not valid' : '';
     if (srt) {
       try {
         srtPath = reserve(path.dirname(t.final), path.basename(t.final).replace(/\.mp4$/, '.srt'));
         fs.writeFileSync(srtPath, srt);
-      } catch { srtPath = ''; }
+      } catch (e) {
+        if (srtPath) removeQuietly(srtPath);
+        srtPath = '';
+        subtitleError = e && e.message ? e.message : String(e);
+      }
     }
     if (ffmpeg) {
       // ffmpeg writes into a file this process just created, never a name it did not.
       const tmp = reserve(path.dirname(t.final), path.basename(t.final).replace(/\.mp4$/, '.remux.mp4'));
       // Subtitles in if they can be, else the video alone: a caption problem never costs the take.
-      const muxed = srtPath && await remux(ffmpeg, t.part, tmp, srtPath);
+      const muxed = srtPath ? await remux(ffmpeg, t.part, tmp, srtPath) : false;
       if (muxed || await remux(ffmpeg, t.part, tmp)) {
         fs.chmodSync(tmp, FILE_MODE);
         fs.renameSync(tmp, t.final);
         removeQuietly(t.part);
-        return { path: t.final, bytes: fs.statSync(t.final).size, remuxed: true, warning, srt: srtPath, subtitleTrack: !!muxed };
+        return { path: t.final, bytes: fs.statSync(t.final).size, remuxed: true, warning, srt: srtPath, subtitleTrack: muxed, subtitleError };
       }
       removeQuietly(tmp);
     }
     fs.renameSync(t.part, t.final);
-    return { path: t.final, bytes: t.bytes, remuxed: false, warning, srt: srtPath, subtitleTrack: false };
+    return { path: t.final, bytes: t.bytes, remuxed: false, warning, srt: srtPath, subtitleTrack: false, subtitleError };
   }
 
   // A take thrown away (the page reloaded, cue quit): keep what was recorded.

@@ -134,8 +134,9 @@ test('subtitles follow the script, one sentence per caption at most, with skippe
   assert.equal(cues.map((c) => c.text).join(' '), tokens.join(' '), 'every word, in order, exactly as written');
   assert.equal(cues[0].text, 'Hello, I am a Flutter developer.');
   assert.equal(cues[0].start, 1000 - HEARD_LAG_MS);
+  const { MAX_LINE_CHARS, LINE_SLACK_CHARS } = require('../renderer/subtitles');
   for (const c of cues) {
-    assert.ok(c.text.length <= 50, c.text);
+    assert.ok(c.text.length <= MAX_LINE_CHARS + LINE_SLACK_CHARS * 3, c.text);
     assert.ok(c.text.split(' ').length > 1, 'no word alone: ' + c.text);
     assert.ok(c.end > c.start);
   }
@@ -171,4 +172,30 @@ test('the opening words are captioned even when the first word heard came later'
   const cues = buildCues(['Hello,', 'I', 'am', 'here.'], [undefined, undefined, 2000, 2400], 0);
   assert.equal(cues.map((c) => c.text).join(' '), 'Hello, I am here.');
   assert.ok(cues[0].start < 2000);
+});
+
+test('captions spoken fast never overlap, and a long last word does not stand alone', () => {
+  const { buildCues } = require('../renderer/subtitles');
+  const fast = buildCues(['Hi.', 'I', 'am', 'here.'], [3000, 3100, 3200, 3300], 10000);
+  for (let k = 1; k < fast.length; k++) assert.ok(fast[k].start >= fast[k - 1].end, JSON.stringify(fast));
+  const words = 'Now we go to the shop for milk today antidisestablishmentarianism.'.split(' ');
+  const cues = buildCues(words, words.map((_, i) => 1000 + i * 300), 0);
+  assert.ok(cues.every((c) => c.text.split(' ').length > 1), JSON.stringify(cues.map((c) => c.text)));
+});
+
+test('words after the last one heard get no caption, and a take cut short drops captions after it', () => {
+  const { buildCues } = require('../renderer/subtitles');
+  const cues = buildCues(['One', 'two.', 'Three', 'four.'], [1000, 1300], 0);
+  assert.equal(cues.map((c) => c.text).join(' '), 'One two.');
+  assert.deepEqual(buildCues(['A.', 'B.'], [1000, 9000], 5000).map((c) => c.text), ['A.']);
+});
+
+test('oversized or malformed subtitles are refused and said', async () => {
+  const dir = tmpDir();
+  const files = createRecorderFiles({ folder: () => dir, ffmpeg: '' });
+  const { id } = files.begin({ scriptName: 'Big', preset: 'landscape', take: 1 });
+  await files.chunk(id, new Uint8Array([1]));
+  const res = await files.end(id, { srt: '1\n00:00:00,000 --> 00:00:01,000\n' + 'x'.repeat(1024 * 1024) });
+  assert.equal(res.srt, '');
+  assert.match(res.subtitleError, /not valid/);
 });

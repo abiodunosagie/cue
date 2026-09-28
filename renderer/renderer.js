@@ -645,7 +645,6 @@
     // One take: a new file, the REC badge and its clock.
     function beginTake() {
       take += 1;
-      const started = Date.now();
       // A camera unplugged or a recorder failure mid-take: say so and save what there is.
       const onProblem = (message) => { showStatus(message); stop(); };
       taking = window.CueRecorder.start({ scriptName: record.scriptName, preset: record.preset, take, onProblem })
@@ -656,7 +655,8 @@
           recTime.textContent = '0:00';
           clearInterval(recTimer);
           recTimer = setInterval(() => {
-            const s = Math.floor((Date.now() - started) / 1000);
+            // One clock for the take: the REC time and the subtitles both count from here.
+            const s = Math.floor((Date.now() - takeStartedAt) / 1000);
             recTime.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
           }, 500);
         })
@@ -692,7 +692,8 @@
         const mb = res.bytes ? ` (${Math.max(1, Math.round(res.bytes / 1048576))} MB)` : '';
         const subs = res.subtitleTrack ? ' Subtitles are inside it (switch them on in the player) and in the .srt beside it.'
           : res.srt ? ' Subtitles are in the .srt file beside it.'
-            : noWordsHeard ? ' No subtitles: cue did not hear the script being read.' : '';
+            : res.subtitleError ? ' The subtitles could not be saved: ' + res.subtitleError + '.'
+              : noWordsHeard ? ' No subtitles: cue did not hear the script being read.' : '';
         text.textContent = `Saved ${res.file}${mb} in ${res.folder}.` + subs + (res.remuxed ? '' : ' Install ffmpeg (brew install ffmpeg) for files that stream and show their length everywhere.') + (res.warning ? ' Part of it may be missing: ' + res.warning : '');
       }
       box.appendChild(text);

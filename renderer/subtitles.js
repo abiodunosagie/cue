@@ -4,6 +4,9 @@
 // window.CueSubtitles and node tests load it directly.
 (function () {
   const MAX_LINE_CHARS = 42;   // one line, readable on a phone
+  // A line may run this far past its even share of the sentence before it
+  // breaks, so breaks fall between words rather than mid-phrase.
+  const LINE_SLACK_CHARS = 4;
   const MAX_CUE_MS = 6000;     // a caption left longer reads as stuck
   const MIN_CUE_MS = 700;      // shorter than this flashes past unread
   const TAIL_MS = 1500;        // the last caption stays after the last word
@@ -13,78 +16,101 @@
   // Words said before the first one heard: placed this far apart just before it.
   const LEAD_WORD_MS = 300;
 
-  // tokens: the script's words in order; times: ms from the take's start for
-  // each word lit (holes for words skipped or never heard); endMs: the take's
-  // length. Returns [{ start, end, text }] in ms, or [] when nothing was timed.
-  function buildCues(tokens, times, endMs) {
-    const timed = [];
+  // When each word is on screen, in ms, or null when no word was heard.
+  // Words between two heard words sit evenly between them; words before the
+  // first heard word lead into it; words after the last heard word were not
+  // read (the take ended first) and get no caption.
+  function wordTimes(count, times) {
+    const heard = [];
     let last = -1;
-    for (let i = 0; i < tokens.length; i++) {
+    for (let i = 0; i < count; i++) {
       if (!Number.isFinite(times[i])) continue;
       // Words must not go back in time, even if recognition jumped around.
       const t = Math.max(0, times[i] - HEARD_LAG_MS, last);
-      timed.push({ i, t });
+      heard.push({ i, t });
       last = t;
     }
-    if (!timed.length) return [];
-    // A word skipped between two timed words sits between them, evenly.
-    const at = new Array(tokens.length);
-    for (let k = 0; k < timed.length; k++) {
-      at[timed[k].i] = timed[k].t;
-      const next = timed[k + 1];
+    if (!heard.length) return null;
+    const at = new Array(heard[heard.length - 1].i + 1);
+    for (let i = 0; i < heard[0].i; i++) at[i] = Math.max(0, heard[0].t - (heard[0].i - i) * LEAD_WORD_MS);
+    for (let k = 0; k < heard.length; k++) {
+      at[heard[k].i] = heard[k].t;
+      const next = heard[k + 1];
       if (!next) break;
-      const gap = next.i - timed[k].i;
-      for (let j = 1; j < gap; j++) at[timed[k].i + j] = timed[k].t + ((next.t - timed[k].t) * j) / gap;
+      const gap = next.i - heard[k].i;
+      for (let j = 1; j < gap; j++) at[heard[k].i + j] = heard[k].t + ((next.t - heard[k].t) * j) / gap;
     }
-    // The script's opening words come first even when recognition caught up
-    // only a few words in: they go just before the first word heard.
-    for (let i = 0; i < timed[0].i; i++) at[i] = Math.max(0, timed[0].t - (timed[0].i - i) * LEAD_WORD_MS);
-    const first = 0;
-    const lastWord = timed[timed.length - 1].i;
+    return at;
+  }
 
-    // Sentences first (a caption never runs across two), then each sentence in
-    // lines of even length, so no word is left alone on a line of its own.
+  // One sentence (word indexes) in lines of even length. A last word left on
+  // its own joins the line before it, or, when that line would be too long to
+  // read, the word before it moves down to join it.
+  function splitSentence(sentence, tokens) {
+    const text = (idx) => idx.map((i) => tokens[i]).join(' ');
+    const lineCount = Math.max(1, Math.ceil(text(sentence).length / MAX_LINE_CHARS));
+    const target = text(sentence).length / lineCount;
+    const lines = [];
+    let words = [];
+    for (const i of sentence) {
+      if (words.length && lines.length < lineCount - 1 && text(words).length + 1 + tokens[i].length > target + LINE_SLACK_CHARS) {
+        lines.push(words);
+        words = [];
+      }
+      words.push(i);
+    }
+    lines.push(words);
+    if (lines.length > 1 && lines[lines.length - 1].length === 1) {
+      const prev = lines[lines.length - 2];
+      const tail = lines[lines.length - 1];
+      if (text(prev.concat(tail)).length <= MAX_LINE_CHARS + LINE_SLACK_CHARS * 3) {
+        lines[lines.length - 2] = prev.concat(tail);
+        lines.pop();
+      } else {
+        // Too long to join: the word before it comes down to keep it company.
+        while (tail.length === 1 && prev.length > 2 && text([prev[prev.length - 1]].concat(tail)).length <= MAX_LINE_CHARS + LINE_SLACK_CHARS) {
+          tail.unshift(prev.pop());
+        }
+      }
+    }
+    return lines;
+  }
+
+  // tokens: the script's words in order; times: ms from the take's start for
+  // each word lit, with holes for words not lit; takeMs: the take's length
+  // (0 if unknown). Returns [{ start, end, text }] in ms, never overlapping,
+  // or [] when nothing was heard.
+  function buildCues(tokens, times, takeMs) {
+    const at = wordTimes(tokens.length, times || []);
+    if (!at) return [];
+    // Sentences first, so a caption never runs across two.
     const sentences = [];
     let current = [];
-    for (let i = first; i <= lastWord; i++) {
+    for (let i = 0; i < at.length; i++) {
       current.push(i);
       if (/[.!?]["')\]]*$/.test(tokens[i])) { sentences.push(current); current = []; }
     }
     if (current.length) sentences.push(current);
-    const cues = [];
-    for (const sentence of sentences) {
-      const chars = sentence.map((i) => tokens[i]).join(' ').length;
-      const lines = Math.max(1, Math.ceil(chars / MAX_LINE_CHARS));
-      const target = chars / lines;
-      let words = [];
-      for (let n = 0; n < sentence.length; n++) {
-        const i = sentence[n];
-        const len = words.map((w) => tokens[w]).join(' ').length;
-        const left = lines - cues.filter((c) => c.sentence === sentence).length;
-        if (words.length && left > 1 && len + 1 + tokens[i].length > target + 4) {
-          cues.push({ sentence, idx: words });
-          words = [];
-        }
-        words.push(i);
-      }
-      if (words.length) cues.push({ sentence, idx: words });
-    }
-    for (const c of cues) {
-      c.start = at[c.idx[0]];
-      c.lastAt = at[c.idx[c.idx.length - 1]];
-      c.text = c.idx.map((i) => tokens[i]).join(' ');
-    }
+    const lines = sentences.flatMap((s) => splitSentence(s, tokens));
+    const cues = lines.map((idx) => ({ start: at[idx[0]], lastAt: at[idx[idx.length - 1]], text: idx.map((i) => tokens[i]).join(' ') }));
 
-    const end = Math.max(0, endMs || 0);
+    const takeEnd = Math.max(0, takeMs || 0);
     for (let k = 0; k < cues.length; k++) {
+      const c = cues[k];
       const next = cues[k + 1];
-      let stop = next ? next.start : cues[k].lastAt + TAIL_MS;
-      stop = Math.min(stop, cues[k].start + MAX_CUE_MS);
-      if (stop - cues[k].start < MIN_CUE_MS) stop = cues[k].start + MIN_CUE_MS;
-      if (end) stop = Math.min(stop, end);
-      cues[k].end = Math.max(cues[k].start + 1, stop);
+      let stop = next ? next.start : c.lastAt + TAIL_MS;
+      stop = Math.min(stop, c.start + MAX_CUE_MS);
+      // Too short to read: it stays longer, and the next one waits for it.
+      if (stop - c.start < MIN_CUE_MS) {
+        stop = c.start + MIN_CUE_MS;
+        if (next && next.start < stop) next.start = stop;
+      }
+      if (takeEnd) stop = Math.min(stop, takeEnd);
+      c.end = Math.max(c.start + 1, stop);
     }
-    return cues.map(({ start, end: e, text }) => ({ start, end: e, text }));
+    return cues
+      .filter((c) => !takeEnd || c.start < takeEnd)
+      .map((c) => ({ start: c.start, end: c.end, text: c.text }));
   }
 
   function stamp(ms) {
@@ -98,7 +124,7 @@
     return cues.map((c, k) => `${k + 1}\n${stamp(c.start)} --> ${stamp(c.end)}\n${c.text}\n`).join('\n');
   }
 
-  const api = { buildCues, toSrt, HEARD_LAG_MS };
+  const api = { buildCues, toSrt, HEARD_LAG_MS, MAX_LINE_CHARS, LINE_SLACK_CHARS };
   if (typeof window !== 'undefined') window.CueSubtitles = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
