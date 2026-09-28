@@ -54,6 +54,18 @@ function registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin })
     return { ok: true };
   });
 
+  // A take the candidate threw away: to the Trash, so a wrong press can be undone.
+  ipcMain.handle('record:discard', async (_e, p) => {
+    if (typeof p !== 'string' || !saved.has(p) || !fs.existsSync(p)) return { error: 'That video is no longer there.' };
+    try {
+      await shell.trashItem(p);
+      saved.delete(p);
+      return { ok: true };
+    } catch (e) {
+      return { error: 'Could not move it to the Trash: ' + (e && e.message ? e.message : String(e)) };
+    }
+  });
+
   ipcMain.handle('record:choose-folder', async () => {
     const win = getWin();
     const res = await dialog.showOpenDialog(win, { title: 'Where should cue save videos?', defaultPath: folder(), properties: ['openDirectory', 'createDirectory'] });

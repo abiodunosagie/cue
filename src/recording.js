@@ -21,6 +21,7 @@ function normalizeRecording(value) {
     cameraId: id(v.cameraId),
     micId: id(v.micId),
     on: v.on === true,
+    autoStop: v.autoStop !== false,
     preset: PRESET_IDS.includes(v.preset) ? v.preset : DEFAULT_PRESET
   };
 }

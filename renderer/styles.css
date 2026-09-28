@@ -868,6 +868,13 @@ button:focus { outline: none; }
 .rec-frame.hidden { display: none; }
 #rec-preview { display: block; max-width: 100%; max-height: 260px; transform: scaleX(-1); }
 /* Where the eyes should sit: a third of the way down, the usual framing. */
+.rec-meter { display: flex; align-items: center; gap: 10px; }
+.rec-meter.hidden { display: none; }
+.rec-meter-track { flex: 0 0 140px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); overflow: hidden; }
+#rec-meter-fill { display: block; height: 100%; width: 0; background: #4ade80; transition: width 80ms linear; }
+.rec-meter[data-level="quiet"] #rec-meter-fill { background: #fbbf24; }
+.rec-meter[data-level="loud"] #rec-meter-fill { background: #ef4444; }
+.sc-check-sub { font-weight: 500; }
 .rec-eyes { position: absolute; left: 8%; right: 8%; top: 33%; border-top: 1px dashed rgba(250, 204, 21, 0.7); pointer-events: none; }
 #rec-badge { display: inline-flex; align-items: center; gap: 6px; color: #fca5a5; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 #rec-badge.hidden { display: none; }

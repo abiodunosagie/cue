@@ -544,6 +544,8 @@
     let take = 0;
     let taking = null;       // the take being started or finished (a promise)
     let recTimer = null;
+    let autoStopTimer = null;
+    const AUTO_STOP_S = 4;   // after the last word: time to smile and look at the lens before it ends
     const recBadge = document.getElementById('rec-badge');
     const recTime = document.getElementById('rec-time');
     const films = () => !!(record && record.preset !== 'prompter');
@@ -618,6 +620,19 @@
       }, 1000);
     }
 
+    // The last word was said: count down, then save as if Done was pressed.
+    function autoStopAfterLastWord() {
+      let left = AUTO_STOP_S;
+      label.textContent = `End of script. Saving in ${left}...`;
+      autoStopTimer = setInterval(() => {
+        left -= 1;
+        if (left > 0) { label.textContent = `End of script. Saving in ${left}...`; return; }
+        clearAutoStop();
+        stop();
+      }, 1000);
+    }
+    function clearAutoStop() { clearInterval(autoStopTimer); autoStopTimer = null; }
+
     // One take: a new file, the REC badge and its clock.
     function beginTake() {
       take += 1;
@@ -662,7 +677,25 @@
         btn.className = 's-action';
         btn.textContent = 'Show in Finder';
         btn.addEventListener('click', async () => { const r = await cue.recordReveal(res.path); if (r && r.error) text.textContent = r.error; });
-        box.appendChild(btn);
+        // Keeping a take is the default; deleting one takes two presses and goes to the Trash.
+        const del = document.createElement('button');
+        del.className = 's-action danger';
+        del.textContent = 'Delete take';
+        let armed = null;
+        del.addEventListener('click', async () => {
+          if (!armed) {
+            del.textContent = 'Press again to delete';
+            armed = setTimeout(() => { armed = null; del.textContent = 'Delete take'; }, 3000);
+            return;
+          }
+          clearTimeout(armed);
+          const r = await cue.recordDiscard(res.path);
+          if (r && r.error) { text.textContent = r.error; return; }
+          box.classList.add('failed');
+          text.textContent = `Moved ${res.file} to the Trash.`;
+          btn.remove(); del.remove();
+        });
+        box.append(btn, del);
       }
       messages.appendChild(box);
       if (!active) messages.scrollTop = messages.scrollHeight;
@@ -705,6 +738,7 @@
     // Start over: while filming, the take so far is saved and a new one starts after the count.
     async function restart() {
       if (!active) return;
+      clearAutoStop();
       if (films()) await finishTake();
       if (!active) return;
       follower.reset();
@@ -721,6 +755,7 @@
       active = false;
       counting = false;
       clearInterval(countTimer);
+      clearAutoStop();
       if (record) {
         record = null;
         // The camera goes off once the last take is on disk.
@@ -743,7 +778,8 @@
       if (!active || counting || !follower) return;
       const st = follower.hear(said, isFinal);
       if (st.token !== lastToken) paint(st.token);
-      if (st.done) label.textContent = films() ? 'End of script. Press Done to save the video.' : 'End of script. Stop recording, then press Done.';
+      if (st.done && films() && record.autoStop) { if (!autoStopTimer) autoStopAfterLastWord(); }
+      else if (st.done) label.textContent = films() ? 'End of script. Press Done to save the video.' : 'End of script. Stop recording, then press Done.';
     }
 
     messages.addEventListener('wheel', () => { if (active) pausedUntil = Date.now() + MANUAL_PAUSE_MS; }, { passive: true });
@@ -835,8 +871,39 @@
     const recSize = document.getElementById('rec-size');
     const recAdvice = document.getElementById('rec-advice');
     const recFolder = document.getElementById('rec-folder');
+    const recAutoStop = document.getElementById('rec-autostop');
+    const recMeter = document.getElementById('rec-meter');
+    const recMeterTrack = document.getElementById('rec-meter-track');
+    const recMeterFill = document.getElementById('rec-meter-fill');
+    const recMeterText = document.getElementById('rec-meter-text');
     const Presets = window.CueRecordPresets;
-    const recPrefs = () => ({ cameraId: '', micId: '', on: false, preset: Presets.DEFAULT_PRESET, ...((settings && settings.recording) || {}) });
+    const recPrefs = () => ({ cameraId: '', micId: '', on: false, autoStop: true, preset: Presets.DEFAULT_PRESET, ...((settings && settings.recording) || {}) });
+    const METER_WINDOW_MS = 1200; // the verdict is on the loudest moment of about a second of speech
+
+    // The bar moves with every frame; the words change only a few times a second.
+    function startMeter() {
+      const recent = [];
+      let lastText = 0;
+      recMeter.removeAttribute('data-level');
+      recMeterText.textContent = 'Say something to test the microphone.';
+      window.CueRecorder.meter((peak) => {
+        const now = Date.now();
+        recent.push({ t: now, peak });
+        while (recent.length && now - recent[0].t > METER_WINDOW_MS) recent.shift();
+        const db = peak > 0 ? 20 * Math.log10(peak) : -60;
+        const pct = Math.max(0, Math.min(100, Math.round(((db + 60) / 60) * 100)));
+        recMeterFill.style.width = pct + '%';
+        recMeterTrack.setAttribute('aria-valuenow', String(pct));
+        if (now - lastText < 300) return;
+        lastText = now;
+        const loudest = recent.reduce((m, r) => Math.max(m, r.peak), 0);
+        // Silence before anyone speaks is not "too quiet" yet.
+        if (loudest < 0.003) return;
+        const v = Presets.micVerdict(loudest);
+        recMeter.dataset.level = v.level;
+        recMeterText.textContent = v.text;
+      });
+    }
     let previewSeq = 0;
 
     function fillSelect(sel, items, value) {
@@ -856,6 +923,7 @@
       const seq = ++previewSeq;
       const prefs = recPrefs();
       recOn.checked = prefs.on;
+      recAutoStop.checked = prefs.autoStop;
       recOptions.classList.toggle('hidden', !prefs.on);
       document.getElementById('script-start').textContent = prefs.on && prefs.preset !== 'prompter' ? 'Start recording' : 'Start';
       if (!recPreset.options.length) {
@@ -870,6 +938,8 @@
       const films = !!p.request;
       recFrame.classList.toggle('hidden', !films);
       recCamera.disabled = !films; recMic.disabled = !films;
+      recMeter.classList.toggle('hidden', !films);
+      recAutoStop.parentElement.classList.toggle('hidden', !films);
       if (!films) { window.CueRecorder.close(); recPreview.srcObject = null; recSize.textContent = 'Nothing is recorded in this mode.'; return; }
       recSize.textContent = 'Turning the camera on...';
       try {
@@ -878,6 +948,7 @@
         const { cameras, mics } = await window.CueRecorder.devices();
         fillSelect(recCamera, cameras, prefs.cameraId);
         fillSelect(recMic, mics, prefs.micId);
+        startMeter();
         recSize.textContent = got
           ? `Records ${got.width}x${got.height} at ${got.fps} fps` + (got.cropped ? ', cut from this camera\'s wider picture.' : ', the camera\'s own picture.') + ' Line your eyes up with the dashed line.'
           : '';
@@ -893,6 +964,7 @@
     recPreset.addEventListener('change', async () => { await saveRecPrefs({ preset: recPreset.value }); refreshRecord(); });
     recCamera.addEventListener('change', async () => { await saveRecPrefs({ cameraId: recCamera.value }); refreshRecord(); });
     recMic.addEventListener('change', async () => { await saveRecPrefs({ micId: recMic.value }); refreshRecord(); });
+    recAutoStop.addEventListener('change', () => saveRecPrefs({ autoStop: recAutoStop.checked }));
     document.getElementById('rec-folder-btn').addEventListener('click', async () => {
       const res = await cue.recordChooseFolder().catch(() => null);
       if (res && res.folder) recFolder.textContent = 'Saves to ' + res.folder;
@@ -912,6 +984,7 @@
       scrim.classList.add('hidden');
       previewSeq++;
       recPreview.srcObject = null;
+      window.CueRecorder.stopMeter();
       if (!keepCamera) window.CueRecorder.close();
     }
 
@@ -966,7 +1039,7 @@
     document.getElementById('script-start').addEventListener('click', async () => {
       if (!area.value.trim()) { status.textContent = 'Write or paste your script first.'; return; }
       const prefs = recPrefs();
-      const record = prefs.on ? { preset: prefs.preset, scriptName: name.value.trim() || 'cue recording' } : null;
+      const record = prefs.on ? { preset: prefs.preset, autoStop: prefs.autoStop, scriptName: name.value.trim() || 'cue recording' } : null;
       await close(!!record);
       teleprompter.start(area.value, { record });
     });

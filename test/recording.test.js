@@ -29,8 +29,8 @@ test('the crop keeps the preset shape, centred, in even pixels', () => {
 });
 
 test('recording settings are cleaned', () => {
-  assert.deepEqual(normalizeRecording(null), { cameraId: '', micId: '', on: false, preset: 'landscape' });
-  assert.deepEqual(normalizeRecording({ cameraId: 'c', micId: 7, on: 'yes', preset: 'nope' }), { cameraId: 'c', micId: '', on: false, preset: 'landscape' });
+  assert.deepEqual(normalizeRecording(null), { cameraId: '', micId: '', on: false, autoStop: true, preset: 'landscape' });
+  assert.deepEqual(normalizeRecording({ cameraId: 'c', micId: 7, on: 'yes', preset: 'nope' }), { cameraId: 'c', micId: '', on: false, autoStop: true, preset: 'landscape' });
   assert.equal(normalizeRecording({ on: true, preset: 'portrait' }).preset, 'portrait');
 });
 
@@ -73,4 +73,18 @@ test('the camera is declared: entitlement and an honest usage line', () => {
   const builder = fs.readFileSync(path.join(__dirname, '..', 'electron-builder.cjs'), 'utf8');
   assert.doesNotMatch(builder, /does not use the camera/);
   assert.match(builder, /NSCameraUsageDescription:\s*"cue uses the camera only when you record yourself/);
+});
+
+test('the microphone check calls quiet, good and loud at the right levels', () => {
+  const { micVerdict } = require('../renderer/record-presets');
+  assert.equal(micVerdict(0).level, 'quiet');
+  assert.equal(micVerdict(0.005).level, 'quiet');   // -46 dBFS
+  assert.equal(micVerdict(0.1).level, 'good');      // -20 dBFS
+  assert.equal(micVerdict(0.5).level, 'good');      // -6 dBFS
+  assert.equal(micVerdict(0.9).level, 'loud');      // -0.9 dBFS
+});
+
+test('auto-stop is on unless turned off', () => {
+  assert.equal(normalizeRecording({}).autoStop, true);
+  assert.equal(normalizeRecording({ autoStop: false }).autoStop, false);
 });

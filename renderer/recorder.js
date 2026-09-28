@@ -21,6 +21,8 @@
   let takeId = '';
   let queue = Promise.resolve();
   let writeError = '';
+  let meterCtx = null;
+  let meterRaf = 0;
 
   async function devices() {
     const list = await navigator.mediaDevices.enumerateDevices();
@@ -29,7 +31,35 @@
     return { cameras: pick('videoinput'), mics: pick('audioinput') };
   }
 
+  // The microphone meter: calls onPeak(0..1) with the loudest sample of each frame.
+  function meter(onPeak) {
+    stopMeter();
+    const tracks = stream ? stream.getAudioTracks() : [];
+    if (!tracks.length) return;
+    meterCtx = new AudioContext();
+    const analyser = meterCtx.createAnalyser();
+    analyser.fftSize = 1024;
+    meterCtx.createMediaStreamSource(new MediaStream(tracks)).connect(analyser);
+    const buf = new Float32Array(analyser.fftSize);
+    const tick = () => {
+      analyser.getFloatTimeDomainData(buf);
+      let peak = 0;
+      for (const v of buf) { const a = Math.abs(v); if (a > peak) peak = a; }
+      onPeak(peak);
+      meterRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  function stopMeter() {
+    cancelAnimationFrame(meterRaf);
+    meterRaf = 0;
+    if (meterCtx) meterCtx.close().catch(() => {});
+    meterCtx = null;
+  }
+
   function stopStream() {
+    stopMeter();
     cancelAnimationFrame(drawing);
     drawing = 0;
     if (canvasStream) canvasStream.getTracks().forEach((t) => t.stop());
@@ -136,6 +166,8 @@
   window.CueRecorder = {
     devices,
     preview,
+    meter,
+    stopMeter,
     start,
     stop,
     // Everything off: the camera light goes out.

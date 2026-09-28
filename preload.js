@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('cue', {
   recordChunk: (id, data) => ipcRenderer.invoke('record:chunk', id, data),
   recordEnd: (id) => ipcRenderer.invoke('record:end', id),
   recordReveal: (p) => ipcRenderer.invoke('record:reveal', p),
+  recordDiscard: (p) => ipcRenderer.invoke('record:discard', p),
   recordChooseFolder: () => ipcRenderer.invoke('record:choose-folder'),
   recordPlace: (on) => ipcRenderer.invoke('record:place', on),
   codingLibraryDelete: (id) => ipcRenderer.invoke('codingLibrary:delete', id),

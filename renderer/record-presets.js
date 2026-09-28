@@ -60,7 +60,18 @@
     return { sx: Math.floor((srcW - sw) / 2), sy: Math.floor((srcH - sh) / 2), sw, sh };
   }
 
-  const api = { PRESETS, PRESET_IDS, DEFAULT_PRESET, cropFor };
+  // The microphone check before Start: the loudest moment of the last second
+  // or so (peak, 0 to 1). Speech well placed peaks around -20 to -6 dBFS.
+  const QUIET_DB = -40;
+  const LOUD_DB = -3;
+  function micVerdict(peak) {
+    const db = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+    if (db < QUIET_DB) return { level: 'quiet', text: 'Too quiet. Speak up, move closer, or check the microphone is the right one.' };
+    if (db > LOUD_DB) return { level: 'loud', text: 'Too loud, it may crackle. Move back a little.' };
+    return { level: 'good', text: 'Sounds good.' };
+  }
+
+  const api = { PRESETS, PRESET_IDS, DEFAULT_PRESET, cropFor, micVerdict };
   if (typeof window !== 'undefined') window.CueRecordPresets = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
