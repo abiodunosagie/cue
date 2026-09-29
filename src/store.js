@@ -76,6 +76,8 @@ const DEFAULTS = {
   // points", "casual tone". Applied to every LLM mode EXCEPT LeetCode (kept
   // strict for coding problems).
   aiRules: '',
+  // mobile | fullstack by hand, or auto: read from the job description (src/role-focus.js). Per job profile.
+  roleFocus: 'auto',
   panelOpacity: PanelOpacity.DEFAULT,
   answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)
   // Job profiles (src/profiles.js): the active one lives in the flat fields above.
@@ -117,7 +119,7 @@ const DEFAULTS = {
     // llm.js's DEAD_ANTHROPIC_MODEL_RE self-heal additionally migrates any
     // settings file already saved with the old dead ids.
     // coding: the ⌘H solve model (CURRENT_ANTHROPIC_DEFAULT_CODING in src/llm.js).
-    anthropic: { fast: 'claude-haiku-4-5-20251001', smart: 'claude-sonnet-4-5-20250929', coding: 'claude-opus-5-5' },
+    anthropic: { fast: 'claude-sonnet-5-5', smart: 'claude-sonnet-5-5', coding: 'claude-opus-5-5' },
     // Kept in sync with CURRENT_GEMINI_DEFAULT in src/llm.js — gemini-2.0-flash
     // (the previous default here) was retired by Google on 2026-03-03 and 404s
     // on every request. gemini-2.5-flash is current and free-tier available.

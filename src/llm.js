@@ -15,10 +15,11 @@ const CURRENT_GEMINI_DEFAULT = 'gemini-2.5-flash';
 // claude-3-5-haiku-latest / claude-3-5-sonnet-latest were retired by Anthropic
 // (confirmed absent from GET https://api.anthropic.com/v1/models as of Sep 19
 // 2026 — every claude-2.x and claude-3.x id 404s with not_found_error).
-// claude-haiku-4-5-20251001 / claude-sonnet-4-5-20250929 are current and were
-// live-verified with a real request before shipping this default.
-const CURRENT_ANTHROPIC_DEFAULT_FAST = 'claude-haiku-4-5-20251001';
-const CURRENT_ANTHROPIC_DEFAULT_SMART = 'claude-sonnet-4-5-20250929';
+// Fast and Smart are both claude-sonnet-5-5: Haiku answered faster but not well
+// enough for a live interview. Live-verified on 2026-09-29 (GET /v1/models and
+// real streams): first word 1.3 to 1.8s against Haiku 4.5's 0.9s.
+const CURRENT_ANTHROPIC_DEFAULT_FAST = 'claude-sonnet-5-5';
+const CURRENT_ANTHROPIC_DEFAULT_SMART = 'claude-sonnet-5-5';
 // Coding solves (⌘H) run on the strongest model: a wrong answer there fails the
 // interview outright, so they trade cost and a few seconds for correctness.
 // Live-verified against GET /v1/models and a real solve on 2026-09-23.
