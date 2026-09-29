@@ -67,7 +67,10 @@ const SECRET_PATTERNS = [
   [/(:\/\/[^/\s:@'"]+:)[^@\s'"]+@/g, '$1[hidden]@'],
   // Also Groovy's space form: storePassword "x".
   [new RegExp(`(${SECRET_NAME}["']?\\s*(?:[:=]\\s*|\\s+)["'])(?=[^"'\\s]*\\d)[^"'\\s]{6,}(["'])`, 'gi'), '$1[hidden]$2'],
-  [/(["'])(?=[A-Za-z0-9_\-+/=.]*\d)(?=[A-Za-z0-9_\-+/=.]*[A-Za-z])[A-Za-z0-9_\-+/=.]{24,}\1/g, '$1[hidden]$1']
+  [/(["'])(?=[A-Za-z0-9_\-+/=.]*\d)(?=[A-Za-z0-9_\-+/=.]*[A-Za-z])[A-Za-z0-9_\-+/=.]{24,}\1/g, '$1[hidden]$1'],
+  // A name that literally says password or secret hides its quoted value even
+  // without a digit (password = "correcthorsebattery"); UI text has spaces and stays.
+  [/((?:passw(?:or)?d|pwd|secret)[A-Za-z0-9_]*["']?\s*[:=]\s*["'])[^"'\s]{8,}(["'])/gi, '$1[hidden]$2']
 ];
 
 // In config files a value is written without quotes (password: x, KEY=x,

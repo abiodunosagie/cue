@@ -441,7 +441,7 @@ test('formatProviderErrorMessage: publik 401 key_revoked → reprovision / recon
   assert.deepEqual(formatProviderErrorMessage(sdkError(401, { type: 'key_revoked', reprovision: true }), 'publik').action, { kind: 'reprovision' });
   assert.equal(formatProviderErrorMessage(sdkError(401, { type: 'key_revoked', reprovision: false }), 'publik').action.kind, 'reconnect');
   const cap = formatProviderErrorMessage(sdkError(429, { type: 'daily_cap_reached', claim_state: 'anonymous', claim_url: 'https://publikhq.com/claim/abc' }, { 'retry-after': '1800' }), 'publik');
-  assert.match(cap.message, /daily publik API spending cap — it resets in 30 minutes/);
+  assert.match(cap.message, /daily publik API spending cap: it resets in 30 minutes/);
   const unknown = formatProviderErrorMessage(sdkError(400, { type: 'unknown_model' }), 'publik', 'gpt-9');
   assert.match(unknown.message, /does not serve "gpt-9"/);
   assert.equal(unknown.action, null);

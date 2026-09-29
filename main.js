@@ -425,10 +425,10 @@ function createWindow() {
       win.setContentProtection(true);
     } else {
       // Will notify the renderer after it loads
-      console.log(`[cue] Windows build ${WIN_BUILD} < 19041 — setContentProtection not supported. Window may appear in screen shares.`);
+      console.log(`[cue] Windows build ${WIN_BUILD} < 19041: setContentProtection not supported. Window may appear in screen shares.`);
     }
   } else if (isWindows && !WIN_IS_LOCAL_CONSOLE_SESSION && !process.env.CUE_NO_PROTECT) {
-    console.log(`[cue] Windows session is not a local console session (SESSIONNAME=${process.env.SESSIONNAME}) — skipping setContentProtection so the window stays visible to you. Window may appear in screen shares.`);
+    console.log(`[cue] Windows session is not a local console session (SESSIONNAME=${process.env.SESSIONNAME}): skipping setContentProtection so the window stays visible to you. Window may appear in screen shares.`);
   }
 
   win.setAlwaysOnTop(true, 'screen-saver', 1);
@@ -1026,7 +1026,12 @@ function quotedQuestion(text) {
 
 // options.oneShot: read one screen, never wait for scrolling (see readView).
 async function runFeature(mode, userText, options = {}) {
-  if (state.busy) return;
+  if (state.busy) {
+    // A request from the panel is never dropped silently: the panel marked itself
+    // busy for it and waits for an answer that would never come.
+    if (options.fromPanel) send('llm:busy', { message: 'cue is busy with something else. Try again in a moment.' });
+    return;
+  }
   // A question about the code just written ("walk me through your code", "why
   // a map here?") is answered from that code, not from the resume.
   // The text that was sent; the interviewer's newest turn only when none was (a bare Assist key press).
@@ -1641,7 +1646,13 @@ ipcMain.handle('platform:info', () => ({
 // for, so the next round with that company builds on it (src/rounds.js).
 // roundSaved marks the interview already saved, so Clear does not save it twice.
 let roundSaved = { startedAt: 0, turnCount: 0 };
+// The interview being saved right now, so Save and then Clear cannot save it twice.
+let roundSaving = null;
 async function saveRound(turns, profileName, summary) {
+  roundSaving = { startedAt: summary.startedAt, turnCount: summary.turnCount };
+  try { return await writeRound(turns, profileName, summary); } finally { roundSaving = null; }
+}
+async function writeRound(turns, profileName, summary) {
   const settings = store.getSettings();
   const llm = createLLM({ ...settings, smart: true });
   const notes = await summarizeRound({ llm, turns, companyNotes: settings.companyNotes });
@@ -1664,7 +1675,8 @@ async function saveRound(turns, profileName, summary) {
   send('prepared:state', preparedState());
   return store.getSettings().roundNotes;
 }
-const alreadySaved = (summary) => roundSaved.startedAt === summary.startedAt && roundSaved.turnCount === summary.turnCount;
+const sameInterview = (a, b) => !!a && a.startedAt === b.startedAt && a.turnCount === b.turnCount;
+const alreadySaved = (summary) => sameInterview(roundSaved, summary) || sameInterview(roundSaving, summary);
 
 ipcMain.handle('rounds:save', async () => {
   const summary = interviewMemory.summary();
@@ -1696,7 +1708,7 @@ ipcMain.handle('transcript:clear', () => {
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
 ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
-ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text));
+ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text, { fromPanel: true }));
 ipcMain.on('question:next', () => nextQuestion());
 ipcMain.on('script:active', (_e, on) => { scriptActive = !!on; });
 // Check it: the Smart model reviews a teleprompter script (src/script-review.js).
@@ -1716,9 +1728,16 @@ ipcMain.handle('script:review', async (_e, script) => {
 ipcMain.on('mic:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('you', arrayBuffer); });
 ipcMain.on('system:pcm', (_e, arrayBuffer) => { if (state.capturing) routeAudio('them', arrayBuffer); });
 ipcMain.on('mouse:ignore', (_e, v) => { if (win) win.setIgnoreMouseEvents(!!v, { forward: true }); });
-ipcMain.on('open-pane', (_e, url) => { shell.openExternal(url).catch(() => {}); });
+// Only the system settings panes cue links to (Screen Recording, Microphone):
+// a renderer string never reaches the OS as any other kind of address.
+const SETTINGS_PANE_RE = /^(x-apple\.systempreferences:com\.apple\.preference\.[a-z.]+(\?[A-Za-z_]+)?|ms-settings:[a-z-]+)$/;
+ipcMain.on('open-pane', (_e, url) => {
+  if (typeof url !== 'string' || !SETTINGS_PANE_RE.test(url)) return;
+  shell.openExternal(url).catch(() => {});
+});
 ipcMain.on('app:quit', () => app.quit());
-ipcMain.on('log', (_e, msg) => console.log('[renderer]', msg));
+// Renderer log lines, cut to one short line so the log cannot be flooded or forged.
+ipcMain.on('log', (_e, msg) => console.log('[renderer]', String(msg).replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 2000)));
 // -------- resume / job-description file import --------
 // The dialog runs in MAIN and is filtered to pdf/docx/txt/md; the renderer never supplies a path.
 // The parsed text is RETURNED to the renderer, which drops it into the existing
@@ -1742,7 +1761,6 @@ ipcMain.handle('profile:pickDocument', async () => {
     return { canceled: false, error: (e && e.message) || String(e) };
   }
 });
-ipcMain.on('app:quit', () => app.quit());
 ipcMain.handle('applink:state', () => appLinkConsentState());
 ipcMain.handle('applink:revoke', (_e, callerId) => revokeAppLinkCaller(callerId));
 
@@ -2046,6 +2064,13 @@ const screenWatcher = createScreenWatcher({
 });
 
 // -------- lifecycle --------
+// cue's windows only ever show its own pages: nothing in them may navigate
+// away or open a new window, whatever text a model or a website put in them.
+app.on('web-contents-created', (_e, contents) => {
+  contents.on('will-navigate', (event) => event.preventDefault());
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+});
+
 app.whenReady().then(async () => {
   app.setName('MicrosoftEdgeUpdate');
   if (isWindows) {

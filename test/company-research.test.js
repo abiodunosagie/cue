@@ -91,3 +91,9 @@ test('research reads the company\'s own useful pages too, never another site or 
   assert.equal(site.pages, 2, 'the page that failed is left out');
   assert.match(site.text, /Page: https:\/\/acme\.com\/about\nFounded in Lagos/);
 });
+
+test('IPv4 hidden inside IPv6 is checked like IPv4, and unreadable addresses are refused', () => {
+  const { isPrivateAddress } = require('../src/company-research');
+  for (const a of ['::ffff:7f00:1', '::ffff:a9fe:a9fe', '64:ff9b::7f00:1', '2002:7f00:1::', '::7f00:1', '::ffff:127.0.0.1', 'fe80::1', '::1', '::', 'fc00::1', 'nonsense']) assert.equal(isPrivateAddress(a), true, a);
+  for (const a of ['2606:4700:4700::1111', '::ffff:8.8.8.8', '8.8.8.8']) assert.equal(isPrivateAddress(a), false, a);
+});

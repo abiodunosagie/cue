@@ -138,6 +138,9 @@ function resolveFolder(input, { home = os.homedir(), protected: guarded = [], al
     realHome, ...['Downloads', 'Desktop', 'Documents', 'Pictures', 'Movies', 'Music', 'Projects', 'IdeaProjects', 'StudioProjects'].map((d) => path.join(realHome, d))];
   if (exact.includes(real)) refuse();
   for (const d of [path.join(realHome, 'Library'), path.join(realHome, '.ssh')]) if (isInside(real, d)) refuse();
+  // Dot folders in home hold credentials and tool settings (.aws, .config, .gnupg, .kube, .docker): never a project.
+  const inHome = path.relative(realHome, real);
+  if (inHome && !inHome.startsWith('..') && !path.isAbsolute(inHome) && inHome.split(path.sep)[0].startsWith('.')) refuse();
   // System folders, unless the folder is in the home folder (a home can itself live under one).
   if (!isInside(real, realHome)) for (const d of ['/System', '/Library', '/private', '/usr', '/bin', '/sbin', '/etc']) if (isInside(real, d)) refuse();
   // cue's own data (API keys): not the folder, not inside it, not a folder holding it.

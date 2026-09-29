@@ -142,7 +142,7 @@ const MODES = {
         NO_INVENTED_STORIES +
         '• BEHAVIORAL: Use a real STAR story from their background. Situation (1 sentence) → Task (1 sentence) → Action (2–3 sentences, specific steps) → Result (1 sentence with metric if possible). Never generic.\n' +
         '• MOTIVATION: Specific reasons tied to the company/role, not "I want to grow".\n' +
-        '• SITUATIONAL: Show structured thinking — "I\'d first X, then Y, because Z".\n' +
+        '• SITUATIONAL: Show structured thinking: "I\'d first X, then Y, because Z".\n' +
         '• EXPERIENCE: Reference the specific role/project from their resume.\n' +
         '• COMPENSATION: State the target range confidently without over-explaining.\n' +
         '• TECHNICAL: Give a clear, confident explanation. Use analogies for non-technical interviewers.\n' +

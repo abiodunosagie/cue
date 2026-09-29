@@ -51,7 +51,7 @@ const COPY = {
   // from publik's lib/publik-api/why-it-costs.ts. Same sentence under the
   // first-run card, behind the settings toggle and nowhere else — never a
   // new pricing claim.
-  whyItCosts: 'A provider charges for every request the app makes; publik pays that bill and passes it on at half the provider\'s list price. Nothing is charged behind your back — usage only draws from a plan or pack you choose to buy.',
+  whyItCosts: 'A provider charges for every request the app makes; publik pays that bill and passes it on at half the provider\'s list price. Nothing is charged behind your back. Usage only draws from a plan or pack you choose to buy.',
   whyItCostsToggle: 'Why it costs money',
   cta: {
     cardTitle: 'publik API is set up',
@@ -323,7 +323,7 @@ function describeGatewayError({ status, body, model, retryAfter } = {}) {
   if (status === 401) {
     if (type === 'key_revoked' && err.reprovision === true) {
       return {
-        message: `This computer's ${PROVIDER_LABEL} key was retired after a long idle stretch. cue is reconnecting — ask again in a moment, ${BYO}`,
+        message: `This computer's ${PROVIDER_LABEL} key was retired after a long idle stretch. cue is reconnecting, ask again in a moment, ${BYO}`,
         action: { kind: 'reprovision' }
       };
     }
@@ -342,13 +342,13 @@ function describeGatewayError({ status, body, model, retryAfter } = {}) {
     const wait = formatRetryAfter(retryAfter);
     if (type === 'daily_cap_reached') {
       return {
-        message: `This computer reached its daily ${PROVIDER_LABEL} spending cap${wait ? ` — it resets in ${wait}` : ' — it resets at midnight UTC'}. Link it to your publik account for a higher cap, ${BYO}`,
+        message: `This computer reached its daily ${PROVIDER_LABEL} spending cap${wait ? `: it resets in ${wait}` : ': it resets at midnight UTC'}. Link it to your publik account for a higher cap, ${BYO}`,
         action: err.claim_state !== 'claimed' ? link('Link now', err.claim_url) : null
       };
     }
     if (type === 'week_budget_reached') {
       return {
-        message: `Your publik plan's usage for this week is used up${wait ? ` — it resets in ${wait}` : ''}. Add credit to keep going, ${BYO}`,
+        message: `Your publik plan's usage for this week is used up${wait ? `: it resets in ${wait}` : ''}. Add credit to keep going, ${BYO}`,
         action: link('Add credit', err.add_credit_url)
       };
     }

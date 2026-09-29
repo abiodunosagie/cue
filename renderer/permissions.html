@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
-  <title>cue — Permissions</title>
+  <title>cue: Permissions</title>
   <style>
     :root {
       --accent: #3C83F5;
@@ -248,7 +248,7 @@
 
         // Mic
         rowMic.className = 'perm-row no-drag ' + (micOk ? 'granted' : 'denied');
-        statusMic.textContent = micOk ? 'Granted' : (status.mic === 'not-determined' ? 'Not yet requested' : 'Not granted — open Settings to allow');
+        statusMic.textContent = micOk ? 'Granted' : (status.mic === 'not-determined' ? 'Not yet requested' : 'Not granted, open Settings to allow');
         statusMic.className = 'perm-status ' + (micOk ? 'ok' : 'bad');
         badgeMic.textContent = micOk ? '✓' : '✗';
         badgeMic.className = 'perm-badge ' + (micOk ? 'ok' : 'bad');
@@ -256,7 +256,7 @@
 
         // Screen
         rowScreen.className = 'perm-row no-drag ' + (screenOk ? 'granted' : 'denied');
-        statusScreen.textContent = screenOk ? 'Granted' : (status.screen === 'not-determined' ? 'Not yet requested' : 'Not granted — open Settings to allow');
+        statusScreen.textContent = screenOk ? 'Granted' : (status.screen === 'not-determined' ? 'Not yet requested' : 'Not granted, open Settings to allow');
         statusScreen.className = 'perm-status ' + (screenOk ? 'ok' : 'bad');
         badgeScreen.textContent = screenOk ? '✓' : '✗';
         badgeScreen.className = 'perm-badge ' + (screenOk ? 'ok' : 'bad');

@@ -113,7 +113,10 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     }
     const invalid = checkSeveralApps([...new Set(roots)]);
     if (invalid) { state.busy = false; return { error: invalid }; }
-    run(llm, [...new Set(roots)], purpose).finally(() => { state.busy = false; });
+    // run() may hand busy back early (a walkthrough frees cue while its likely
+    // questions are written); then another answer owns it, and this must not clear it.
+    const owner = { released: false };
+    run(llm, [...new Set(roots)], purpose, owner).finally(() => { if (!owner.released) state.busy = false; });
     return { ok: true, name: roots.map((r) => path.basename(r)).join(' + ') };
   });
 
@@ -132,7 +135,7 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     }
   }
 
-  async function run(llm, roots, purpose) {
+  async function run(llm, roots, purpose, owner = { released: false }) {
     const several = roots.length > 1;
     const root = several ? null : roots[0];
     const name = roots.map((r) => path.basename(r)).join(' + ');
@@ -188,6 +191,7 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
       // The walkthrough works now; cue is free again while its likely questions
       // are answered in the background, so they show at once in the interview.
       state.busy = false;
+      owner.released = true;
       send('status', { message: `Walkthrough ready in ${secs}s. Now answering its likely questions in the background, about a minute. In the interview, press ${EXPLAIN_KEY} on any file or app screen.` });
       const qa = await likelyQuestions(name, saved.report, startedAt);
       // Cleared or replaced meanwhile (the save above moved the generation once).

@@ -1,6 +1,7 @@
 // Simple JSON-file settings store (avoids native modules so `npm install` stays clean).
 const fs = require('fs');
 const path = require('path');
+const { writeFileAtomic } = require('./atomic-file');
 const { app } = require('electron');
 const { normalizeBaseUrl } = require('./openai-compatible');
 const { normalizeLength } = require('../renderer/answer-length');
@@ -163,8 +164,15 @@ function deepMerge(base, over) {
 
 function load() {
   if (data) return data;
-  try { data = deepMerge(DEFAULTS, JSON.parse(fs.readFileSync(FILE, 'utf8'))); }
-  catch { data = deepMerge(DEFAULTS, {}); }
+  let raw = null;
+  try { raw = fs.readFileSync(FILE, 'utf8'); } catch { raw = null; } // none yet: a first run
+  try { data = deepMerge(DEFAULTS, raw === null ? {} : JSON.parse(raw)); }
+  catch {
+    // A damaged file is never overwritten by the defaults: it is kept next to
+    // it, so the profiles and keys in it can be recovered.
+    try { fs.copyFileSync(FILE, FILE.replace(/\.json$/, '') + '.damaged-' + Date.now() + '.json'); } catch { /* best effort */ }
+    data = deepMerge(DEFAULTS, {});
+  }
   data.panelOpacity = PanelOpacity.normalize(data.panelOpacity);
   data.answerLength = normalizeLength(data.answerLength);
   const migrated = Profiles.migrate(data);
@@ -174,7 +182,8 @@ function load() {
   return data;
 }
 // 0600: the file holds every BYO key and now a publik key. A no-op on Windows.
-function save() { try { fs.writeFileSync(FILE, JSON.stringify(data, null, 2), { mode: 0o600 }); } catch (e) { /* ignore */ } }
+// Written to a temp file and renamed, so a crash mid-write can never leave half a file.
+function save() { writeFileAtomic(FILE, JSON.stringify(data, null, 2)); }
 
 // Called by main.js at launch, before the window exists. publik becomes the
 // selected provider only where nothing works today: a build that carries an
@@ -194,9 +203,15 @@ function applyPublikDefault(build) {
   return true;
 }
 
+// The shape a setting must keep: an object stays an object, a string a string.
+// A wrong type from the renderer (apiKeys: null) is dropped, never saved.
+function kindOf(v) { return v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v; }
 function stripRendererPatch(patch) {
-  const out = { ...(patch || {}) };
+  const out = { ...(patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {}) };
   for (const k of RENDERER_READ_ONLY) delete out[k];
+  for (const k of Object.keys(out)) {
+    if (Object.prototype.hasOwnProperty.call(DEFAULTS, k) && DEFAULTS[k] !== null && kindOf(out[k]) !== kindOf(DEFAULTS[k])) delete out[k];
+  }
   if (out.apiKeys && typeof out.apiKeys === 'object') { out.apiKeys = { ...out.apiKeys }; delete out.apiKeys.publik; }
   return out;
 }

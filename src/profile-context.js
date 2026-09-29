@@ -57,7 +57,7 @@ function appendAiRules(systemPrompt, aiRules) {
   if (!rules) return systemPrompt;
   const clipped = rules.slice(0, MAX_RULES_WITH_FOCUS_CHARS);
   return systemPrompt +
-    '\n\nThe user has set the following rules for how you write. Follow them strictly — they override any default tone or formatting in the instructions above. ' +
+    '\n\nThe user has set the following rules for how you write. Follow them strictly: they override any default tone or formatting in the instructions above. ' +
     'If two rules conflict, prefer the rule that is more specific.\n' +
     '--- USER RULES ---\n' + clipped + '\n--- END USER RULES ---';
 }

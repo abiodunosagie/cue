@@ -173,12 +173,12 @@ function formatProviderErrorMessage(error, provider, model) {
   if (isRateLimitError(error)) {
     const retrySeconds = extractRetryDelaySeconds(rawMessage);
     const waitHint = retrySeconds ? ` Wait about ${formatRetryWait(retrySeconds)}` : ' Wait a moment';
-    return `${label} is rate-limiting requests right now (429 Too Many Requests).${waitHint} and try again — this is a temporary per-minute/request limit, not your account running out of credit.`;
+    return `${label} is rate-limiting requests right now (429 Too Many Requests).${waitHint} and try again. This is a temporary per-minute/request limit, not your account running out of credit.`;
   }
 
   if (isNotFoundError(error)) {
     const modelHint = model ? ` "${model}"` : '';
-    return `${label} model${modelHint} is unavailable (404) — it may have been renamed, retired by the provider, or misspelled. Open Settings and pick a current model for ${label} (or clear the field to use cue's default), then try again.`;
+    return `${label} model${modelHint} is unavailable (404). it may have been renamed, retired by the provider, or misspelled. Open Settings and pick a current model for ${label} (or clear the field to use cue's default), then try again.`;
   }
 
   return rawMessage || 'Unknown LLM error.';

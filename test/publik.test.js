@@ -268,10 +268,10 @@ test('401 key_revoked: reprovision:true re-mints silently, false offers Reconnec
 
 test('429 types and Retry-After', () => {
   const cap = publik.describeGatewayError({ status: 429, body: { type: 'daily_cap_reached', claim_state: 'anonymous', claim_url: 'https://publikhq.com/claim/X' }, retryAfter: 3600 });
-  assert.match(cap.message, /daily publik API spending cap — it resets in 60 minutes/);
+  assert.match(cap.message, /daily publik API spending cap: it resets in 60 minutes/);
   assert.equal(cap.action.url, 'https://publikhq.com/claim/X');
   const week = publik.describeGatewayError({ status: 429, body: { type: 'week_budget_reached', add_credit_url: 'https://publikhq.com/dashboard/api/add' }, retryAfter: 86400 });
-  assert.match(week.message, /this week is used up — it resets in 24 hours/);
+  assert.match(week.message, /this week is used up: it resets in 24 hours/);
   assert.equal(week.action.label, 'Add credit');
   const busy = publik.describeGatewayError({ status: 429, body: { type: 'rate_limit_exceeded' }, retryAfter: 12 });
   assert.match(busy.message, /busy right now\. Wait 12 seconds/);

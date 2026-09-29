@@ -479,3 +479,9 @@ test('a follow-up still reads its files when the apps only share the disk root',
   const turn = askTurn({ memory: { root, name: 'x', tree: 't', index: ['lib/a_b.dart'], report: 'R' }, question: 'what does a_b.dart do' });
   assert.match(turn, /class AB/);
 });
+
+test('credential and tool folders in home are never read as a project', () => {
+  const home = tmp();
+  for (const d of ['.aws', '.config/gh', '.kube']) fs.mkdirSync(path.join(home, d), { recursive: true });
+  for (const d of ['.aws', '.config/gh', '.kube']) assert.throws(() => resolveFolder(path.join(home, d), { home }), /./, d);
+});

@@ -123,3 +123,21 @@ test('defaults carry the publik model aliases and the settings file is written 0
   store.setSettings({});
   if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600);
 });
+
+test('a setting of the wrong shape from the panel is dropped, never saved', () => {
+  const { store } = loadStore();
+  const out = store.stripRendererPatch({ apiKeys: null, models: 'x', provider: 'anthropic', smart: 'yes', answerLength: 'short' });
+  assert.equal('apiKeys' in out, false);
+  assert.equal('models' in out, false);
+  assert.equal('smart' in out, false);
+  assert.equal(out.provider, 'anthropic');
+  assert.equal(out.answerLength, 'short');
+  assert.deepEqual(store.stripRendererPatch(null), {});
+  assert.deepEqual(store.stripRendererPatch(['x']), {});
+});
+
+test('a damaged settings file is kept for recovery, never silently replaced', () => {
+  const { store, dir } = loadStore('{"apiKeys": {"anthropic": "sk-x"}, "resumeT');
+  store.getSettings();
+  assert.ok(fs.readdirSync(dir).some((f) => /^cue-data\.damaged-\d+\.json$/.test(f)));
+});

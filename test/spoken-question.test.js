@@ -93,3 +93,12 @@ test('a question asked again right after its answer is recognised, a different o
   assert.equal(asksEarlier('How would you handle offline sync? Our drivers are in rural areas.'), true, 'the turn check looks at this one');
   assert.equal(asksEarlier('We are a logistics company. We have forty engineers.'), false);
 });
+
+test('a question the interviewer paused in the middle of waits for the rest', () => {
+  const { questionToAnswer } = require('../renderer/spoken-question');
+  for (const t of ['Tell me about a time when', 'Can you tell me about', 'Walk me through', 'How would you', 'Why did you choose', 'Have you ever', 'Describe a time', 'Tell me about your', 'What are your biggest', 'How would you approach designing the']) {
+    assert.notEqual(questionToAnswer(t).state, 'question', t);
+  }
+  for (const t of ['so what does this notifier do', 'which state library do you use', 'why did you do that', 'Have you ever led a team']) assert.equal(questionToAnswer(t).state, 'question', t);
+  assert.equal(questionToAnswer('Can you hear me okay?').state, 'checkin');
+});

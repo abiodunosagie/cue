@@ -1515,6 +1515,8 @@
     const heardText = input.value.trim();
     const text = (typeof asked === 'string' && asked.trim()) || heardText;
     if (!text) { runMode('assist', ''); return; }
+    // An answer is still streaming: keep the question in the box instead of losing it.
+    if (busy) { showToast('Still answering. Press Enter again when it is done.', 2500); return; }
     const wasFromSTT = inputFromSTT;
     
     // Save to history before clearing (in case user wants to redo)
@@ -1686,6 +1688,8 @@
       saveToQuestionHistory(input.value);
       
       const res = await cue.clearTranscript();
+      // A new interview: nothing asked in the last one counts as a repeat.
+      lastAnswered = { text: '', at: 0 }; pendingAnswered = ''; lastGatedTurn = ''; gateSaidNo = '';
       clearMessages();
       // Also clear the floating interim bar
       if (interimEl) { interimEl.textContent = ''; interimEl.classList.remove('show'); }
@@ -1728,7 +1732,7 @@
         showStatus('No microphone audio track was available. Check Windows Sound settings for a working default input device, then try again.');
         return;
       }
-      cue.log('mic stream started: track=' + (track.label || '(no label — permission may be stale)') + ' muted=' + track.muted);
+      cue.log('mic stream started: track=' + (track.label || '(no label: permission may be stale)') + ' muted=' + track.muted);
       audioCtx = new AudioContext({ sampleRate: 16000 });
 
       // Use AudioWorklet for low-latency, off-main-thread processing
@@ -1760,7 +1764,7 @@
     } catch (err) {
       const message = err && err.message ? err.message : String(err);
       const name = err && err.name;
-      cue.log('mic error: ' + name + ' — ' + message);
+      cue.log('mic error: ' + name + ': ' + message);
       // getUserMedia's DOMException.name is the reliable signal here — the
       // .message text varies by Chromium version and isn't meant for users.
       // Distinguishing "no device" from "denied" from "in use elsewhere"
@@ -2276,6 +2280,13 @@
     aiEl.dataset.section = 'full';
     showToast('Quick start ready. The full solution comes in below it.', 2600);
     if (busy) armBusyFailsafe();
+  });
+  // Main was busy with something the panel did not know of (a project read):
+  // this request never ran, so the panel is free again and nothing counts as answered.
+  cue.on('llm:busy', ({ message }) => {
+    pendingAnswered = '';
+    setBusy(false);
+    showToast(message || 'cue is busy. Try again in a moment.', 3000);
   });
   cue.on('llm:done', () => {
     const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update();
@@ -2813,8 +2824,11 @@
   });
   cue.on('rounds:saved', ({ activeProfile, roundNotes }) => {
     if (activeProfile !== settings.activeProfile) return;
+    // Notes being edited in the box are kept; the saved round is on disk and shows next time.
+    const box = $('#round-notes');
+    const untouched = box.value.trim() === String(settings.roundNotes || '').trim();
     settings.roundNotes = roundNotes;
-    $('#round-notes').value = roundNotes || '';
+    if (untouched) box.value = roundNotes || '';
   });
 
   // ---- test my setup ----
@@ -3069,7 +3083,7 @@
       for (const model of whisperOverview.models) {
         const option = document.createElement('option');
         option.value = model.id;
-        option.textContent = `${model.label} — ${formatBytes(model.bytes)}${model.recommended ? ' (recommended)' : ''}${model.installed ? ' ✓' : ''}`;
+        option.textContent = `${model.label}, ${formatBytes(model.bytes)}${model.recommended ? ' (recommended)' : ''}${model.installed ? ' ✓' : ''}`;
         select.appendChild(option);
       }
       const selectionExists = whisperOverview.models.some((model) => model.id === previousSelection);
@@ -3312,29 +3326,29 @@
     {
       icon: '👋',
       title: 'Welcome to cue',
-      body: 'cue is a private AI copilot that floats over your screen. It can <strong>see your screen</strong>, <strong>hear your meetings</strong>, and help you answer questions or solve coding problems — while staying hidden from most screen shares.<br><br>This quick guide gets you running in about a minute.'
+      body: 'cue is a private AI copilot that floats over your screen. It can <strong>see your screen</strong>, <strong>hear your meetings</strong>, and help you answer questions or solve coding problems, while staying hidden from most screen shares.<br><br>This quick guide gets you running in about a minute.'
     },
     {
       icon: '🔐',
       title: 'Allow cue to see & hear',
-      body: permissionHelp + '<ul><li><strong>Microphone</strong> — to hear you</li><li><strong>Screen recording</strong> — to see your screen and hear meeting audio</li></ul>',
+      body: permissionHelp + '<ul><li><strong>Microphone</strong>: to hear you</li><li><strong>Screen recording</strong>: to see your screen and hear meeting audio</li></ul>',
       buttons: permissionButtons
     },
     {
       icon: '🔑',
       title: 'Connect an AI provider',
-      body: 'cue uses <strong>your own</strong> API key — pick <span class="hl">OpenAI</span>, <span class="hl">Anthropic</span>, <span class="hl">Google Gemini</span>, or <span class="hl">Azure AI Foundry</span>. Get a key from your provider, then paste it into cue\'s Settings.<br><br><strong>Tip:</strong> For the <em>best</em> real-time listening, add a <span class="hl">Deepgram</span> key (lowest latency streaming transcription). Otherwise, an OpenAI key enables streaming via the Realtime API, and Gemini/Whisper work as batch fallbacks.',
+      body: 'cue uses <strong>your own</strong> API key: pick <span class="hl">OpenAI</span>, <span class="hl">Anthropic</span>, <span class="hl">Google Gemini</span>, or <span class="hl">Azure AI Foundry</span>. Get a key from your provider, then paste it into cue\'s Settings.<br><br><strong>Tip:</strong> For the <em>best</em> real-time listening, add a <span class="hl">Deepgram</span> key (lowest latency streaming transcription). Otherwise, an OpenAI key enables streaming via the Realtime API, and Gemini/Whisper work as batch fallbacks.',
       buttons: [{ label: 'Open cue Settings', action: () => { finishOnboard(); openSettings(); } }]
     },
     {
       icon: '🫥',
       title: 'Stay hidden in Zoom',
-      body: 'cue is hidden from most screen shares automatically (Google Meet, Teams, QuickTime — nothing to do). <strong>Zoom needs one setting:</strong><br><br>Zoom → <span class="hl">Settings</span> → <span class="hl">Share Screen</span> → <span class="hl">Advanced</span> → <strong>Screen capture mode</strong> → choose <strong>“Advanced capture with window filtering.”</strong><br><br>Avoid “<strong>without</strong> window filtering” — that mode reveals cue.'
+      body: 'cue is hidden from most screen shares automatically (Google Meet, Teams, QuickTime, nothing to do). <strong>Zoom needs one setting:</strong><br><br>Zoom → <span class="hl">Settings</span> → <span class="hl">Share Screen</span> → <span class="hl">Advanced</span> → <strong>Screen capture mode</strong> → choose <strong>“Advanced capture with window filtering.”</strong><br><br>Avoid “<strong>without</strong> window filtering”, that mode reveals cue.'
     },
     {
       icon: '✨',
       title: 'You’re all set',
-      body: 'How to use cue:<ul><li>' + assistShortcut + ' — <strong>Assist</strong> with whatever\'s on screen or being said</li><li>' + solveShortcut + ' — solve a coding problem on screen</li><li>Click <strong>▢</strong> in the top bar to start listening to a meeting</li><li>Type a question and press <span class="kbd">↵</span></li></ul>Reopen this guide anytime by clicking the <strong>cue logo</strong>. Quit with ' + quitShortcut + '.'
+      body: 'How to use cue:<ul><li>' + assistShortcut + ': <strong>Assist</strong> with whatever\'s on screen or being said</li><li>' + solveShortcut + ': solve a coding problem on screen</li><li>Click <strong>▢</strong> in the top bar to start listening to a meeting</li><li>Type a question and press <span class="kbd">↵</span></li></ul>Reopen this guide anytime by clicking the <strong>cue logo</strong>. Quit with ' + quitShortcut + '.'
     }
   ];
   // First-run disclosure (R21 §4.3): two disclosures — cost and data path —
@@ -3480,7 +3494,7 @@
       // Windows 10: update the onboarding screen recording button to be more helpful
       const ob = OB_STEPS[1];
       ob.buttons = ob.buttons.filter((b) => !b.label.toLowerCase().includes('screen'));
-      ob.body = 'cue needs microphone permission to hear you. Click the button below to open Windows microphone settings and allow cue.<br><br><strong>Screen capture works automatically on Windows 10</strong> — no additional permission needed.<ul><li><strong>Microphone</strong> — to hear you</li><li><strong>Screen recording</strong> — works automatically on Windows 10</li></ul>';
+      ob.body = 'cue needs microphone permission to hear you. Click the button below to open Windows microphone settings and allow cue.<br><br><strong>Screen capture works automatically on Windows 10</strong>: no additional permission needed.<ul><li><strong>Microphone</strong>: to hear you</li><li><strong>Screen recording</strong>: works automatically on Windows 10</li></ul>';
     }
 
     smartBtn.classList.toggle('on', !!settings.smart);

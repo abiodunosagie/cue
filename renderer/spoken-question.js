@@ -107,16 +107,20 @@
     /have you ever/i
   ];
   const QUESTION_STARTERS = /^(what|how|why|when|where|who|which|tell|describe|explain|can|could|would|should|have|did|do|is|are|was|were)/i;
-  // A short question ("why Riverpod here") is whole only when it does not stop on
-  // a word that needs more after it ("how do you", "what is the", "why do you want to").
-  const UNFINISHED_END = /\b(you|your|the|a|an|to|do|does|did|is|are|was|were|we|i|of|for|in|on|at|with|and|or|about|how|what|why|would|could|should|can|will|want|like|use|make|get|this|that|my|our|their)\s*$/i;
+  // A question without a question mark is whole only when it does not stop on a
+  // word that needs more after it: "how do you", "tell me about a time when",
+  // "walk me through", "what are your biggest". The interviewer paused mid-sentence.
+  // Words that can end a real question (do, use, that, this) are not in it:
+  // "what does it do", "which library do you use", "why did you do that".
+  const UNFINISHED_END = /\b(you|your|the|a|an|to|is|are|was|were|we|i|of|for|in|on|at|with|and|or|about|how|what|why|would|could|should|can|will|my|our|their|when|which|if|where|who|through|me|us|by|from|ever|time|some|any|biggest|greatest|most|hardest|proudest|best|worst|choose|choosing|describe|explain|tell|share)\s*$/i;
   function isLikelyCompleteQuestion(text) {
     const trimmed = String(text || '').trim().replace(LEADING_FILLER_RE, '');
     if (trimmed.length < 12) return false;
     if (/\?$/.test(trimmed)) return true;
+    if (UNFINISHED_END.test(trimmed.replace(/[.,!;:]+$/, ''))) return false;
     if (BEHAVIORAL_PATTERNS.some((p) => p.test(trimmed))) return true;
     if (QUESTION_STARTERS.test(trimmed) && trimmed.length > 25) return true;
-    if (/^(why|how|what|where|which)\b/i.test(trimmed) && trimmed.split(/\s+/).length >= 3 && !UNFINISHED_END.test(trimmed)) return true;
+    if (/^(why|how|what|where|which)\b/i.test(trimmed) && trimmed.split(/\s+/).length >= 3) return true;
     return /(about that|for us|to us|with you|for you|about it|to share|you handle|you approach|your experience|your background)\s*$/i.test(trimmed);
   }
 
@@ -131,7 +135,7 @@
   //  - 'statement': it ends on a statement (a question may hide earlier; main's gate decides).
   // A last sentence that only checks in, or only gives room to answer ("take
   // your time", "be honest"), leaves the question before it standing.
-  const CHECKINS = 'does that make sense|makes sense|you know what i mean|you know|right|okay|ok|alright|are you with me|are you following|with me|yeah|cool|good|great|any questions so far|is that clear|got it|' +
+  const CHECKINS = 'can you hear me okay|can you hear me|can you see my screen|is my audio okay|am i audible|does that make sense|makes sense|you know what i mean|you know|right|okay|ok|alright|are you with me|are you following|with me|yeah|cool|good|great|any questions so far|is that clear|got it|' +
     'take your time|no rush|be honest|just curious|go ahead|feel free|whenever you are ready|whenever you\'re ready|in your own words|briefly|in a nutshell|no pressure|over to you|your turn';
   const CHECKIN_RE = new RegExp('^(?:(?:' + FILLERS + ')\\b[\\s,.]*)*(' + CHECKINS + ')\\b[\\s?!.]*$', 'i');
   // A wh-word followed by its subject opens a statement: "what we do is", "how
@@ -155,7 +159,7 @@
     const t = sentence.replace(LEADING_FILLER_RE, '').trim();
     if (!t) return false;
     if (/\?$/.test(t)) return true;
-    if (DECLARATIVE_WH.test(t)) return false;
+    if (DECLARATIVE_WH.test(t) || UNFINISHED_END.test(t.replace(/[.,!;:]+$/, ''))) return false;
     return ASKS_RE.test(t) || isLikelyCompleteQuestion(t);
   }
   function questionToAnswer(text) {

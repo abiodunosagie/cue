@@ -13,7 +13,7 @@ const publik = require('../src/publik');
 const TOKEN = 'pat_cue_' + 'a'.repeat(32);
 const KEY = 'pk_live_' + 'k'.repeat(12) + '_' + 'x'.repeat(32);
 const CLAIM_URL = 'https://publikhq.com/claim/HK7F-2QWD';
-const WHY = 'A provider charges for every request the app makes; publik pays that bill and passes it on at half the provider\'s list price. Nothing is charged behind your back — usage only draws from a plan or pack you choose to buy.';
+const WHY = 'A provider charges for every request the app makes; publik pays that bill and passes it on at half the provider\'s list price. Nothing is charged behind your back. Usage only draws from a plan or pack you choose to buy.';
 
 function build() {
   return { appToken: TOKEN, appSlug: 'cue', baseUrl: 'https://publikhq.com/api/v1', disclosureVersion: 1, available: true };
