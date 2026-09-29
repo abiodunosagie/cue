@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('cue', {
   projectDetect: () => ipcRenderer.invoke('project:detect'),
   projectStart: (source) => ipcRenderer.invoke('project:start', source),
   projectClear: () => ipcRenderer.invoke('project:clear'),
+  projectShow: () => ipcRenderer.invoke('project:show'),
   recordBegin: (opts) => ipcRenderer.invoke('record:begin', opts),
   recordChunk: (id, data) => ipcRenderer.invoke('record:chunk', id, data),
   recordEnd: (id, opts) => ipcRenderer.invoke('record:end', id, opts),

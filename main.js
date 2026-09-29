@@ -29,7 +29,7 @@ const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
 const { registerRecordingIpc } = require('./src/ipc/recording');
 const { registerProjectReviewIpc } = require('./src/ipc/project-review');
 const { createProjectMemory } = require('./src/project-review/memory');
-const { isProjectQuestion, askTurn } = require('./src/project-review/review');
+const { projectMode, askTurn } = require('./src/project-review/review');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
@@ -265,7 +265,10 @@ function clearInterview() {
   followUps.clear();
   questionBundle.clear();
   currentLibraryId = null;
-  projectMemory.clear();
+  // A walkthrough of the candidate's own project is prepared before the
+  // interview, so Clear keeps it; a review belongs to this interview only.
+  const loaded = projectMemory.get();
+  if (!loaded || loaded.purpose !== 'walkthrough') projectMemory.clear();
   announceQuestion();
   return interviewMemory.clear();
 }
@@ -976,10 +979,12 @@ async function runFeature(mode, userText, options = {}) {
   // The candidate typing about an error in the code they are writing: read the
   // editor and the error on screen against the plan, instead of guessing.
   if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'fixCode';
-  // A typed question about the codebase reviewed earlier: answered from that
-  // project's review and its files as they are on disk now.
+  // A loaded project (a review, or a walkthrough of the candidate's own) can
+  // take typed questions about it and the Explain key (src/project-review/review.js projectMode).
   const reviewed = projectMemory.get();
-  if (mode === 'ask' && userText && reviewed && isProjectQuestion(userText, reviewed.index)) mode = 'projectAsk';
+  const walkthrough = reviewed && reviewed.purpose === 'walkthrough' ? reviewed : null;
+  const hasCodingSolve = interviewMemory.codingHistory({ count: 1 }).length > 0;
+  mode = projectMode({ mode, userText, memory: reviewed, hasCodingSolve });
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -1006,7 +1011,7 @@ async function runFeature(mode, userText, options = {}) {
     modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
-      : (mode === 'ask' || mode === 'projectAsk' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
+      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
     send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, showWait: def.tier === 'coding' });
 
@@ -1120,8 +1125,9 @@ async function runFeature(mode, userText, options = {}) {
       answers: mode === 'report' ? interviewMemory.answers() : [],
       architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode),
-      projectReport: (mode === 'fixCode' || mode === 'checkProgress') && projectMemory.has() ? projectMemory.get().report : '',
-      projectTurn: mode === 'projectAsk' ? askTurn({ memory: reviewed, question: userText || '' }) : '',
+      projectReport: (mode === 'fixCode' || mode === 'checkProgress') && reviewed && !walkthrough ? reviewed.report : '',
+      projectTurn: mode === 'projectAsk' || mode === 'walkthroughAsk' ? askTurn({ memory: reviewed, question: userText || '' }) : '',
+      walkthrough,
       pages: imageDataUrls ? imageDataUrls.length : 1,
       views
     };

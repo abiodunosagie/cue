@@ -67,7 +67,7 @@
               <button class="act" data-mode="followup"><span class="ic"></span><span>Follow-up</span></button>
               <button class="act" data-mode="recap"><span class="ic"></span><span>Recap</span></button>
               <button class="act" id="script-btn" title="Teleprompter: read a script you wrote, it follows your voice"><span class="ic"></span><span>Script</span></button>
-              <button class="act" id="project-btn" title="Review a codebase you were handed: its problems and how to fix them"><span class="ic"></span><span>Project</span></button>
+              <button class="act" id="project-btn" title="Review a codebase you were handed, or prepare a walkthrough of your own project"><span class="ic"></span><span>Project</span></button>
             </div>
 
             <div id="composer">
@@ -524,21 +524,25 @@
   <div id="project-scrim" class="hidden">
     <div id="project-sheet" class="glass" role="dialog" aria-labelledby="project-title">
       <div class="s-head">
-        <div class="s-title" id="project-title">Review a codebase</div>
+        <div class="s-title" id="project-title">Review or walk through a project</div>
         <button id="project-close" class="s-close">Close</button>
       </div>
       <div class="sc-body">
-        <p class="rec-advice">Pick the project you were handed. cue reads every source, test and config file, runs the analyzer in the background, and writes a review you can say aloud: how it is built, what to fix first and how. Secrets in the code are hidden before anything is sent to your AI provider.</p>
+        <p class="rec-advice"><strong>Review it:</strong> for a codebase you were handed. You get how it is built, what to fix first and how.</p>
+        <p class="rec-advice"><strong>Walk through it:</strong> for a project you built. You get a script in your voice: which app screens to show, which files to open, what to say at each, and answers to likely questions. In the interview, press Cmd+Shift+E on any file or app screen and cue tells you what to say about it.</p>
+        <p class="rec-advice">cue reads the source files. Secrets in them are hidden before anything is sent to your AI provider.</p>
         <div class="sc-label" id="project-list-label">Recent in your editors</div>
         <div id="project-list" class="project-list" role="radiogroup" aria-labelledby="project-list-label"></div>
         <label class="sc-label" for="project-path">Or a folder path or GitHub link</label>
         <input id="project-path" type="text" autocomplete="off" spellcheck="false" placeholder="~/Downloads/their-app or https://github.com/owner/repo" />
         <div id="project-loaded" class="project-loaded hidden">
           <span id="project-loaded-text"></span>
+          <button id="project-show" class="s-action">Show it</button>
           <button id="project-forget" class="s-action">Forget it</button>
         </div>
         <div class="sc-row sc-actions">
           <span id="project-status" class="sc-status" role="status"></span>
+          <button id="project-walk" class="s-action">Walk through it</button>
           <button id="project-review" class="ob-primary">Review it</button>
         </div>
       </div>

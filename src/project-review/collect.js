@@ -95,7 +95,8 @@ const XCODE_DIR_RE = /\.(xcodeproj|xcworkspace)$/;
 
 // Every file worth reading under root, never following a link:
 // { files: [{ rel, text, chars, cut }], skipped: { reason: count }, totalChars, truncated }
-function collectProject(root, { maxFileChars = MAX_FILE_CHARS, maxFiles = MAX_FILES, maxTotalChars = MAX_TOTAL_CHARS } = {}) {
+// keep({ rel, chars }): false leaves a file out before it counts toward the cap.
+function collectProject(root, { maxFileChars = MAX_FILE_CHARS, maxFiles = MAX_FILES, maxTotalChars = MAX_TOTAL_CHARS, keep = null } = {}) {
   const flutter = fs.existsSync(path.join(root, 'pubspec.yaml'));
   const files = [];
   const skipped = {};
@@ -138,6 +139,7 @@ function collectProject(root, { maxFileChars = MAX_FILE_CHARS, maxFiles = MAX_FI
     try { buf = fs.readFileSync(f.abs); } catch { skip('files that could not be read'); continue; }
     if (isBinary(buf)) { skip('images, fonts and other non-text files'); continue; }
     if (f.rel.endsWith('.json') && PRIVATE_KEY_JSON_RE.test(buf.toString('utf8'))) { skip('secret and signing files (never opened)'); continue; }
+    if (keep && !keep({ rel: f.rel, chars: buf.length })) { skip('assets, data dumps and working notes'); continue; }
     let text = maskSecrets(buf.toString('utf8'), f.rel);
     const cut = text.length > maxFileChars;
     if (cut) text = text.slice(0, maxFileChars) + `\n/* cue: the rest of this ${buf.length}-byte file was not read */`;
@@ -172,4 +174,17 @@ function kindOf(files) {
   return 'other';
 }
 
-module.exports = { collectProject, maskSecrets, treeOf, kindOf, SECRET_FILE_RE };
+// A walkthrough explains what the candidate wrote. Left out of its read:
+//  - the app's bundled assets folder at the root (Flutter's assets/: Lottie
+//    animations, sample data), which is data, not code;
+//  - JSON or HTML over 20 KB anywhere (API docs, Postman exports, fixtures);
+//  - the owner's own working notes (session guides, AI assistant notes,
+//    progress logs), which are private and not part of the app.
+const WALK_DATA_MAX_CHARS = 20000;
+const WALK_NOTES_RE = /(^|\/)(SESSION_GUIDE|CLAUDE|AGENTS|GEMINI)\.md$|(^|\/)progress\.txt$|(^|\/)\.dev\//i;
+function walkthroughWorthy({ rel, chars }) {
+  if (/^assets\//.test(rel) || WALK_NOTES_RE.test(rel)) return false;
+  return !(/\.(json|html)$/.test(rel) && chars > WALK_DATA_MAX_CHARS);
+}
+
+module.exports = { collectProject, maskSecrets, treeOf, kindOf, SECRET_FILE_RE, walkthroughWorthy };

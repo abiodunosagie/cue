@@ -1,6 +1,7 @@
-// The Project sheet: pick the codebase to review (a project open in the
-// candidate's editors, a pasted folder path or a GitHub link) and start the
-// review, which streams into the panel like an answer (src/ipc/project-review.js).
+// The Project sheet: pick a codebase (a project open in the candidate's
+// editors, a pasted folder path or a GitHub link) and start a review of it or a
+// walkthrough of it, which streams into the panel like an answer
+// (src/ipc/project-review.js).
 // Everything shown here is text from main, set with textContent.
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -56,13 +57,19 @@
 
   function showLoaded(loaded) {
     $('project-loaded').classList.toggle('hidden', !loaded);
-    if (loaded) $('project-loaded-text').textContent = `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`;
+    if (!loaded) return;
+    $('project-loaded-text').textContent = loaded.purpose === 'walkthrough'
+      ? `Walkthrough of ${loaded.name} ready (${when(loaded.reviewedAt)}). In the interview, press Cmd+Shift+E on any file or app screen. Answers to questions you hear or type use it too. It stays until you press Forget it.`
+      : `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`;
   }
+
+  const starters = () => [$('project-review'), $('project-walk')];
+  let starting = false; // one read at a time, Enter or either button
 
   async function open() {
     $('project-scrim').classList.remove('hidden');
     status('');
-    $('project-review').disabled = false;
+    starters().forEach((b) => { b.disabled = false; });
     const res = await window.cue.projectDetect().catch(() => null);
     render((res && res.projects) || []);
     showLoaded(res && res.loaded);
@@ -71,16 +78,26 @@
 
   function close() { $('project-scrim').classList.add('hidden'); }
 
-  async function start() {
-    if ($('project-review').disabled) return; // one review at a time, Enter or click
+  // purpose: 'review' or 'walkthrough'.
+  async function start(purpose) {
+    if (starting) return;
     const typed = $('project-path').value.trim();
     const value = typed || picked;
     if (!value) { status('Pick a project or paste its folder path.'); return; }
-    $('project-review').disabled = true;
+    starting = true;
+    starters().forEach((b) => { b.disabled = true; });
     status('Starting...');
-    const res = await window.cue.projectStart({ value }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
-    $('project-review').disabled = false;
-    if (!res || res.error) { status((res && res.error) || 'The review could not start.'); return; }
+    const res = await window.cue.projectStart({ value, purpose }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
+    starting = false;
+    starters().forEach((b) => { b.disabled = false; });
+    const what = purpose === 'walkthrough' ? 'The walkthrough' : 'The review';
+    if (!res || res.error) { status((res && res.error) || `${what} could not start.`); return; }
+    close();
+  }
+
+  async function show() {
+    const res = await window.cue.projectShow().catch((e) => ({ error: e && e.message ? e.message : String(e) }));
+    if (!res || res.error) { status((res && res.error) || 'The saved text could not be shown.'); return; }
     close();
   }
 
@@ -88,8 +105,10 @@
     if (!$('project-btn')) return;
     $('project-btn').addEventListener('click', open);
     $('project-close').addEventListener('click', close);
-    $('project-review').addEventListener('click', start);
-    $('project-path').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
+    $('project-review').addEventListener('click', () => start('review'));
+    $('project-walk').addEventListener('click', () => start('walkthrough'));
+    $('project-show').addEventListener('click', show);
+    $('project-path').addEventListener('keydown', (e) => { if (e.key === 'Enter') start('review'); });
     $('project-path').addEventListener('input', () => {
       const typing = !!$('project-path').value.trim();
       document.querySelectorAll('.project-row').forEach((r) => r.classList.toggle('on', !typing && r.querySelector('input').checked));

@@ -1,7 +1,9 @@
 // The project reviewed in this interview, kept for the rest of it: follow-up
 // questions ("fix issue 3", "where is auth handled"), Fix my code and Check my
 // progress all work from it. Unlike coding solves it survives New question;
-// Clear interview or a new review replaces it. Text only (the folder, the tree,
+// Clear interview or a new review replaces it; a walkthrough of the
+// candidate's own project is prepared before the interview, so only a new
+// read or Forget it replaces that. Text only (the folder, the tree,
 // the file list and the report), saved next to cue-data.json (0600) so a
 // restart mid-interview keeps it. Source files are re-read from disk when
 // needed, never stored.
@@ -25,6 +27,8 @@ function clean(m) {
     tree: String(m.tree || '').slice(0, MAX_TREE_CHARS),
     index: (Array.isArray(m.index) ? m.index : []).filter((x) => typeof x === 'string').slice(0, MAX_INDEX),
     report,
+    // A review of a codebase the candidate was handed, or a walkthrough of their own.
+    purpose: m.purpose === 'walkthrough' ? 'walkthrough' : 'review',
     reviewedAt: Number(m.reviewedAt) || 0
   };
 }
