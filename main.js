@@ -30,12 +30,13 @@ const { registerRecordingIpc } = require('./src/ipc/recording');
 const { registerProjectReviewIpc } = require('./src/ipc/project-review');
 const { createProjectMemory } = require('./src/project-review/memory');
 const { projectMode, askTurn } = require('./src/project-review/review');
-const Profiles = require('./src/profiles');
-const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
-const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
+const { createPreparedStore, profileHash } = require('./src/prepared-answers');
+const { createPrepare } = require('./src/prepare');
+const { createFollowUpBank } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
 const { checkTurn, noAnswer } = require('./src/turn-check');
-const { summarizeRound, appendRound, canSummarize } = require('./src/rounds');
+const { registerRoundsIpc } = require('./src/ipc/rounds');
+const { registerPublikIpc } = require('./src/ipc/publik');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -149,12 +150,8 @@ projectMemory.load();
 // Up here too: a practice that crashed is cleared (clearInterview) while this
 // file is still loading, and a const declared below that call is not usable yet.
 const questionBundle = createQuestionBundle();
-const preparing = { running: false, error: '' };
 // Answers to the likely follow-ups of this interview's last few answers (src/follow-ups.js).
 const followUps = createFollowUpBank();
-const PREPARE_TIMEOUT_MS = 180000;
-const PREPARE_DEBOUNCE_MS = 3000;
-let prepareTimer = null;
 const MAX_TRANSCRIPT_TURNS = MEMORY_MAX_TURNS; // ~90 minutes of conversation
 const transcript = interviewMemory.turns().slice(-MAX_TRANSCRIPT_TURNS); // { channel, text, ts }
 const FLUSH_MS = 900;
@@ -698,139 +695,11 @@ async function setCapturing(active) {
 }
 
 // -------- feature runner --------
-function preparedState() {
-  const settings = store.getSettings();
-  return {
-    ...preparedStore.summary(profileHash(settings)),
-    current: preparedStore.isCurrent(profileHash(settings)),
-    canPrepare: canPrepare(settings),
-    running: preparing.running,
-    error: preparing.error
-  };
-}
-
-// One Smart call writes the likely questions and their spoken answers, with the
-// same context and rules as a live answer. Skipped when the bank already matches
-// the profile, unless forced from Settings.
-// Questions with spoken answers, written with the candidate's context in the
-// system prompt exactly as for a live answer, so they follow the same voice,
-// length and no-invented-stories rules. Used for the prepared bank and follow-ups.
-async function askForItems({ llm, settings, turns, prompt, maxTokens, timeoutMs }) {
-  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: spokenAnswerTexts() }), rulesWithFocus(settings));
-  return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
-}
-
-async function prepareAnswers({ force }) {
-  const settings = store.getSettings();
-  const hash = profileHash(settings);
-  if (preparing.running || !canPrepare(settings)) return preparedState();
-  if (!force && preparedStore.isCurrent(hash)) return preparedState();
-  const llm = createLLM({ ...settings, smart: true });
-  if (!llm.ready) return preparedState();
-  preparing.running = true; preparing.error = '';
-  send('prepared:state', preparedState());
-  try {
-    const items = await bankItems(llm, settings);
-    // The profile may have changed while this ran; then this bank is already stale.
-    if (profileHash(store.getSettings()) === hash) preparedStore.replace(hash, items);
-    else schedulePrepare();
-  } catch (e) {
-    preparing.error = 'Could not prepare answers: ' + (e && e.message ? e.message : String(e));
-    recordEvent({ level: 'error', event: 'prepare_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareAnswers', context: { provider: settings.provider } });
-  } finally {
-    preparing.running = false;
-    send('prepared:state', preparedState());
-  }
-  return preparedState();
-}
-
-// The likely questions and answers for one profile's settings; throws when the
-// model gave nothing usable.
-async function bankItems(llm, settings) {
-  const items = await askForItems({ llm, settings, turns: [], prompt: PREPARE_INSTRUCTIONS, maxTokens: PREPARE_MAX_TOKENS, timeoutMs: PREPARE_TIMEOUT_MS });
-  if (!items.length) throw new Error('the model did not return usable answers');
-  return items;
-}
-
-// Every other job profile gets its bank too, one at a time after the active
-// one, so switching profile right before an interview finds answers ready.
-// Shares the running flag with prepareAnswers, so only one bank is built at a
-// time; a profile that fails is tried again at the next launch.
-async function prepareOtherProfiles() {
-  if (preparing.running) return;
-  preparing.running = true;
-  try {
-    for (const name of Profiles.names(store.getSettings())) {
-      const current = store.getSettings();
-      if (name === current.activeProfile) continue;
-      let settings;
-      try { settings = { ...current, ...Profiles.switchTo(current, name).fields }; } catch { continue; }
-      const hash = profileHash(settings);
-      if (!canPrepare(settings) || preparedStore.isCurrent(hash)) continue;
-      const llm = createLLM({ ...settings, smart: true });
-      if (!llm.ready) return;
-      try {
-        const items = await bankItems(llm, settings);
-        preparedStore.replace(hash, items);
-        console.log(`[prepared] ${items.length} answers ready for the ${name} profile`);
-      } catch (e) {
-        recordEvent({ level: 'error', event: 'prepare_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareOtherProfiles', context: { provider: settings.provider } });
-      }
-    }
-  } finally {
-    preparing.running = false;
-    // An edit to the active profile while these ran was skipped: build it now.
-    if (!preparedStore.isCurrent(profileHash(store.getSettings()))) schedulePrepare();
-  }
-}
-
-// Profile edits come in bursts (typing, then Save); prepare once they settle.
-function schedulePrepare() {
-  clearTimeout(prepareTimer);
-  prepareTimer = setTimeout(() => prepareAnswers({ force: false }), PREPARE_DEBOUNCE_MS);
-}
-
-// The prepared answer for a heard question, or null. Only for answerThis at the
-// default length (prepared answers are written at that length) and only from a
-// bank made from the current profile. A close but not near-identical question
-// is confirmed by the Fast model first.
-async function findPreparedAnswer(mode, userText, settings) {
-  const screen = mode === 'walkthroughAnswer';
-  if ((mode !== 'answerThis' && !screen) || normalizeLength(settings.answerLength) !== 'medium') return null;
-  // The job's prepared bank, the walkthrough's likely questions and this
-  // interview's follow-ups: the closest match wins.
-  const project = projectMemory.get();
-  const candidates = [
-    preparedStore.match(userText || '', profileHash(settings)),
-    project && project.purpose === 'walkthrough' ? findMatch(project.qa, userText || '') : null,
-    findMatch(followUps.items(), userText || '')
-  ].filter(Boolean);
-  const match = candidates.reduce((best, m) => (!best || m.score > best.score ? m : best), null);
-  if (!match) return null;
-  if (match.direct) return match.item;
-  // A question about the screen that is only close to a saved one is answered
-  // from the screen: the saved answer may be about another file.
-  if (screen) return null;
-  const fast = createLLM({ ...settings, smart: false });
-  if (!fast.ready) return null;
-  return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.item.question })) ? match.item : null;
-}
-
-// In the background after a spoken answer: the two likely follow-ups and their
-// answers, with the same context and rules as a live answer. Dropped if the
-// interview was cleared meanwhile; a failure only means no follow-ups this time.
-async function prepareFollowUps(question, answer, generation) {
-  if (!question || !answer) return;
-  const settings = store.getSettings();
-  const llm = createLLM({ ...settings, smart: true });
-  if (!llm.ready) return;
-  try {
-    const items = await askForItems({ llm, settings, turns: transcript, prompt: followUpPrompt(question, answer), maxTokens: FOLLOW_UP_MAX_TOKENS, timeoutMs: FOLLOW_UP_TIMEOUT_MS });
-    if (items.length && generation === interviewMemory.generation()) followUps.add(items);
-  } catch (e) {
-    recordEvent({ level: 'warn', event: 'follow_ups_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareFollowUps', context: {} });
-  }
-}
+const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer, prepareFollowUps } = createPrepare({
+  store, createLLM, preparedStore, followUps, projectMemory, interviewMemory, send, recordEvent,
+  getTranscript: () => transcript,
+  spokenAnswerTexts: () => spokenAnswerTexts()
+});
 
 // The earlier coding solves a mode builds on: the last two for a new solve,
 // and for explainCode and checkProgress the one being explained or checked
@@ -1415,177 +1284,10 @@ ipcMain.handle('practice:end', () => practice.end());
 ipcMain.on('practice:played', (_e, token) => practice.played(token));
 ipcMain.handle('prepared:run', () => prepareAnswers({ force: true }));
 
-// -------- publik API --------
-// Contract: ~/publik-api-research/CONTRACT.md. The key is minted only after
-// the disclosure is accepted (publik:accept-disclosure); the balance line is
-// fed by the x-publik-* headers on every answer and reconciled from GET /wallet.
-let publikWalletTimer = null;
-let publikProvisioning = null;
+// -------- publik API (src/ipc/publik.js) --------
+const { publikNoteHeaders, publikScheduleWalletRefresh, publikHandleErrorAction } =
+  registerPublikIpc({ ipcMain, app, shell, store, send, recordEvent, publikBuild });
 
-function publikDevice() {
-  let deviceName = '';
-  try { deviceName = os.hostname(); } catch { /* optional */ }
-  return { appVersion: app.getVersion(), platform: process.platform, osVersion: os.release(), arch: process.arch, deviceName };
-}
-
-function publikState() {
-  const s = store.getSettings();
-  const p = s.publik || {};
-  const connected = !!s.apiKeys.publik;
-  const wallet = p.wallet || null;
-  const claimState = (wallet && wallet.claimState) || p.claimState || 'anonymous';
-  const view = {
-    available: publikBuild.available,
-    selected: s.provider === publik.PUBLIK_PROVIDER,
-    connected,
-    revoked: !!p.revoked,
-    disconnected: !!p.disconnected,
-    keyId: p.keyId || '',
-    claimState,
-    claimUrl: p.claimUrl || (wallet && wallet.claimUrl) || '',
-    addCreditUrl: (wallet && wallet.addCreditUrl) || '',
-    topUpUrl: (wallet && wallet.topUpUrl) || p.claimUrl || '',
-    starterMicros: p.starterMicros || 0,
-    balanceMicros: p.balanceMicros,
-    balanceAt: p.balanceAt || 0,
-    balanceLabel: publik.formatMicros(p.balanceMicros),
-    wallet,
-    disclosureAccepted: p.disclosureAccepted || 0,
-    disclosureVersion: publikBuild.disclosureVersion,
-    lastError: p.lastError || '',
-    cardShown: !!p.cardShown,
-    copy: publik.COPY,
-    links: publik.LINKS
-  };
-  view.line = publik.balanceLine(view);
-  // CONTRACT §12: the first-run card (shown while connected && !cardShown),
-  // the settings button, and the low-starter banner — all computed here so
-  // the renderer only paints.
-  view.card = publik.ctaView(view);
-  view.settingsCta = publik.settingsCta(view);
-  view.lowStarter = publik.lowStarterNotice(view);
-  return view;
-}
-function publikPush() { send('publik:state', publikState()); }
-
-async function publikProvision() {
-  if (publikProvisioning) return publikProvisioning;
-  publikProvisioning = publik.provisionInstall({
-    build: publikBuild,
-    store,
-    device: publikDevice(),
-    log: (e) => recordEvent({ level: e.level, event: e.event, msg: e.msg, frame: 'publikProvision', context: e.context || {} })
-  }).then((r) => {
-    if (r.ok && r.minted) store.setPublik({ disconnected: false });
-    publikPush();
-    return publikState();
-  }).finally(() => { publikProvisioning = null; });
-  return publikProvisioning;
-}
-
-// x-publik-* headers from a streamed answer: the balance after admission
-// (the hold is included), the claim state, the week. Settlement follows.
-function publikNoteHeaders(headers) {
-  const h = publik.readGatewayHeaders(headers);
-  if (!h) return;
-  const s = store.getSettings();
-  const wallet = { ...(s.publik.wallet || {}) };
-  if (h.balanceMicros !== null) wallet.balanceMicros = h.balanceMicros;
-  if (h.claimState) wallet.claimState = h.claimState;
-  if (h.weekUsedMicros !== null) wallet.weekUsedMicros = h.weekUsedMicros;
-  if (h.weekBudgetMicros !== null || h.weekResetsAt) wallet.weekBudgetMicros = h.weekBudgetMicros;
-  if (h.weekResetsAt) wallet.weekResetsAt = h.weekResetsAt;
-  if (h.starterRemainingMicros !== null) wallet.starterRemainingMicros = h.starterRemainingMicros;
-  store.setPublik({
-    balanceMicros: h.balanceMicros !== null ? h.balanceMicros : s.publik.balanceMicros,
-    balanceAt: Date.now(),
-    claimState: h.claimState || s.publik.claimState,
-    wallet,
-    revoked: false
-  });
-  publikPush();
-}
-
-async function publikRefreshWallet() {
-  const s = store.getSettings();
-  if (!s.apiKeys.publik) return publikState();
-  try {
-    const w = await publik.fetchWallet({ baseUrl: s.publik.baseUrl || publikBuild.baseUrl, apiKey: s.apiKeys.publik });
-    store.setPublik({
-      wallet: w, balanceMicros: w.balanceMicros, balanceAt: Date.now(), claimState: w.claimState,
-      claimUrl: w.claimUrl || (w.claimState === 'claimed' ? '' : s.publik.claimUrl), revoked: false, disconnected: false, lastError: ''
-    });
-  } catch (e) {
-    if (e.status === 401) publikHandleRevoked(e);
-    else recordEvent({ level: 'warn', event: 'publik_wallet_failed', msg: e.message, frame: 'publikRefreshWallet', context: { status: e.status || null } });
-  }
-  publikPush();
-  return publikState();
-}
-function publikScheduleWalletRefresh() {
-  clearTimeout(publikWalletTimer);
-  publikWalletTimer = setTimeout(() => { publikRefreshWallet().catch(() => {}); }, 1500);
-}
-
-// 401 key_revoked: reprovision:true (idle sweep) → re-mint on our own with the
-// same install_id; reprovision:false (removed from the dashboard) → stay
-// disconnected until the user presses Reconnect.
-function publikHandleRevoked(e) {
-  const revokedType = !!(e && e.type === 'key_revoked');
-  const silent = revokedType && e.reprovision === true;
-  // "disconnected" is the dashboard/uninstaller removal only; a plain 401
-  // (invalid_api_key) just asks for Reconnect.
-  store.setPublik({ revoked: true, disconnected: revokedType && !silent, lastError: '' });
-  if (silent) publikProvision().catch(() => {});
-}
-function publikHandleErrorAction(action) {
-  if (!action || action.kind !== 'reprovision') return;
-  publikHandleRevoked({ type: 'key_revoked', reprovision: true });
-}
-
-ipcMain.handle('publik:state', () => publikState());
-ipcMain.handle('publik:accept-disclosure', async () => {
-  // Consent precedes mint: this is the only path that calls POST /installs
-  // for a fresh install. It also selects publik if the user had moved away.
-  if (!publikBuild.available) return publikState();
-  store.setPublik({ disclosureAccepted: publikBuild.disclosureVersion });
-  store.setSettings({ provider: publik.PUBLIK_PROVIDER });
-  return publikProvision();
-});
-ipcMain.handle('publik:reconnect', async () => {
-  const s = store.getSettings();
-  if (!s.publik.disclosureAccepted) return publikState();
-  if (s.apiKeys.publik && !s.publik.revoked) return publikRefreshWallet();
-  store.setPublik({ revoked: true });
-  return publikProvision();
-});
-ipcMain.handle('publik:refresh', () => publikRefreshWallet());
-ipcMain.handle('publik:disconnect', async () => {
-  const s = store.getSettings();
-  if (s.apiKeys.publik) {
-    try { await publik.revokeInstall({ baseUrl: s.publik.baseUrl || publikBuild.baseUrl, apiKey: s.apiKeys.publik }); } catch (e) { /* the key is dropped locally regardless */ }
-  }
-  store.setPublik({ apiKey: '', keyId: '', revoked: false, disconnected: true, balanceMicros: null, wallet: null, lastError: '' });
-  publikPush();
-  return publikState();
-});
-// "Later" or the primary button on the first-run card: the card was shown for
-// this starter grant. Touches publik.cardShown only — the key stays in place
-// and the free starter is kept (§12.1).
-ipcMain.handle('publik:card-seen', () => {
-  try { publik.markCardSeen(store); } catch (e) { recordEvent({ level: 'error', event: 'publik_card_seen_failed', msg: e.message, frame: 'publik:card-seen', context: {} }); }
-  publikPush();
-  return publikState();
-});
-// The only path a gateway-supplied URL can take out of the app: publikhq.com
-// only. A link off that origin is dropped (the stored claim link stands in
-// when it is safe); nothing else is ever handed to the system browser.
-ipcMain.on('publik:open', (_e, url) => {
-  const s = store.getSettings();
-  const target = publik.resolveOpenTarget(url, s.publik.claimUrl);
-  if (!target) { recordEvent({ level: 'warn', event: 'publik_open_dropped', msg: '', frame: 'publik:open', context: {} }); return; }
-  shell.openExternal(target).catch(() => {});
-});
 ipcMain.handle('capture:toggle', () => {
   const targetState = !desiredCaptureState;
   desiredCaptureState = targetState;
@@ -1642,68 +1344,11 @@ ipcMain.handle('platform:info', () => ({
   winBuild: WIN_BUILD,
   winSupportsContentProtection: WIN_SUPPORTS_CONTENT_PROTECTION
 }));
-// Interview rounds: what an interview taught is kept in the job profile it was
-// for, so the next round with that company builds on it (src/rounds.js).
-// roundSaved marks the interview already saved, so Clear does not save it twice.
-let roundSaved = { startedAt: 0, turnCount: 0 };
-// The interview being saved right now, so Save and then Clear cannot save it twice.
-let roundSaving = null;
-async function saveRound(turns, profileName, summary) {
-  roundSaving = { startedAt: summary.startedAt, turnCount: summary.turnCount };
-  try { return await writeRound(turns, profileName, summary); } finally { roundSaving = null; }
-}
-async function writeRound(turns, profileName, summary) {
-  const settings = store.getSettings();
-  const llm = createLLM({ ...settings, smart: true });
-  const notes = await summarizeRound({ llm, turns, companyNotes: settings.companyNotes });
-  const now = store.getSettings();
-  if (now.activeProfile === profileName) {
-    store.setSettings({ roundNotes: appendRound(now.roundNotes, notes) });
-  } else if (now.profiles && Object.prototype.hasOwnProperty.call(now.profiles, profileName)) {
-    // The profile was switched while the notes were written: they go to the one the interview was for.
-    const profile = now.profiles[profileName];
-    store.setProfileState({ profiles: { ...now.profiles, [profileName]: { ...profile, roundNotes: appendRound(profile.roundNotes, notes) } }, activeProfile: now.activeProfile, fields: {} });
-  } else {
-    throw new Error('The profile ' + profileName + ' is gone, so this round was not kept.');
-  }
-  roundSaved = { startedAt: summary.startedAt, turnCount: summary.turnCount };
-  // The panel's copy of the settings is saved whole on Done: it must hold the new notes.
-  const saved = store.getSettings();
-  send('rounds:saved', { activeProfile: saved.activeProfile, roundNotes: saved.roundNotes });
-  // The prepared answers now build on this round too.
-  schedulePrepare();
-  send('prepared:state', preparedState());
-  return store.getSettings().roundNotes;
-}
-const sameInterview = (a, b) => !!a && a.startedAt === b.startedAt && a.turnCount === b.turnCount;
-const alreadySaved = (summary) => sameInterview(roundSaved, summary) || sameInterview(roundSaving, summary);
-
-ipcMain.handle('rounds:save', async () => {
-  const summary = interviewMemory.summary();
-  const turns = interviewMemory.turns();
-  if (!canSummarize(turns)) return { error: 'This interview is too short to learn from yet.' };
-  if (alreadySaved(summary)) return { error: 'This interview is already saved as a round.' };
-  try {
-    const roundNotes = await saveRound(turns, store.getSettings().activeProfile, summary);
-    return { roundNotes };
-  } catch (e) {
-    return { error: e && e.message ? e.message : String(e) };
-  }
-});
-
-// Clear interview: a real interview not saved yet is kept as a round of the
-// active profile first, in the background, so nothing it taught is lost.
-ipcMain.handle('transcript:clear', () => {
-  const summary = interviewMemory.summary();
-  const turns = interviewMemory.turns();
-  const profileName = store.getSettings().activeProfile;
-  if (canSummarize(turns) && !alreadySaved(summary)) {
-    send('status', { message: `Saving what this interview taught to the ${profileName} profile...` });
-    saveRound(turns, profileName, summary).then(
-      () => send('status', { message: `Saved this interview as a round of the ${profileName} profile.` }),
-      (e) => send('status', { message: 'This interview could not be saved as a round: ' + (e && e.message ? e.message : String(e)) }));
-  }
-  return clearInterview();
+registerRoundsIpc({
+  ipcMain, store, createLLM, interviewMemory, send,
+  schedulePrepare: () => schedulePrepare(),
+  preparedState: () => preparedState(),
+  clearInterview: () => clearInterview()
 });
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.

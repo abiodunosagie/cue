@@ -208,7 +208,8 @@ test('copy rule: the CTA copy says "publik API", dollars, never "credits", never
   const preload = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
   assert.match(preload, /publikCardSeen: \(\) => ipcRenderer\.invoke\('publik:card-seen'\)/);
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
-  assert.match(main, /ipcMain\.handle\('publik:card-seen'/);
-  assert.match(main, /publik\.resolveOpenTarget\(url, s\.publik\.claimUrl\)/);
+  const publikIpc = fs.readFileSync(path.join(__dirname, '..', 'src', 'ipc', 'publik.js'), 'utf8');
+  assert.match(publikIpc, /ipcMain\.handle\('publik:card-seen'/);
+  assert.match(publikIpc, /publik\.resolveOpenTarget\(url, s\.publik\.claimUrl\)/);
   assert.match(main, /!settings\.publik\.cardShown/, 'runFeature gates the starter on the card having been shown');
 });
