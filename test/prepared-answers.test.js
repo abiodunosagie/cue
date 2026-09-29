@@ -94,3 +94,18 @@ test('banks for the last 30 profiles are kept, newest first, and an old one-bank
   legacy.load();
   assert.equal(legacy.summary('old').count, 4);
 });
+
+test('short and differently worded questions still find their saved answer', () => {
+  const { findMatch } = require('../src/prepared-answers');
+  const items = [
+    { question: 'What is BGlory Rides and who is it for?', variants: ['What does this app do?'], answer: 'A' },
+    { question: 'How is the final fare decided, and how do you stop inflation?', variants: [], answer: 'B' }
+  ];
+  const direct = findMatch(items, 'What does this app do?');
+  assert.equal(direct.item.answer, 'A');
+  assert.equal(direct.direct, true, 'one content word, all of it matched');
+  const close = findMatch(items, 'So how did you decide the final fare');
+  assert.equal(close.item.answer, 'B', 'decide and decided meet');
+  assert.equal(close.direct, false, 'a close wording is confirmed first');
+  assert.equal(findMatch(items, 'Do you like football?'), null);
+});

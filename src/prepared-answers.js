@@ -82,8 +82,13 @@ function parseItems(text) {
   return items;
 }
 
+// The reading tracker's stems are made for following speech, not for comparing
+// questions: "decide" and "decided" come out as decide and decid. A trailing e
+// is dropped too, so both forms meet.
+const canonical = (w) => { const s = SYNONYMS[w] || w; return s.length > 3 ? s.replace(/e$/, '') : s; };
+
 function words(text) {
-  return new Set(tokenize(text).map((w) => SYNONYMS[w] || w));
+  return new Set(tokenize(text).map(canonical));
 }
 
 function similarity(a, b) {
@@ -98,10 +103,13 @@ function similarity(a, b) {
 // direct when it is near-identical, or null when nothing is even close.
 function findMatch(items, heard) {
   let best = null;
+  const heardWords = words(heard).size;
   for (const item of items || []) {
     for (const q of [item.question, ...(item.variants || [])]) {
       const { score, shared } = similarity(heard, q);
-      if (shared < MIN_SHARED_WORDS || score < CANDIDATE_MIN) continue;
+      // A short question ("what does this app do?" is one content word) needs
+      // every word it has; longer ones need at least MIN_SHARED_WORDS.
+      if (shared < Math.min(MIN_SHARED_WORDS, heardWords) || score < CANDIDATE_MIN) continue;
       if (!best || score > best.score) best = { item, score };
     }
   }
