@@ -16,6 +16,9 @@ const SETTLE_MS = 2500; // after load, for content the app fetches and draws
 const MAX_TEXT_CHARS = 6000;
 
 let partitionCount = 0;
+// The windows drawing a company page, so main's navigation guard lets them follow the site.
+const renderContents = new WeakSet();
+const isRenderContents = (contents) => renderContents.has(contents);
 
 // A request host that is this machine or a private network, by name or literal address.
 function isLocalHost(hostname) {
@@ -46,6 +49,7 @@ async function renderPage(url) {
     show: false, width: 1280, height: 900,
     webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: true, images: false, webSecurity: true }
   });
+  renderContents.add(win.webContents);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.setAudioMuted(true);
   win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
@@ -76,4 +80,4 @@ async function renderPage(url) {
   });
 }
 
-module.exports = { renderPage, isLocalHost };
+module.exports = { renderPage, isLocalHost, isRenderContents };

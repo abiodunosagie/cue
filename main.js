@@ -37,6 +37,7 @@ const { quickAsk } = require('./src/quick-ask');
 const { checkTurn, noAnswer } = require('./src/turn-check');
 const { registerRoundsIpc } = require('./src/ipc/rounds');
 const { registerPublikIpc } = require('./src/ipc/publik');
+const { isRenderContents } = require('./src/page-render');
 const { getPermissionStatus, requestPermissions } = require('./src/permissions');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
@@ -916,8 +917,11 @@ async function runFeature(mode, userText, options = {}) {
   // take typed questions about it and the Explain key (src/project-review/review.js projectMode).
   const reviewed = projectMemory.get();
   const walkthrough = reviewed && reviewed.purpose === 'walkthrough' ? reviewed : null;
-  const hasCodingSolve = interviewMemory.codingHistory({ count: 1 }).length > 0;
-  mode = projectMode({ mode, userText, screenQuestion: refersToScreen(heard), memory: reviewed, hasCodingSolve });
+  // A coding round in progress: its code is what Explain and heard questions are about.
+  // Once it is a few answers back, a walkthrough takes over again.
+  const hasCodingSolve = !!interviewMemory.recentCodingSolve();
+  // The whole heard turn counts: the screen is often named before the question ("look at this screen, why a provider here?").
+  mode = projectMode({ mode, userText, screenQuestion: refersToScreen(heard) || refersToScreen(options.heard || ''), memory: reviewed, hasCodingSolve });
   // During a walkthrough, a heard question about what is on screen ("why this
   // class?", "what happens when I tap that?") is answered from the screen; the
   // answer's prompt and bubble need the question itself.
@@ -1352,7 +1356,7 @@ const rounds = registerRoundsIpc({
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
 ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
-ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text, { fromPanel: true }));
+ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text, { fromPanel: true, heard: typeof payload.heard === 'string' ? payload.heard.slice(0, 8000) : '' }));
 ipcMain.on('question:next', () => nextQuestion());
 ipcMain.on('script:active', (_e, on) => { scriptActive = !!on; });
 // Check it: the Smart model reviews a teleprompter script (src/script-review.js).
@@ -1649,7 +1653,9 @@ const screenWatcher = createScreenWatcher({
 // cue's windows only ever show its own pages: nothing in them may navigate
 // away or open a new window, whatever text a model or a website put in them.
 app.on('web-contents-created', (_e, contents) => {
-  contents.on('will-navigate', (event) => event.preventDefault());
+  // A company page drawn for research may move itself to its own next page;
+  // its window is sandboxed and can only reach the internet through the proxy.
+  contents.on('will-navigate', (event) => { if (!isRenderContents(contents)) event.preventDefault(); });
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
 });
 

@@ -103,9 +103,16 @@ test('short and differently worded questions still find their saved answer', () 
   ];
   const direct = findMatch(items, 'What does this app do?');
   assert.equal(direct.item.answer, 'A');
-  assert.equal(direct.direct, true, 'one content word, all of it matched');
+  assert.equal(direct.direct, false, 'one shared word is confirmed by the Fast model first, never trusted alone');
   const close = findMatch(items, 'So how did you decide the final fare');
   assert.equal(close.item.answer, 'B', 'decide and decided meet');
   assert.equal(close.direct, false, 'a close wording is confirmed first');
   assert.equal(findMatch(items, 'Do you like football?'), null);
+});
+
+test('a reply cut off at its token limit keeps every answer that came whole', () => {
+  const { parseItems } = require('../src/prepared-answers');
+  const cut = '[{"question":"A?","variants":[],"answer":"one"},{"question":"B?","variants":["b {x}"],"answer":"two \\" quoted"},{"question":"C?","answ';
+  assert.deepEqual(parseItems(cut).map((i) => i.question), ['A?', 'B?']);
+  assert.deepEqual(parseItems('no json at all'), []);
 });

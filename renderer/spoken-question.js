@@ -112,12 +112,21 @@
   // "walk me through", "what are your biggest". The interviewer paused mid-sentence.
   // Words that can end a real question (do, use, that, this) are not in it:
   // "what does it do", "which library do you use", "why did you do that".
-  const UNFINISHED_END = /\b(you|your|the|a|an|to|is|are|was|were|we|i|of|for|in|on|at|with|and|or|about|how|what|why|would|could|should|can|will|my|our|their|when|which|if|where|who|through|me|us|by|from|ever|time|some|any|biggest|greatest|most|hardest|proudest|best|worst|choose|choosing|describe|explain|tell|share)\s*$/i;
+  // A word a real question can end on (a project you worked on, questions for
+  // me, what you are excited about) is not in it: only words that always need
+  // more after them. A short request stopped at its preposition ("walk me
+  // through", "can you tell me about") is caught on its own.
+  const UNFINISHED_END = /\b(your|the|a|an|to|is|are|was|were|we|i|and|or|but|how|what|why|would|could|should|can|will|my|our|their|when|which|if|where|who|ever|some|any|biggest|greatest|most|hardest|proudest|best|worst|choose|choosing|describe|explain|tell|share)\s*$/i;
+  const STOPPED_REQUEST = /^(?:(?:can|could|would) you |please )?(?:tell|walk|talk|take) (?:me|us)(?: (?:about|through|more about))?$|^describe an?$|^(?:tell me about|describe) (?:a|an|the) time$|^(?:how|what|why|where|when|which) (?:would|could|should|do|did|does|will|can|have|are) (?:you|we|i)$/i;
+  function unfinished(text) {
+    const t = String(text || '').replace(/[.,!;:]+$/, '').trim();
+    return UNFINISHED_END.test(t) || STOPPED_REQUEST.test(t);
+  }
   function isLikelyCompleteQuestion(text) {
     const trimmed = String(text || '').trim().replace(LEADING_FILLER_RE, '');
     if (trimmed.length < 12) return false;
     if (/\?$/.test(trimmed)) return true;
-    if (UNFINISHED_END.test(trimmed.replace(/[.,!;:]+$/, ''))) return false;
+    if (unfinished(trimmed)) return false;
     if (BEHAVIORAL_PATTERNS.some((p) => p.test(trimmed))) return true;
     if (QUESTION_STARTERS.test(trimmed) && trimmed.length > 25) return true;
     if (/^(why|how|what|where|which)\b/i.test(trimmed) && trimmed.split(/\s+/).length >= 3) return true;
@@ -141,7 +150,7 @@
   // A wh-word followed by its subject opens a statement: "what we do is", "how
   // we work is", "what you'll be doing is", "what I'd like to see is".
   const DECLARATIVE_WH = /^(what|how|why|where|who|which|when)\s+(we|i|they|he|she|it|our|my|their|this|that|the team|the company|you'll|you will|you'd|you would be|you're going|you are going)\b/i;
-  const ASKS_RE = /\b(i'd|i would) (love|like) to (hear|know|understand|see)\b|\b(walk|talk|take) (me|us) through\b|\bcan you (tell|describe|explain|share|show|walk)\b|\btell (me|us) (about|how|what|why)\b/i;
+  const ASKS_RE = /\b(i'd|i would) (love|like) to (hear|know|understand|see)\b|\b(walk|talk|take) (me|us) through\b|\bcan you (tell|describe|explain|share|show|walk)\b|\btell (me|us) (more|about|how|what|why)\b/i;
   const REFERS_BACK = /\b(that|this|it|those|these|them)\b/i;
   // A statement with a tag ("we are remote, right?") only checks in.
   const TAG_CHECK_RE = /,\s*(right|okay|ok|yeah|yes|correct|no)\?$/i;
@@ -159,7 +168,7 @@
     const t = sentence.replace(LEADING_FILLER_RE, '').trim();
     if (!t) return false;
     if (/\?$/.test(t)) return true;
-    if (DECLARATIVE_WH.test(t) || UNFINISHED_END.test(t.replace(/[.,!;:]+$/, ''))) return false;
+    if (DECLARATIVE_WH.test(t) || unfinished(t)) return false;
     return ASKS_RE.test(t) || isLikelyCompleteQuestion(t);
   }
   function questionToAnswer(text) {
@@ -179,8 +188,8 @@
 
   // The interviewer asking again what was just answered ("sorry, so again, why
   // Riverpod?"): the shorter question's content words all appear in the other,
-  // and the two share at least half their words overall.
-  const SAME_QUESTION_OVERLAP = 0.5;
+  // and nearly all their words are shared.
+  const SAME_QUESTION_OVERLAP = 0.8;
   const contentWords = (t) => new Set(String(t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
     .filter((w) => w.length > 2 && !/^(the|and|you|your|what|how|why|can|could|would|did|does|tell|about|that|this|with|for|are|was|again|just|then|sorry|so|okay)$/.test(w))
     .map((w) => (w.length > 5 ? w.replace(/(ing|ed|es|s)$/, '') : w)));
@@ -190,6 +199,7 @@
     if (!x.size || !y.size) return false;
     let shared = 0;
     for (const w of x) if (y.has(w)) shared++;
+    // A follow-up that adds a topic ("...with Flutter and Firebase?", "...in large apps?") is a new question.
     return Math.min(x.size, y.size) >= 2 && shared === Math.min(x.size, y.size) && shared / (x.size + y.size - shared) >= SAME_QUESTION_OVERLAP;
   }
 
@@ -198,8 +208,16 @@
   function asksEarlier(text) {
     return sentencesOf(text).slice(0, -1).some(isQuestionSentence);
   }
+  // A last sentence shaped like a question or a request that the rules above
+  // could not settle ("Which frameworks have you worked with.") goes to the
+  // turn check too, however short the turn.
+  const QUESTION_SHAPE = /^(?:(?:and|so|but|okay|ok|right|well)[\s,]+)*(what|how|why|when|where|who|which|do|does|did|is|are|was|were|can|could|would|should|have|has|tell|walk|describe|explain|talk)\b/i;
+  function looksLikeQuestion(text) {
+    const all = sentencesOf(text);
+    return all.length > 0 && QUESTION_SHAPE.test(all[all.length - 1]);
+  }
 
-  const api = { questionToAnswer, isSameQuestion, asksEarlier, isLikelyCompleteQuestion, modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
+  const api = { questionToAnswer, isSameQuestion, asksEarlier, looksLikeQuestion, isLikelyCompleteQuestion, modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
   if (typeof window !== 'undefined') window.SpokenQuestion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

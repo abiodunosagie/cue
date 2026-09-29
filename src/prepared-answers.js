@@ -21,7 +21,9 @@ const MAX_ANSWER_CHARS = 2000;
 const DIRECT_MATCH = 0.85;
 const CANDIDATE_MIN = 0.4;
 const MIN_SHARED_WORDS = 2;
-const CONFIRM_TIMEOUT_MS = 1500;
+// Measured 0.8 to 1.7 s on the Fast model at effort low: a confirmed prepared
+// answer still shows sooner than a live answer (2 to 4 s to its first word).
+const CONFIRM_TIMEOUT_MS = 2500;
 // Same idea, different word, after stemming.
 // Keys are stemmed forms: tokenize turns "repositories" into "repositori".
 const SYNONYMS = { application: 'app', program: 'app', codebase: 'project', repo: 'project', repository: 'project', repositori: 'project' };
@@ -63,14 +65,31 @@ const PREPARE_INSTRUCTIONS =
 
 // Pull the JSON array out of the model's reply, tolerating a stray code fence
 // or sentence around it. Invalid items are dropped, never guessed at.
+// The complete top-level {...} objects in the text of a JSON array, in order,
+// stopping at the first one that was cut off.
+function wholeObjects(text) {
+  const out = [];
+  let depth = 0; let from = -1; let inString = false; let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inString) { if (escaped) escaped = false; else if (c === '\\') escaped = true; else if (c === '"') inString = false; continue; }
+    if (c === '"') inString = true;
+    else if (c === '{') { if (depth === 0) from = i; depth++; }
+    else if (c === '}') { depth--; if (depth === 0 && from >= 0) { try { out.push(JSON.parse(text.slice(from, i + 1))); } catch { /* skip one bad object */ } from = -1; } }
+    else if (c === ']' && depth === 0) break;
+  }
+  return out;
+}
+
 function parseItems(text) {
   const raw = String(text || '');
   const start = raw.indexOf('[');
+  if (start < 0) return [];
   const end = raw.lastIndexOf(']');
-  if (start < 0 || end <= start) return [];
-  let parsed;
-  try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { return []; }
-  if (!Array.isArray(parsed)) return [];
+  let parsed = null;
+  if (end > start) { try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { parsed = null; } }
+  // A reply cut off at its token limit is not valid JSON: keep every object that came whole.
+  if (!Array.isArray(parsed)) parsed = wholeObjects(raw.slice(start + 1));
   const items = [];
   for (const it of parsed) {
     if (!it || typeof it.question !== 'string' || typeof it.answer !== 'string') continue;
@@ -112,10 +131,11 @@ function findMatch(items, heard) {
       // A short question ("what does this app do?" is one content word) needs
       // every word it has; longer ones need at least MIN_SHARED_WORDS.
       if (shared < Math.min(MIN_SHARED_WORDS, heardWords) || score < CANDIDATE_MIN) continue;
-      if (!best || score > best.score) best = { item, score };
+      if (!best || score > best.score) best = { item, score, shared };
     }
   }
-  if (best) best.direct = best.score >= DIRECT_MATCH;
+  // One shared word is never proof enough ("Tell me about Flutter" and "Why Flutter?"): confirm first.
+  if (best) best.direct = best.score >= DIRECT_MATCH && best.shared >= MIN_SHARED_WORDS;
   return best;
 }
 

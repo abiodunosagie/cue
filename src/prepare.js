@@ -77,12 +77,18 @@ function createPrepare({ store, createLLM, preparedStore, followUps, projectMemo
   // one, so switching profile right before an interview finds answers ready.
   // Shares the running flag with prepareAnswers, so only one bank is built at a
   // time; a profile that fails is tried again at the next launch.
-  async function prepareOtherProfiles() {
+  // activeTried: the active profile's bank was just attempted; if it still is
+  // not current (the model failed), carry on with the others instead of retrying it.
+  async function prepareOtherProfiles({ activeTried = false } = {}) {
     if (preparing.running) return;
     preparing.running = true;
+    let stoppedForActive = false;
     try {
       for (const name of Profiles.names(store.getSettings())) {
         const current = store.getSettings();
+        // The active profile comes first: when it needs a bank (it was edited, or
+        // just switched to), stop here; the finally below builds it at once.
+        if (!activeTried && canPrepare(current) && !preparedStore.isCurrent(profileHash(current))) { stoppedForActive = true; break; }
         if (name === current.activeProfile) continue;
         let settings;
         try { settings = { ...current, ...Profiles.switchTo(current, name).fields }; } catch { continue; }
@@ -100,8 +106,10 @@ function createPrepare({ store, createLLM, preparedStore, followUps, projectMemo
       }
     } finally {
       preparing.running = false;
-      // An edit to the active profile while these ran was skipped: build it now.
-      if (!preparedStore.isCurrent(profileHash(store.getSettings()))) schedulePrepare();
+      // The active profile needs its bank (edited meanwhile, or the loop stopped
+      // for it): build it now, then carry on with the others.
+      if (stoppedForActive) prepareAnswers({ force: false }).then(() => prepareOtherProfiles({ activeTried: true }), () => {});
+      else if (!preparedStore.isCurrent(profileHash(store.getSettings()))) schedulePrepare();
     }
   }
 

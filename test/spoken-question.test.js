@@ -102,3 +102,22 @@ test('a question the interviewer paused in the middle of waits for the rest', ()
   for (const t of ['so what does this notifier do', 'which state library do you use', 'why did you do that', 'Have you ever led a team']) assert.equal(questionToAnswer(t).state, 'question', t);
   assert.equal(questionToAnswer('Can you hear me okay?').state, 'checkin');
 });
+
+test('normal interview questions that end on a preposition or pronoun are answered', () => {
+  const { questionToAnswer, looksLikeQuestion } = require('../renderer/spoken-question');
+  for (const t of ['Tell me about a project you worked on.', 'Tell me about the project you are most proud of.', 'So can you walk me through a project you are proud of.',
+    'Do you have any questions for me.', 'What questions do you have for us.', 'Which frameworks have you worked with.', 'What are you most excited about.',
+    'What technologies do you work with.', 'What is the most challenging bug you have had to deal with.', 'Is there anything you want to ask us.',
+    'What made you apply to us.', 'Tell me more about that.', 'What questions do we have for you.', 'How would you test it']) {
+    assert.equal(questionToAnswer(t).state, 'question', t);
+  }
+  assert.equal(looksLikeQuestion('Which one do you use'), true);
+  assert.equal(looksLikeQuestion('We are a logistics company.'), false);
+});
+
+test('a follow-up that narrows the last question is a new question, not a repeat', () => {
+  const { isSameQuestion } = require('../renderer/spoken-question');
+  assert.equal(isSameQuestion('What is your experience with Flutter?', 'What is your experience with Flutter and Firebase?'), false);
+  assert.equal(isSameQuestion('How do you handle state?', 'How do you handle state in large apps?'), false);
+  assert.equal(isSameQuestion('What is your biggest weakness?', 'Sorry, so again, what is your biggest weakness?'), true);
+});

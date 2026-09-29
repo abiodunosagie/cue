@@ -556,10 +556,12 @@
   }
 
   // ---- actions -----------------------------------------------------------
-  function runMode(mode, text) {
+  // heard: everything the interviewer said this turn, when text is the question
+  // found in it; main uses it to tell whether the screen was named.
+  function runMode(mode, text, heard = '') {
     if (busy) return;
     setBusy(true);
-    cue.ask({ mode, text: text || '' });
+    cue.ask({ mode, text: text || '', heard: heard || '' });
   }
 
   document.querySelectorAll('.act[data-mode]').forEach((btn) => {
@@ -792,7 +794,10 @@
   }
 
   const isUntouchedSTT = () => inputFromSTT && input.value.trim() === (lastSTTValue || '').trim();
-  const mayHoldQuestion = (text) => String(text || '').trim().split(/\s+/).length >= TURN_CHECK_MIN_WORDS || window.SpokenQuestion.asksEarlier(text);
+  // A turn worth main's turn check: long, or it asked something earlier, or it
+  // ends on something shaped like a question the rules could not settle.
+  const mayHoldQuestion = (text) => String(text || '').trim().split(/\s+/).length >= TURN_CHECK_MIN_WORDS ||
+    window.SpokenQuestion.asksEarlier(text) || window.SpokenQuestion.looksLikeQuestion(text);
 
   // After the longer pause: ask main whether a question in the turn is waiting.
   // Once per turn text; dropped when new words came or the text was edited. The
@@ -964,7 +969,7 @@
     // assist (which reads the screen) when the question points at the screen.
     // Otherwise use ask mode (user typed their own question)
     const mode = wasFromSTT ? window.SpokenQuestion.modeForSpokenQuestion(heardText || text) : 'ask';
-    runMode(mode, text);
+    runMode(mode, text, wasFromSTT ? heardText : '');
   }
   $('#send-btn').addEventListener('click', () => send());
   input.addEventListener('keydown', (e) => {
@@ -2119,11 +2124,14 @@
   });
   cue.on('rounds:saved', ({ activeProfile, roundNotes }) => {
     if (activeProfile !== settings.activeProfile) return;
-    // Notes being edited in the box are kept; the saved round is on disk and shows next time.
+    // Notes being edited in the box are kept, with the new round added below
+    // them, so pressing Done keeps both.
     const box = $('#round-notes');
-    const untouched = box.value.trim() === String(settings.roundNotes || '').trim();
+    const before = String(settings.roundNotes || '');
+    const untouched = box.value.trim() === before.trim();
     settings.roundNotes = roundNotes;
     if (untouched) box.value = roundNotes || '';
+    else if (String(roundNotes || '').startsWith(before)) box.value = box.value.trimEnd() + '\n\n' + String(roundNotes).slice(before.length).trim();
   });
 
   // ---- test my setup ----
