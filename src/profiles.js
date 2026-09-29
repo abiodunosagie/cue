@@ -4,10 +4,16 @@
 // Switching writes the flat fields back into the profile being left, then
 // loads the chosen one into them. Pure: the store applies what these return.
 
-const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk'];
-// A new profile is for another job with the same person: the CV, stories and
-// work style carry over; everything about the job starts empty.
-const JOB_FIELDS = ['jobDescription', 'companyNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk'];
+// aiRules and roleFocus are per job too: one role wants a mobile developer, the
+// next a mobile full stack engineer, and one job's rules must not reach another.
+const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk', 'aiRules', 'roleFocus'];
+// A new profile is for another job with the same person: the CV, stories, work
+// style and AI rules carry over; everything about the job starts empty, and the
+// role focus goes back to reading the new job description.
+const JOB_FIELDS = ['jobDescription', 'companyNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk', 'roleFocus'];
+// Profiles saved before these fields were per profile have no copy of them.
+// Switching to one keeps the value in use instead of blanking it.
+const KEEP_WHEN_MISSING = ['aiRules'];
 const DEFAULT_NAME = 'My profile';
 const MAX_NAME = 40;
 const MAX_PROFILES = 20;
@@ -45,7 +51,10 @@ function saved(settings) {
 function switchTo(settings, name) {
   const profiles = saved(settings);
   if (!has(profiles, name)) throw new Error('There is no profile called ' + name + '.');
-  return { profiles, activeProfile: name, fields: { ...snapshot({}), ...profiles[name] } };
+  const target = profiles[name];
+  const fields = { ...snapshot({}), ...target };
+  for (const k of KEEP_WHEN_MISSING) if (!has(target, k)) fields[k] = String((settings && settings[k]) || '');
+  return { profiles, activeProfile: name, fields };
 }
 
 function create(settings, rawName) {

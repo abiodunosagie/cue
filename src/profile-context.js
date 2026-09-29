@@ -6,6 +6,9 @@ const MAX_RESUME_CONTEXT_CHARS = 12000;
 // the résumé cap: anything longer should live in a real prompt file, not in
 // a settings field.
 const MAX_AI_RULES_CHARS = 2000;
+// The rules plus the job profile's role focus line (src/role-focus.js), which is
+// added after rules that may already use the full 2000.
+const MAX_RULES_WITH_FOCUS_CHARS = MAX_AI_RULES_CHARS + 400;
 
 /**
  * Adds a résumé as data-only context without changing prompts for users who have not supplied one.
@@ -50,7 +53,7 @@ function appendResumeContext(systemPrompt, resumeContext) {
 function appendAiRules(systemPrompt, aiRules) {
   const rules = typeof aiRules === 'string' ? aiRules.trim() : '';
   if (!rules) return systemPrompt;
-  const clipped = rules.slice(0, MAX_AI_RULES_CHARS);
+  const clipped = rules.slice(0, MAX_RULES_WITH_FOCUS_CHARS);
   return systemPrompt +
     '\n\nThe user has set the following rules for how you write. Follow them strictly — they override any default tone or formatting in the instructions above. ' +
     'If two rules conflict, prefer the rule that is more specific.\n' +
@@ -60,6 +63,7 @@ function appendAiRules(systemPrompt, aiRules) {
 module.exports = {
   MAX_RESUME_CONTEXT_CHARS,
   MAX_AI_RULES_CHARS,
+  MAX_RULES_WITH_FOCUS_CHARS,
   appendResumeContext,
   appendAiRules,
 };

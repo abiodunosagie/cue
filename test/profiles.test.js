@@ -61,3 +61,27 @@ test('deleting the profile in use switches to another first, and the last one ca
   assert.equal(r.fields.jobDescription, 'JD Acme');
   assert.deepEqual(Object.keys(r.profiles), ['My profile']);
 });
+
+test('AI rules and role focus belong to each profile', () => {
+  let s = apply(flat, { ...migrate(flat), fields: {} });
+  s = { ...s, roleFocus: 'fullstack' };
+  const r = create(s, 'Globex');
+  assert.equal(r.fields.aiRules, 'keep');        // carried over like the CV
+  assert.equal(r.fields.roleFocus, '');           // a new job reads its own description
+  s = apply(s, r);
+  s = { ...s, aiRules: 'Globex rules', roleFocus: 'mobile' };
+  const back = switchTo(s, 'My profile');
+  assert.equal(back.profiles.Globex.aiRules, 'Globex rules');
+  assert.equal(back.profiles.Globex.roleFocus, 'mobile');
+  assert.equal(back.fields.aiRules, 'keep');
+  assert.equal(back.fields.roleFocus, 'fullstack');
+});
+
+test('a profile saved before AI rules were per profile keeps the rules in use', () => {
+  const old = { ...flat, aiRules: 'current rules', activeProfile: 'New', profiles: { Old: { resumeText: 'CV', jobDescription: 'JD old' }, New: {} } };
+  const r = switchTo(old, 'Old');
+  assert.equal(r.fields.aiRules, 'current rules');
+  assert.equal(r.fields.roleFocus, '');
+  const withRules = { ...old, profiles: { ...old.profiles, Old: { ...old.profiles.Old, aiRules: '' } } };
+  assert.equal(switchTo(withRules, 'Old').fields.aiRules, '');  // a saved empty value is kept as empty
+});

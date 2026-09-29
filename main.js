@@ -37,6 +37,7 @@ const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
+const { rulesWithFocus } = require('./src/role-focus');
 const { startAppLink, stopAppLink, recordEvent, appLinkConsentState, revokeAppLinkCaller } = require('./src/applink');
 const publik = require('./src/publik');
 // The app token release.yml baked into src/publik-build.json (empty in a dev
@@ -709,7 +710,7 @@ function preparedState() {
 // system prompt exactly as for a live answer, so they follow the same voice,
 // length and no-invented-stories rules. Used for the prepared bank and follow-ups.
 async function askForItems({ llm, settings, turns, prompt, maxTokens, timeoutMs }) {
-  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: spokenAnswerTexts() }), settings.aiRules || '');
+  const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: spokenAnswerTexts() }), rulesWithFocus(settings));
   return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
 }
 
@@ -1109,7 +1110,7 @@ async function runFeature(mode, userText, options = {}) {
       ? ''
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: spokenAnswerTexts() });
-    const system = def.buildSystem ? def.buildSystem(contextBlock, settingsForPrompt.aiRules || '') : (def.system || '');
+    const system = def.buildSystem ? def.buildSystem(contextBlock, rulesWithFocus(settingsForPrompt)) : (def.system || '');
     opener = openerPromise ? await openerPromise : '';
     // One user turn builder for the answer, the quick start and the full
     // solution, so none of them can miss the memory, length or opener parts.

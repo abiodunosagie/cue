@@ -26,7 +26,7 @@ test('bounds résumé context to the supported settings limit', () => {
 });
 
 // ── AI rules ────────────────────────────────────────────────────────────────
-const { MAX_AI_RULES_CHARS, appendAiRules } = require('../src/profile-context');
+const { MAX_RULES_WITH_FOCUS_CHARS, appendAiRules } = require('../src/profile-context');
 
 test('appendAiRules: leaves the mode prompt unchanged when no rules are set', () => {
   assert.equal(appendAiRules('Base prompt', ''), 'Base prompt');
@@ -53,11 +53,11 @@ test('appendAiRules: appends AFTER the base prompt', () => {
   assert.ok(prompt.indexOf('Base prompt') < prompt.indexOf('--- USER RULES ---'));
 });
 
-test('appendAiRules: bounds rules to MAX_AI_RULES_CHARS', () => {
-  const rules = 'x'.repeat(MAX_AI_RULES_CHARS + 500);
+test('appendAiRules: bounds rules to MAX_RULES_WITH_FOCUS_CHARS', () => {
+  const rules = 'x'.repeat(MAX_RULES_WITH_FOCUS_CHARS + 500);
   const prompt = appendAiRules('', rules);
-  assert.ok(prompt.includes('x'.repeat(MAX_AI_RULES_CHARS)));
-  assert.ok(!prompt.includes('x'.repeat(MAX_AI_RULES_CHARS + 1)));
+  assert.ok(prompt.includes('x'.repeat(MAX_RULES_WITH_FOCUS_CHARS)));
+  assert.ok(!prompt.includes('x'.repeat(MAX_RULES_WITH_FOCUS_CHARS + 1)));
 });
 
 test('appendAiRules: trims surrounding whitespace before clipping', () => {

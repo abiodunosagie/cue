@@ -304,7 +304,7 @@
           <input id="profile-new-name" type="text" placeholder="New profile name, e.g. the company" autocomplete="off" aria-label="New profile name" />
           <button class="s-action s-upload-btn" id="profile-new-btn">New profile</button>
         </div>
-        <div class="s-note">A new profile keeps your resume, stories and work style and starts with an empty job description.</div>
+        <div class="s-note">A new profile keeps your resume, stories, work style and AI rules, and starts with an empty job description. Each profile keeps its own AI rules and role focus.</div>
 
         <label class="s-label">Your resume <span class="s-hint">paste full resume, or import a PDF, DOCX, TXT or Markdown file</span></label>
         <div class="s-field s-upload"><span class="s-filename" id="resume-filename"></span><button class="s-action s-upload-btn" id="upload-resume-btn">Import file</button></div>
@@ -313,6 +313,14 @@
         <label class="s-label">Target job description <span class="s-hint">optional, every answer is tailored to this role</span></label>
         <div class="s-field s-upload"><span class="s-filename" id="jd-filename"></span><button class="s-action s-upload-btn" id="upload-jd-btn">Import file</button></div>
         <textarea id="job-description" rows="5" spellcheck="false" placeholder="Paste the job description for the role you're interviewing for. cue will highlight your most relevant experience."></textarea>
+
+        <label class="s-label" style="margin-top:14px;">Role focus <span class="s-hint">how answers present you for this job</span></label>
+        <div class="s-seg" id="role-focus-seg">
+          <button data-role-focus="auto">Auto</button>
+          <button data-role-focus="mobile">Mobile</button>
+          <button data-role-focus="fullstack">Full stack</button>
+        </div>
+        <div class="s-note" id="role-focus-note"></div>
       </div>
 
       <!-- Tab: Projects (src/ipc/projects.js, renderer/projects-panel.js) -->
@@ -431,7 +439,7 @@
           <button data-architecture="simple">Simple</button>
         </div>
 
-        <label class="s-label" style="margin-top:14px;">AI rules <span class="s-hint">how the AI should write its responses</span></label>
+        <label class="s-label" style="margin-top:14px;">AI rules <span class="s-hint" id="ai-rules-hint">how the AI should write its responses, saved with the job profile in use</span></label>
         <textarea id="ai-rules" rows="10" spellcheck="false" maxlength="2000" placeholder="e.g.
 - Never use em-dashes.
 - Reply in 2-3 short bullet points.
@@ -574,6 +582,7 @@
   <script src="markdown.js"></script>
   <script src="panel-opacity.js"></script>
   <script src="answer-length.js"></script>
+  <script src="role-focus.js"></script>
   <script src="stream-blocks.js"></script>
   <script src="script-blocks.js"></script>
   <script src="script-follow.js"></script>

@@ -30,11 +30,17 @@ const PREPARE_MAX_TOKENS = 8000;
 
 // Everything a prepared answer is built from (not the same list as the fields a
 // job profile carries, src/profiles.js). A change to any of it makes the bank stale.
-const BANK_INPUTS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules'];
+const { normalizeRoleFocus } = require('./role-focus');
+
+const BANK_INPUTS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules', 'roleFocus'];
 
 function profileHash(settings) {
   const h = crypto.createHash('sha256');
-  for (const k of BANK_INPUTS) h.update(k + '\0' + String((settings && settings[k]) || '') + '\0');
+  for (const k of BANK_INPUTS) {
+    // '' and 'auto' are the same choice; only a real change makes the bank stale.
+    const value = k === 'roleFocus' ? normalizeRoleFocus(settings && settings[k]) : String((settings && settings[k]) || '');
+    h.update(k + '\0' + value + '\0');
+  }
   return h.digest('hex');
 }
 

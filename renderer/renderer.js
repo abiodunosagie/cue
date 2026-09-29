@@ -2593,6 +2593,7 @@
     // Profile tab
     $('#resume-text').value = settings.resumeText || '';
     $('#job-description').value = settings.jobDescription || '';
+    showRoleFocus();
     // Interview Prep tab
     $('#star-stories').value = settings.starStories || '';
     $('#why-company').value = settings.whyCompany || '';
@@ -2916,6 +2917,24 @@
     settings.codingSpeed = button.dataset.codingSpeed;
     document.querySelectorAll('#coding-speed-seg button').forEach((candidate) => candidate.classList.toggle('on', candidate === button));
   }));
+
+  // Role focus (renderer/role-focus.js): the note says what Auto reads from the
+  // job description typed so far, so the choice is never a guess.
+  function showRoleFocus() {
+    const chosen = RoleFocus.normalizeRoleFocus(settings.roleFocus);
+    document.querySelectorAll('#role-focus-seg button').forEach((button) => button.classList.toggle('on', button.dataset.roleFocus === chosen));
+    const note = $('#role-focus-note');
+    if (chosen !== 'auto') { note.textContent = 'Answers present you as ' + (chosen === 'mobile' ? 'a mobile developer first' : 'a mobile full stack engineer') + ' for this job.'; return; }
+    const found = RoleFocus.detectRoleFocus($('#job-description').value);
+    note.textContent = found
+      ? 'Auto reads this job description as ' + RoleFocus.LABELS[found] + '.'
+      : 'Auto: add the job description and cue picks Mobile or Full stack from it.';
+  }
+  document.querySelectorAll('#role-focus-seg button').forEach((button) => button.addEventListener('click', () => {
+    settings.roleFocus = button.dataset.roleFocus;
+    showRoleFocus();
+  }));
+  $('#job-description').addEventListener('input', showRoleFocus);
 
   document.querySelectorAll('#architecture-seg button').forEach((button) => button.addEventListener('click', () => {
     settings.codeArchitecture = button.dataset.architecture;
