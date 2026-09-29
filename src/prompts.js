@@ -581,7 +581,7 @@ MODES.walkthroughAsk = { ...MODES.projectAsk, buildSystem(_contextBlock, aiRules
 // names the project), but only the parts that answer questions, most useful
 // first, so the answer stays fast.
 const WALKTHROUGH_NOTE_CHARS = 40000;
-const SPOKEN_WALKTHROUGH_CHARS = 16000;
+const SPOKEN_WALKTHROUGH_CHARS = 8000; // measured: 16k slowed an intro from ~1.9s to ~5.4s first word, 8k kept ~1.5s
 const SPOKEN_SECTIONS = ['Say first', 'If they ask', 'Key flows', 'Hard parts', 'Decisions and trade-offs', 'How it is built'];
 // A section starts with its bold name: **Name:** or **Name**:
 const SECTION_RE = /^\*\*(Say first|How it is built|Demo path|Code tour|Key flows|Decisions and trade-offs|Hard parts|If they ask|What I would improve next)(?::\*\*|\*\*:)/gm;
