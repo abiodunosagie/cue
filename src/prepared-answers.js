@@ -30,7 +30,7 @@ const PREPARE_MAX_TOKENS = 8000;
 
 // Everything a prepared answer is built from (not the same list as the fields a
 // job profile carries, src/profiles.js). A change to any of it makes the bank stale.
-const { normalizeRoleFocus } = require('./role-focus');
+const { normalizeRoleFocus } = require('../renderer/role-focus');
 
 const BANK_INPUTS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules', 'roleFocus'];
 

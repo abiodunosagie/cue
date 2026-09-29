@@ -2655,6 +2655,7 @@
       if (!res || res.canceled) return;
       if (res.error) { showStatus(what + ' import failed: ' + res.error); return; }
       $('#' + textareaId).value = res.text || '';
+      if (textareaId === 'job-description') showRoleFocus();
       showStatus('Imported ' + res.fileName + '. Press Save to keep it.');
     });
   }
@@ -2924,10 +2925,13 @@
     const chosen = RoleFocus.normalizeRoleFocus(settings.roleFocus);
     document.querySelectorAll('#role-focus-seg button').forEach((button) => button.classList.toggle('on', button.dataset.roleFocus === chosen));
     const note = $('#role-focus-note');
-    if (chosen !== 'auto') { note.textContent = 'Answers present you as ' + (chosen === 'mobile' ? 'a mobile developer first' : 'a mobile full stack engineer') + ' for this job.'; return; }
+    if (chosen !== 'auto') {
+      note.textContent = 'Answers present you as ' + RoleFocus.SUMMARIES[chosen] + ' for this job.';
+      return;
+    }
     const found = RoleFocus.detectRoleFocus($('#job-description').value);
     note.textContent = found
-      ? 'Auto reads this job description as ' + RoleFocus.LABELS[found] + '.'
+      ? 'Auto reads this job description as ' + RoleFocus.LABELS[found] + ': answers present you as ' + RoleFocus.SUMMARIES[found] + '.'
       : 'Auto: add the job description and cue picks Mobile or Full stack from it.';
   }
   document.querySelectorAll('#role-focus-seg button').forEach((button) => button.addEventListener('click', () => {

@@ -13,4 +13,4 @@ function rulesWithFocus(settings) {
   return [rules, line].filter(Boolean).join('\n');
 }
 
-module.exports = { ...RoleFocus, rulesWithFocus };
+module.exports = { rulesWithFocus };

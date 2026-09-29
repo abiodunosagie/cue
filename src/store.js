@@ -74,9 +74,10 @@ const DEFAULTS = {
   // Tab 5: Style — custom response rules
   // The user writes how the AI should write: e.g. "no em-dashes", "use bullet
   // points", "casual tone". Applied to every LLM mode EXCEPT LeetCode (kept
-  // strict for coding problems).
+  // strict for coding problems). Per job profile, like the resume above.
   aiRules: '',
-  // mobile | fullstack by hand, or auto: read from the job description (src/role-focus.js). Per job profile.
+  // Role focus, per job profile: mobile or fullstack set by hand, or auto,
+  // read from the job description (renderer/role-focus.js).
   roleFocus: 'auto',
   panelOpacity: PanelOpacity.DEFAULT,
   answerLength: 'medium',   // short | medium | long spoken answers (renderer/answer-length.js)

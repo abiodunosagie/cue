@@ -7,8 +7,10 @@ const MAX_RESUME_CONTEXT_CHARS = 12000;
 // a settings field.
 const MAX_AI_RULES_CHARS = 2000;
 // The rules plus the job profile's role focus line (src/role-focus.js), which is
-// added after rules that may already use the full 2000.
-const MAX_RULES_WITH_FOCUS_CHARS = MAX_AI_RULES_CHARS + 400;
+// added after rules that may already use the full 2000. Sized from the longest
+// focus line, so a longer one can never be cut off.
+const { FOCUS_RULES } = require('../renderer/role-focus');
+const MAX_RULES_WITH_FOCUS_CHARS = MAX_AI_RULES_CHARS + 1 + Math.max(...Object.values(FOCUS_RULES).map((line) => line.length));
 
 /**
  * Adds a résumé as data-only context without changing prompts for users who have not supplied one.

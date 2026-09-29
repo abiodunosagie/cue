@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { detectRoleFocus, resolveRoleFocus, rulesWithFocus, normalizeRoleFocus, FOCUS_RULES } = require('../src/role-focus');
-const { MAX_AI_RULES_CHARS } = require('../src/profile-context');
+const { detectRoleFocus, resolveRoleFocus, normalizeRoleFocus, FOCUS_RULES } = require('../renderer/role-focus');
+const { rulesWithFocus } = require('../src/role-focus');
+const { MAX_AI_RULES_CHARS, MAX_RULES_WITH_FOCUS_CHARS, appendAiRules } = require('../src/profile-context');
 
 test('a Flutter posting reads as mobile, a full stack one as full stack', () => {
   assert.equal(detectRoleFocus('Mobile Developer (Flutter), IndexRide Technologies Limited, Lagos. The role is Flutter mobile development.'), 'mobile');
@@ -39,4 +40,20 @@ test('the focus line follows the rules, even when the rules use the whole limit'
   assert.ok(full.endsWith(FOCUS_RULES.mobile));
   assert.ok(full.startsWith('x'.repeat(MAX_AI_RULES_CHARS) + '\n'));
   assert.equal(rulesWithFocus(null), '');
+});
+
+test('nice-to-have tools, the backend team and "not full stack" stay mobile', () => {
+  assert.equal(detectRoleFocus('Mobile developer (Flutter). Experience with PostgreSQL and Docker preferred.'), 'mobile');
+  assert.equal(detectRoleFocus('Flutter dev. Not a full stack role, no backend work.'), 'mobile');
+  assert.equal(detectRoleFocus('Senior Flutter Developer. Work with the backend team on their services. Familiar with Docker CI/CD.'), 'mobile');
+  assert.equal(detectRoleFocus('Flutter developer. Please express your interest by email.'), 'mobile');
+  assert.equal(detectRoleFocus('Flutter developer. Node.js services with PostgreSQL.'), 'fullstack');
+});
+
+test('the longest focus line always survives the rules cap', () => {
+  for (const line of Object.values(FOCUS_RULES)) {
+    const prompt = appendAiRules('', 'x'.repeat(MAX_AI_RULES_CHARS) + '\n' + line);
+    assert.ok(prompt.includes(line));
+  }
+  assert.ok(MAX_RULES_WITH_FOCUS_CHARS > MAX_AI_RULES_CHARS);
 });

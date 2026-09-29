@@ -36,7 +36,7 @@ async function main() {
   // Case A: fresh install, no settings.json yet -> deepMerge(DEFAULTS, {}) ->
   // settings.models is store.js's DEFAULTS.models verbatim (this fix's new values).
   const freshInstallModels = {
-    anthropic: { fast: 'claude-haiku-4-5-20251001', smart: 'claude-sonnet-4-5-20250929' },
+    anthropic: { fast: 'claude-sonnet-5-5', smart: 'claude-sonnet-5-5' },
   };
   const okFast = await run('fresh-install fast-tier', {
     provider: 'anthropic', apiKeys: { anthropic: apiKey }, models: freshInstallModels, smart: false,

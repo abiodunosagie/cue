@@ -29,7 +29,7 @@ cue floats a small glass panel on top of everything. It takes **three separate i
 | **Recap** | button | the whole conversation |
 | **Ask anything** | type + `↵` | your screen + conversation |
 | **Solve a coding problem** | `⌘` `H` (macOS) or `Ctrl` `H` (Windows) | your screen only |
-| **Smart** toggle | pill in the box | switches to a smarter (slower) model |
+| **Smart** toggle | pill in the box | fuller answers from the Smart model |
 
 It's a copilot for **live meetings** ("what do I say to that?") and **coding problems** (screenshot → full solution), and it's designed to be **invisible in screen shares** so it stays your private assistant.
 
@@ -187,7 +187,7 @@ cue is hidden from most screen-share tools automatically — **Google Meet, Micr
 - **`⌘` `H` — Solve what's on screen.** Screenshots a coding problem and returns the approach, code, and time/space complexity.
 - **The `▢` button** (top bar) — start/stop **listening** to a meeting. The green dot means it's live.
 - **Type a question** in the box and press `↵` to ask about your screen or conversation.
-- **Smart** — flip it on for a smarter, more thorough model; off for fast and cheap.
+- **Smart**: on Anthropic, Fast and Smart are both Sonnet 5.5 by default, so Smart mainly gives fuller answers. On other providers it switches to a smarter, slower model.
 - **Hide** collapses the panel to just the top bar. Drag cue around by the **top pill**. Quit with `⌘` `⇧` `X` on macOS or `Ctrl` `Shift` `X` on Windows.
 
 The panel is see-through and click-through — the empty space around it never blocks the app behind it.
