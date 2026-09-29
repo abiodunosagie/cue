@@ -116,3 +116,10 @@ test('a reply cut off at its token limit keeps every answer that came whole', ()
   assert.deepEqual(parseItems(cut).map((i) => i.question), ['A?', 'B?']);
   assert.deepEqual(parseItems('no json at all'), []);
 });
+
+test('a close match is confirmed against the wording that matched, not only the main question', () => {
+  const { findMatch } = require('../src/prepared-answers');
+  const items = [{ question: 'What is BGlory Rides and who is it for?', variants: ['Give me a quick overview of the project.'], answer: 'A' }];
+  const m = findMatch(items, 'Give me an overview of the project');
+  assert.equal(m.phrase, 'Give me a quick overview of the project.');
+});

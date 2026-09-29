@@ -131,7 +131,8 @@ function findMatch(items, heard) {
       // A short question ("what does this app do?" is one content word) needs
       // every word it has; longer ones need at least MIN_SHARED_WORDS.
       if (shared < Math.min(MIN_SHARED_WORDS, heardWords) || score < CANDIDATE_MIN) continue;
-      if (!best || score > best.score) best = { item, score, shared };
+      // phrase: the wording that matched, the one to confirm against.
+      if (!best || score > best.score) best = { item, score, shared, phrase: q };
     }
   }
   // One shared word is never proof enough ("Tell me about Flutter" and "Why Flutter?"): confirm first.

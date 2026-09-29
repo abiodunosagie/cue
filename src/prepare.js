@@ -142,7 +142,7 @@ function createPrepare({ store, createLLM, preparedStore, followUps, projectMemo
     if (screen) return null;
     const fast = createLLM({ ...settings, smart: false });
     if (!fast.ready) return null;
-    return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.item.question })) ? match.item : null;
+    return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.phrase || match.item.question })) ? match.item : null;
   }
 
   // In the background after a spoken answer: the two likely follow-ups and their
