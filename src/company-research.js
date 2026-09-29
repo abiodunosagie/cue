@@ -206,12 +206,15 @@ const PAGE_WORDS = /about|company|who-we-are|mission|vision|values|story|team|pe
 const FILE_RE = /\.(pdf|jpe?g|png|gif|svg|webp|zip|mp4|mp3|docx?|xlsx?|pptx?)(\?|$)/i;
 const bareHost = (h) => String(h || '').toLowerCase().replace(/^www\./, '');
 function pageLinks(html, baseUrl) {
+  return usefulLinks([...String(html || '').matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["']/gi)].map((m) => m[1]), baseUrl);
+}
+function usefulLinks(hrefs, baseUrl) {
   const base = new URL(baseUrl);
   const seen = new Set([base.origin + base.pathname.replace(/\/$/, '')]);
   const out = [];
-  for (const m of String(html || '').matchAll(/<a\b[^>]*\bhref\s*=\s*["']([^"'#]+)["']/gi)) {
+  for (const href of hrefs) {
     let u;
-    try { u = new URL(m[1], base); } catch { continue; }
+    try { u = new URL(String(href).split('#')[0], base); } catch { continue; }
     if ((u.protocol !== 'https:' && u.protocol !== 'http:') || bareHost(u.hostname) !== bareHost(base.hostname) || FILE_RE.test(u.pathname)) continue;
     const key = u.origin + u.pathname.replace(/\/$/, '');
     if (seen.has(key) || !PAGE_WORDS.test(u.pathname)) continue;
@@ -222,16 +225,34 @@ function pageLinks(html, baseUrl) {
 }
 
 // The site as text: the page given, then its most useful pages, each labelled.
-// A page that fails is skipped; the first one must work.
-async function fetchSiteText({ url, fetchImpl = nodeFetch, lookup, onPage = () => {} }) {
+// A page that fails is skipped; the first one must work. render(url) -> { text,
+// links } draws a page built with JavaScript (src/page-render.js, main process);
+// it is used when the HTML alone has almost no words, one page at a time.
+const MIN_PAGE_TEXT = 200;
+async function fetchSiteText({ url, fetchImpl = nodeFetch, lookup, onPage = () => {}, render = null }) {
   const home = await fetchPageHtml({ url, fetchImpl, lookup });
-  const homeText = htmlToText(home);
-  if (homeText.length < 200) throw new Error('The page had almost no readable text. Try the company\'s About page.');
-  const links = pageLinks(home, url);
+  let homeText = htmlToText(home);
+  let links = pageLinks(home, url);
+  const drawn = homeText.length < MIN_PAGE_TEXT && !!render;
+  if (drawn) {
+    // The public-address check already passed for this name above.
+    const page = await render(url);
+    homeText = String(page.text || '');
+    links = usefulLinks(page.links || [], url);
+  }
+  if (homeText.length < MIN_PAGE_TEXT) throw new Error('The page had almost no readable text. Try the company\'s About page.');
   onPage(links.length + 1);
-  // Read together, so a slow page costs its own timeout, not everyone's; a page
-  // that fails or has almost no text is left out.
-  const texts = await Promise.all(links.map((link) => fetchPageHtml({ url: link, fetchImpl, lookup }).then(htmlToText, () => '')));
+  // Plain pages are read together, so a slow page costs its own timeout, not
+  // everyone's; drawn pages one at a time, since each needs a hidden window.
+  // A page that fails or has almost no text is left out.
+  const readOne = async (link) => {
+    const text = await fetchPageHtml({ url: link, fetchImpl, lookup }).then(htmlToText, () => '');
+    if (text.length >= MIN_PAGE_TEXT || !drawn) return text;
+    return render(link).then((p) => String(p.text || ''), () => '');
+  };
+  const texts = [];
+  if (drawn) for (const link of links) texts.push(await readOne(link));
+  else texts.push(...await Promise.all(links.map(readOne)));
   const parts = [`Page: ${url}\n${homeText.slice(0, MAX_PAGE_TEXT_CHARS)}`];
   links.forEach((link, i) => { if (texts[i].length >= 200) parts.push(`Page: ${link}\n${texts[i].slice(0, MAX_PAGE_TEXT_CHARS)}`); });
   return { text: parts.join('\n\n').slice(0, MAX_SITE_TEXT_CHARS), pages: parts.length };
@@ -268,12 +289,12 @@ function parseResearch(reply) {
 
 // The whole research step: fetch, ask the Smart model, parse. Resolves
 // { url, notes, whyCompany } or rejects with a message fit to show.
-async function research({ rawUrl, llm, quickAsk, background, fetchImpl, lookup, onPage }) {
+async function research({ rawUrl, llm, quickAsk, background, fetchImpl, lookup, onPage, render }) {
   const url = normalizeUrl(rawUrl);
   if (!llm.ready) throw new Error('Set up the Smart model in Settings > Keys first.');
-  const site = await fetchSiteText({ url, fetchImpl, lookup, onPage });
+  const site = await fetchSiteText({ url, fetchImpl, lookup, onPage, render });
   const reply = await quickAsk({ llm, system: RESEARCH_SYSTEM, text: researchPrompt(site.text.replace(/<\/?website>/gi, ''), url, background), maxTokens: RESEARCH_MAX_TOKENS, timeoutMs: RESEARCH_TIMEOUT_MS });
   return { url, pages: site.pages, ...parseResearch(reply) };
 }
 
-module.exports = { normalizeUrl, htmlToText, fetchPageText, fetchSiteText, pageLinks, researchPrompt, parseResearch, research, isPrivateAddress };
+module.exports = { normalizeUrl, htmlToText, fetchPageText, fetchSiteText, pageLinks, usefulLinks, researchPrompt, parseResearch, research, isPrivateAddress };

@@ -97,3 +97,22 @@ test('IPv4 hidden inside IPv6 is checked like IPv4, and unreadable addresses are
   for (const a of ['::ffff:7f00:1', '::ffff:a9fe:a9fe', '64:ff9b::7f00:1', '2002:7f00:1::', '::7f00:1', '::ffff:127.0.0.1', 'fe80::1', '::1', '::', 'fc00::1', 'nonsense']) assert.equal(isPrivateAddress(a), true, a);
   for (const a of ['2606:4700:4700::1111', '::ffff:8.8.8.8', '8.8.8.8']) assert.equal(isPrivateAddress(a), false, a);
 });
+
+test('a site built with JavaScript is drawn and its links followed, one page at a time', async () => {
+  const { fetchSiteText } = require('../src/company-research');
+  const shell = '<div id="root"></div><script src="/app.js"></script>';
+  const fetchImpl = async () => ({ ok: true, status: 200, headers: { get: (h) => (h === 'content-type' ? 'text/html' : null) }, text: async () => shell });
+  const drawn = [];
+  const render = async (u) => {
+    drawn.push(u);
+    if (u.endsWith('/careers')) return { text: 'Loading...', links: [] };
+    return u.endsWith('/about')
+      ? { text: 'IndexRide is based in Lagos and runs rides, food and courier. '.repeat(6), links: [] }
+      : { text: 'AI-powered mobility. Rides, food and courier through one intelligence. '.repeat(5), links: ['https://www.acme.com/about', 'https://evil.com/about', '/careers#jobs'] };
+  };
+  const site = await fetchSiteText({ url: 'https://acme.com/', fetchImpl, lookup: publicDns, render });
+  assert.deepEqual(drawn, ['https://acme.com/', 'https://www.acme.com/about', 'https://acme.com/careers']);
+  assert.equal(site.pages, 2, 'careers drew nothing useful');
+  assert.match(site.text, /based in Lagos/);
+  await assert.rejects(fetchSiteText({ url: 'https://acme.com/', fetchImpl, lookup: publicDns }), /almost no readable text/, 'without a renderer it says so');
+});

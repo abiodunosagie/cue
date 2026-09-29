@@ -28,7 +28,9 @@ function registerProfileIpc({ ipcMain, store, createLLM, quickAsk, onProfileChan
         rawUrl,
         llm: createLLM({ ...settings, smart: true }),
         quickAsk,
-        background: [settings.resumeText, settings.starStories].filter(Boolean).join('\n\n')
+        background: [settings.resumeText, settings.starStories].filter(Boolean).join('\n\n'),
+        // Sites built with JavaScript are drawn in a hidden, locked-down window.
+        render: (url) => require('../page-render').renderPage(url)
       });
     } catch (e) {
       return { error: e && e.message ? e.message : String(e) };
