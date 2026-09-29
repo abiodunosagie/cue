@@ -374,7 +374,7 @@
         <div class="s-status" id="lib-status" role="status"></div>
         <div id="lib-list" class="proj-list"></div>
 
-        <label class="s-label">Company research <span class="s-hint">paste the company's website; cue writes company notes and drafts Why this company</span></label>
+        <label class="s-label">Company research <span class="s-hint">paste the company's website; cue reads its main pages, writes company notes and drafts Why this company</span></label>
         <div class="s-field s-upload">
           <input id="company-url" type="text" placeholder="e.g. acme.com or acme.com/about" autocomplete="off" aria-label="Company website" />
           <button class="s-action s-upload-btn" id="company-research-btn">Research</button>
@@ -382,6 +382,13 @@
         <div class="s-note" id="company-research-status"></div>
         <label class="s-label">Company notes <span class="s-hint">facts from the website, used in answers and prepared questions; edit freely</span></label>
         <textarea id="company-notes" rows="4" spellcheck="false" placeholder="Filled by Research, or write your own notes about the company."></textarea>
+
+        <label class="s-label">Interview rounds <span class="s-hint">what each interview with this company taught: what they told you, what they asked, how to answer better. Saved when you clear an interview, or now with the button</span></label>
+        <div class="s-field s-upload">
+          <span class="s-note" id="round-status"></span>
+          <button class="s-action s-upload-btn" id="round-save-btn">Save this interview as a round</button>
+        </div>
+        <textarea id="round-notes" rows="5" spellcheck="false" placeholder="Filled after each interview, or write what you remember from one cue did not hear, e.g. Round 1: they asked about my payments work and told me the team is six people."></textarea>
 
         <label class="s-label">Why this company <span class="s-hint">used for motivation questions</span></label>
         <textarea id="why-company" rows="3" spellcheck="false" placeholder="e.g. I admire how [company] has [specific thing]. Their work on [X] aligns with my experience in [Y]..."></textarea>

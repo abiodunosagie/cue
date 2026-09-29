@@ -32,7 +32,7 @@ const PREPARE_MAX_TOKENS = 12000;
 // job profile carries, src/profiles.js). A change to any of it makes the bank stale.
 const { normalizeRoleFocus } = require('../renderer/role-focus');
 
-const BANK_INPUTS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules', 'roleFocus'];
+const BANK_INPUTS = ['resumeText', 'jobDescription', 'companyNotes', 'roundNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'aiRules', 'roleFocus'];
 
 function profileHash(settings) {
   const h = crypto.createHash('sha256');
@@ -55,7 +55,9 @@ const PREPARE_INSTRUCTIONS =
   'Cover: the intro ("tell me about yourself"), why this role and company, the main technical topics in the job description, ' +
   'the behavioral questions the stories answer, strengths and weaknesses, questions about this company when company notes are given, salary if a target is given, ' +
   'and the questions interviewers ask about any project on a CV: the project you are proudest of, the hardest bug or problem you solved, why you chose its architecture and state management, ' +
-  'how you tested it, how it handles bad networks and errors, how it would scale, and what you would do differently.\n\n' +
+  'how you tested it, how it handles bad networks and errors, how it would scale, and what you would do differently. ' +
+  'When notes from earlier interview rounds with this company are given, include every question they asked before with a better answer than last time, ' +
+  'the follow-ups those answers are likely to bring, and what the next round is likely to cover; build on what they told the candidate about the company and the role.\n\n' +
   'For each question also give 3 or 4 other ways an interviewer might phrase it.\n\n' +
   'Reply with JSON only, no prose and no code fence: an array of objects {"question": string, "variants": [string], "answer": string}.';
 

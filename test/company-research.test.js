@@ -71,6 +71,23 @@ test('research runs the whole step and needs a ready Smart model', async () => {
   const long = '<p>' + 'Acme builds payment tools for small shops. '.repeat(10) + '</p>';
   const out = await research({ rawUrl: 'acme.com', llm: { ready: true }, background: 'CV', lookup: publicDns, fetchImpl: page(long),
     quickAsk: async ({ text }) => { assert.match(text, /<website>/); return '{"notes":"Acme builds payment tools.","whyCompany":"I like it."}'; } });
-  assert.deepEqual(out, { url: 'https://acme.com/', notes: 'Acme builds payment tools.', whyCompany: 'I like it.' });
+  assert.deepEqual(out, { url: 'https://acme.com/', pages: 1, notes: 'Acme builds payment tools.', whyCompany: 'I like it.' });
   await assert.rejects(research({ rawUrl: 'acme.com', llm: { ready: false }, quickAsk: async () => '' }), /Smart model/);
+});
+
+test('research reads the company\'s own useful pages too, never another site or a file', async () => {
+  const { pageLinks, fetchSiteText } = require('../src/company-research');
+  const home = '<a href="/about">About</a><a href="https://www.acme.com/services/">Services</a><a href="https://evil.com/about">x</a>' +
+    '<a href="/brochure.pdf">pdf</a><a href="/blog/post-1">blog</a><a href="/about#team">again</a><a href="mailto:a@acme.com">mail</a>' +
+    '<p>' + 'Acme builds payment tools for small shops. '.repeat(10) + '</p>';
+  assert.deepEqual(pageLinks(home, 'https://acme.com/'), ['https://acme.com/about', 'https://www.acme.com/services']);
+  const pages = { 'https://acme.com/': home, 'https://acme.com/about': '<p>' + 'Founded in Lagos in 2019, Acme serves 400 shops. '.repeat(8) + '</p>' };
+  const fetchImpl = async (u) => {
+    const body = pages[u];
+    if (!body) return { ok: false, status: 404, headers: { get: () => 'text/html' } };
+    return { ok: true, status: 200, headers: { get: (h) => (h === 'content-type' ? 'text/html' : null) }, text: async () => body };
+  };
+  const site = await fetchSiteText({ url: 'https://acme.com/', fetchImpl, lookup: publicDns });
+  assert.equal(site.pages, 2, 'the page that failed is left out');
+  assert.match(site.text, /Page: https:\/\/acme\.com\/about\nFounded in Lagos/);
 });

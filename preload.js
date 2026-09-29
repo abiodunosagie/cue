@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('cue', {
   preparedState: () => ipcRenderer.invoke('prepared:state'),
   preparedRun: () => ipcRenderer.invoke('prepared:run'),
   turnCheck: (text) => ipcRenderer.invoke('turn:check', text),
+  roundSave: () => ipcRenderer.invoke('rounds:save'),
   practiceStart: () => ipcRenderer.invoke('practice:start'),
   setupTest: () => ipcRenderer.invoke('setup:test'),
   profileSwitch: (name) => ipcRenderer.invoke('profile:switch', name),
@@ -74,7 +75,7 @@ contextBridge.exposeInMainWorld('cue', {
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   log: (msg) => ipcRenderer.send('log', msg),
   on: (channel, cb) => {
-    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'scrollReading:changed', 'question:changed', 'project:changed', 'script:heard', 'answer:scroll', 'llm:thinking', 'llm:section', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state', 'projects:draft-progress'];
+    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'scrollReading:changed', 'question:changed', 'rounds:saved', 'script:heard', 'answer:scroll', 'llm:thinking', 'llm:section', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state', 'projects:draft-progress'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
   }

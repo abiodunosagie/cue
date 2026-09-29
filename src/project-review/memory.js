@@ -43,8 +43,7 @@ function clean(m) {
 
 // cloneDir: where GitHub links are downloaded; a review of one is deleted
 // with it, so a third party's code does not stay on the disk.
-// onChange(current): after every set and clear, so the panel knows what is loaded.
-function createProjectMemory({ file, cloneDir = '', onChange = () => {} } = {}) {
+function createProjectMemory({ file, cloneDir = '' } = {}) {
   let current = null;
   let generation = 0;
   const dropClone = (m) => {
@@ -68,14 +67,12 @@ function createProjectMemory({ file, cloneDir = '', onChange = () => {} } = {}) 
       generation++;
       current = next;
       if (file && current) writeFileAtomic(file, JSON.stringify(current));
-      onChange(current);
       return current;
     },
     clear() {
       dropClone(current);
       generation++;
       current = null;
-      onChange(null);
       return file ? removeFileAndTemp(file) : true;
     },
     get: () => current,

@@ -85,6 +85,8 @@ const DEFAULTS = {
   profiles: {},
   activeProfile: '',
   companyNotes: '',         // facts from the company website (src/company-research.js), per profile
+  companyUrl: '',           // that website's address, per profile, so it can be read again
+  roundNotes: '',           // what earlier interview rounds with this company taught (src/rounds.js), per profile
   codingQuickStart: true,  // Cmd+H: the Smart model writes the first part within seconds, then the Coding model continues
   // Cmd+H starts reading: the candidate scrolls and switches tabs, Cmd+H again
   // solves (src/scroll-reader.js). Off: Cmd+H solves from one screenshot.

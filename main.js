@@ -35,6 +35,7 @@ const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, con
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
 const { checkTurn, noAnswer } = require('./src/turn-check');
+const { summarizeRound, appendRound, canSummarize } = require('./src/rounds');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -140,8 +141,7 @@ let currentLibraryId = null;
 // kept across New question, cleared with the interview.
 const projectMemory = createProjectMemory({
   file: path.join(app.getPath('userData'), 'cue-project-review.json'),
-  cloneDir: path.join(app.getPath('userData'), 'cue-projects'),
-  onChange: announceProject
+  cloneDir: path.join(app.getPath('userData'), 'cue-projects')
 });
 projectMemory.load();
 // The coding question in front of the candidate, across its tabs: every view
@@ -456,7 +456,6 @@ function createWindow() {
     // A reloaded panel shows the question cue still holds, and has no script
     // running: never keep dropping interview speech for one.
     announceQuestion();
-    announceProject();
     scriptActive = false;
     recording.reset();
     win.showInactive();
@@ -999,12 +998,6 @@ function announceQuestion() {
   send('question:changed', { views: questionBundle.viewCount(), screens: questionBundle.count() });
 }
 
-// What project is loaded, for the panel: with a walkthrough, a heard question
-// is kept even when the candidate keeps talking over it (renderer.js softClearSTTFill).
-function announceProject() {
-  const current = projectMemory.get();
-  send('project:changed', { loaded: !!current, purpose: current ? current.purpose : '' });
-}
 
 function reportCaptureFailure(e, frame, context) {
   recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame, context });
@@ -1644,7 +1637,60 @@ ipcMain.handle('platform:info', () => ({
   winBuild: WIN_BUILD,
   winSupportsContentProtection: WIN_SUPPORTS_CONTENT_PROTECTION
 }));
+// Interview rounds: what an interview taught is kept in the job profile it was
+// for, so the next round with that company builds on it (src/rounds.js).
+// roundSaved marks the interview already saved, so Clear does not save it twice.
+let roundSaved = { startedAt: 0, turnCount: 0 };
+async function saveRound(turns, profileName, summary) {
+  const settings = store.getSettings();
+  const llm = createLLM({ ...settings, smart: true });
+  const notes = await summarizeRound({ llm, turns, companyNotes: settings.companyNotes });
+  const now = store.getSettings();
+  if (now.activeProfile === profileName) {
+    store.setSettings({ roundNotes: appendRound(now.roundNotes, notes) });
+  } else if (now.profiles && Object.prototype.hasOwnProperty.call(now.profiles, profileName)) {
+    // The profile was switched while the notes were written: they go to the one the interview was for.
+    const profile = now.profiles[profileName];
+    store.setProfileState({ profiles: { ...now.profiles, [profileName]: { ...profile, roundNotes: appendRound(profile.roundNotes, notes) } }, activeProfile: now.activeProfile, fields: {} });
+  } else {
+    throw new Error('The profile ' + profileName + ' is gone, so this round was not kept.');
+  }
+  roundSaved = { startedAt: summary.startedAt, turnCount: summary.turnCount };
+  // The panel's copy of the settings is saved whole on Done: it must hold the new notes.
+  const saved = store.getSettings();
+  send('rounds:saved', { activeProfile: saved.activeProfile, roundNotes: saved.roundNotes });
+  // The prepared answers now build on this round too.
+  schedulePrepare();
+  send('prepared:state', preparedState());
+  return store.getSettings().roundNotes;
+}
+const alreadySaved = (summary) => roundSaved.startedAt === summary.startedAt && roundSaved.turnCount === summary.turnCount;
+
+ipcMain.handle('rounds:save', async () => {
+  const summary = interviewMemory.summary();
+  const turns = interviewMemory.turns();
+  if (!canSummarize(turns)) return { error: 'This interview is too short to learn from yet.' };
+  if (alreadySaved(summary)) return { error: 'This interview is already saved as a round.' };
+  try {
+    const roundNotes = await saveRound(turns, store.getSettings().activeProfile, summary);
+    return { roundNotes };
+  } catch (e) {
+    return { error: e && e.message ? e.message : String(e) };
+  }
+});
+
+// Clear interview: a real interview not saved yet is kept as a round of the
+// active profile first, in the background, so nothing it taught is lost.
 ipcMain.handle('transcript:clear', () => {
+  const summary = interviewMemory.summary();
+  const turns = interviewMemory.turns();
+  const profileName = store.getSettings().activeProfile;
+  if (canSummarize(turns) && !alreadySaved(summary)) {
+    send('status', { message: `Saving what this interview taught to the ${profileName} profile...` });
+    saveRound(turns, profileName, summary).then(
+      () => send('status', { message: `Saved this interview as a round of the ${profileName} profile.` }),
+      (e) => send('status', { message: 'This interview could not be saved as a round: ' + (e && e.message ? e.message : String(e)) }));
+  }
   return clearInterview();
 });
 // Boot: refill the history list from memory. Deliberately not replayed through

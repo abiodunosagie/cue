@@ -6,11 +6,13 @@
 
 // aiRules and roleFocus are per job too: one role wants a mobile developer, the
 // next a mobile full stack engineer, and one job's rules must not reach another.
-const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk', 'aiRules', 'roleFocus'];
+// companyUrl and roundNotes belong to the job: its website, and what each
+// interview round with that company taught.
+const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk', 'aiRules', 'roleFocus'];
 // A new profile is for another job with the same person: the CV, stories, work
 // style and AI rules carry over; everything about the job starts empty, and the
 // role focus goes back to reading the new job description.
-const JOB_FIELDS = ['jobDescription', 'companyNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk', 'roleFocus'];
+const JOB_FIELDS = ['jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk', 'roleFocus'];
 // Profiles saved before these fields were per profile have no copy of them.
 // Switching to one keeps the value in use instead of blanking it.
 const KEEP_WHEN_MISSING = ['aiRules'];

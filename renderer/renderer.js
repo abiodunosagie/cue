@@ -1158,8 +1158,6 @@
   // ---- Question completeness detection ----
   const QUESTION_SETTLE_MS = 600;
   const STATEMENT_SETTLE_MS = 1100;
-  // A walkthrough of the candidate's own project is loaded (main.js announceProject).
-  let walkthroughLoaded = false;
   // A turn that ended on a statement or a check-in but may hold a question
   // (a long one, or one that asked something earlier) gets this pause after
   // the last words, then main's turn check. Longer than both settles above.
@@ -1171,9 +1169,9 @@
   let lastGatedTurn = '';
   let lastAnswered = { text: '', at: 0 };
   let pendingAnswered = '';
-  // The candidate said a real sentence since the interviewer last spoke: they
-  // are answering on their own, so a late turn check does not answer for them.
-  let userAnswering = false;
+  // The last turn the turn check said holds no question: the candidate talking
+  // after it may clear it like any explanation.
+  let gateSaidNo = '';
 
   let heardAt = 0;
 
@@ -1293,7 +1291,6 @@
 
     // Cancel any pending soft-clear (interviewer is still talking)
     clearTimeout(softClearTimer);
-    userAnswering = false;
     composer.classList.remove('stt-dimmed');
 
     const current = input.value.trim();
@@ -1371,12 +1368,13 @@
   const mayHoldQuestion = (text) => String(text || '').trim().split(/\s+/).length >= TURN_CHECK_MIN_WORDS || window.SpokenQuestion.asksEarlier(text);
 
   // After the longer pause: ask main whether a question in the turn is waiting.
-  // Once per turn text; dropped when new words came, the text was edited, or the
-  // candidate started answering on their own.
+  // Once per turn text; dropped when new words came or the text was edited. The
+  // candidate talking meanwhile does not stop it: they want the answer to merge in.
   async function gateTurn(text) {
     lastGatedTurn = text;
     const verdict = await cue.turnCheck(text).catch((e) => { cue.log(`[turn check] failed: ${e && e.message ? e.message : e}`); return null; });
-    if (!verdict || !verdict.answer || input.value !== text || !isUntouchedSTT() || userAnswering) return;
+    if (!verdict || !verdict.answer) { gateSaidNo = text; return; }
+    if (input.value !== text || !isUntouchedSTT()) return;
     const sendWhenFree = () => {
       if (input.value !== text) return; // the interviewer went on meanwhile
       // Shares questionFinalizeTimer with finalizeQuestion, so new words cancel this wait too.
@@ -1391,12 +1389,15 @@
     // When the user speaks (You channel), don't immediately clear
     // Instead, dim the input and wait — they might just be acknowledging
     if (!inputFromSTT) return;
-    // Walking the interviewer through their own project, the candidate keeps
-    // talking over questions, so a complete question that auto-answer will send
-    // is kept for it. One it will not send (auto-answer off, or the question
-    // edited) clears as usual, so the next question never joins onto it.
+    // The candidate often talks while cue works (fillers, a first thought) and
+    // merges cue's answer in when it lands, so a heard question, or a turn the
+    // turn check may still find one in, is kept and answered whatever they say.
+    // One auto-answer will not send (auto-answer off, the question edited), or
+    // an explanation with no question in it, clears as usual, so the next
+    // question never joins onto it.
     const autoSends = settings && settings.autoAnswer !== false && isUntouchedSTT();
-    if (walkthroughLoaded && autoSends && window.SpokenQuestion.questionToAnswer(input.value).state === 'question') return;
+    const heardNow = input.value;
+    if (autoSends && (window.SpokenQuestion.questionToAnswer(heardNow).state === 'question' || (mayHoldQuestion(heardNow) && heardNow !== gateSaidNo))) return;
     
     // FIX #3: Reset userSpeechStart at the beginning before setting new timestamp
     // This ensures we always track from fresh when a new soft-clear cycle begins
@@ -1408,10 +1409,6 @@
     // Dim the input to show it's in "pending clear" state
     composer.classList.add('stt-dimmed');
 
-    // A real sentence means the user is answering on their own, so hold the
-    // auto-answer. "mm-hm" or "okay" is under three content words and leaves it armed.
-    if (window.ReadingTracker.tokenize(text).length >= 3) { clearTimeout(questionFinalizeTimer); userAnswering = true; }
-
     // Re-armed on every 'you' final, so this fires ~800ms after the user stops.
     // The 2s test below is measured from the FIRST final of this cycle, so a brief
     // acknowledgement ("mm-hm") leaves the question on screen while a sustained
@@ -1420,8 +1417,8 @@
     softClearTimer = setTimeout(() => {
       const speechDuration = userSpeechStart ? Date.now() - userSpeechStart : 0;
       if (speechDuration > 2000) {
-        // User has been speaking for a while, so they are answering: clear the box
-        // and drop the pending auto-answer. A short "mm-hm" leaves both alone.
+        // The interviewer only explained and the user has been talking a while:
+        // the conversation moved on, so clear the box. A short "mm-hm" leaves it.
         clearTimeout(questionFinalizeTimer);
         saveToQuestionHistory(input.value);
         input.value = '';
@@ -1644,7 +1641,6 @@
   }
   showQuestion(0, 0);
   cue.on('question:changed', ({ views, screens }) => showQuestion(views, screens));
-  cue.on('project:changed', ({ loaded, purpose }) => { walkthroughLoaded = !!loaded && purpose === 'walkthrough'; });
   document.getElementById('question-next-btn').addEventListener('click', () => cue.nextQuestion());
 
   // Hide / collapse
@@ -2582,6 +2578,8 @@
     $('#key-elevenlabs').value = settings.apiKeys.elevenlabs || '';
     $('#stt-words').value = settings.sttWords || '';
     $('#company-notes').value = settings.companyNotes || '';
+    $('#company-url').value = settings.companyUrl || '';
+    $('#round-notes').value = settings.roundNotes || '';
     fillProfiles();
     $('#practice-voice').value = settings.practiceVoice || 'george';
     $('#key-custom').value = settings.apiKeys.custom || '';
@@ -2784,19 +2782,39 @@
     const btn = e.currentTarget;
     const status = $('#company-research-status');
     btn.disabled = true;
-    status.textContent = 'Reading the website, about 20 seconds…';
+    status.textContent = 'Reading the website and its main pages, about a minute…';
     try {
       const res = await cue.companyResearch($('#company-url').value);
       if (!res || res.error) { status.textContent = (res && res.error) || 'Research failed.'; return; }
       $('#company-notes').value = res.notes;
+      if (res.url) $('#company-url').value = res.url;
       // A Why-this-company the user wrote themselves is never overwritten.
       const why = $('#why-company');
       const kept = !!why.value.trim();
       if (!kept && res.whyCompany) why.value = res.whyCompany;
-      status.textContent = 'Company notes filled' + (kept ? '; your own Why this company was kept' : ' and Why this company drafted') + '. Press Done to keep them.';
+      status.textContent = 'Company notes filled from ' + (res.pages > 1 ? res.pages + ' pages' : 'the page') + (kept ? '; your own Why this company was kept' : ' and Why this company drafted') + '. Press Done to keep them.';
     } finally {
       btn.disabled = false;
     }
+  });
+
+  // ---- interview rounds ----
+  $('#round-save-btn').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const status = $('#round-status');
+    btn.disabled = true;
+    status.textContent = 'Learning from this interview, about half a minute…';
+    try {
+      const res = await cue.roundSave();
+      status.textContent = !res || res.error ? (res && res.error) || 'It could not be saved.' : 'Saved as a round. Prepared answers are being rebuilt with it.';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  cue.on('rounds:saved', ({ activeProfile, roundNotes }) => {
+    if (activeProfile !== settings.activeProfile) return;
+    settings.roundNotes = roundNotes;
+    $('#round-notes').value = roundNotes || '';
   });
 
   // ---- test my setup ----
@@ -3147,6 +3165,8 @@
     settings.apiKeys.elevenlabs = $('#key-elevenlabs').value.trim();
     settings.sttWords = $('#stt-words').value.trim();
     settings.companyNotes = $('#company-notes').value.trim();
+    settings.companyUrl = $('#company-url').value.trim();
+    settings.roundNotes = $('#round-notes').value.trim();
     settings.practiceVoice = $('#practice-voice').value || 'george';
     settings.apiKeys.custom = $('#key-custom').value.trim();
     settings.baseUrl = $('#base-url').value.trim();
