@@ -55,3 +55,41 @@ test('a heard question counts as whole past a leading filler, and a short one on
   for (const t of whole) assert.equal(isLikelyCompleteQuestion(t), true, t);
   for (const t of notYet) assert.equal(isLikelyCompleteQuestion(t), false, t);
 });
+
+test('the question in a long interviewer turn is found by its last sentence, never an explanation', () => {
+  const { questionToAnswer } = require('../renderer/spoken-question');
+  const cases = [
+    ['So what we do at Acme is logistics. We have forty engineers.', 'statement', ''],
+    ['What does that mean? It means we move goods across Lagos every day.', 'statement', ''],
+    ['and that is the platform we are building. Does that make sense?', 'checkin', ''],
+    ['How would you handle offline sync? Our drivers are in rural areas with bad signal.', 'statement', ''],
+    ['We use Riverpod everywhere. Why did you choose it over Bloc?', 'question', 'We use Riverpod everywhere. Why did you choose it over Bloc?'],
+    ['Our app has a lot of screens and heavy maps. How would you approach that?', 'question', 'Our app has a lot of screens and heavy maps. How would you approach that?'],
+    ['So basically we are a small team, five people, remote. I would love to hear about your experience with payments.', 'question', 'I would love to hear about your experience with payments.'],
+    ['What you will be doing is building the driver app', 'statement', ''],
+    ['We are hiring for a senior role, right?', 'checkin', ''],
+    ['Is that something you have done, right?', 'question', 'Is that something you have done, right?'],
+    ['Tell me about yourself.', 'question', 'Tell me about yourself.'],
+    ['', 'statement', '']
+  ];
+  const tails = [
+    ['Tell me about a time you led a team. Take your time.', 'question', 'Tell me about a time you led a team.'],
+    ['What is your biggest weakness? Be honest.', 'question', 'What is your biggest weakness?'],
+    ['We use tools e.g. Riverpod and Bloc. How would you compare them?', 'question', 'We use tools e.g. Riverpod and Bloc. How would you compare them?'],
+    ['so we are a company that moves goods and we started in lagos and then we raised money and we have forty engineers and we want someone who can tell us how they handle things', 'statement', ''],
+    ['Okay. Right. Does that make sense?', 'checkin', '']
+  ];
+  cases.push(...tails);
+  for (const [text, state, question] of cases) {
+    assert.deepEqual(questionToAnswer(text), { state, question }, text);
+  }
+});
+
+test('a question asked again right after its answer is recognised, a different one is not', () => {
+  const { isSameQuestion, asksEarlier } = require('../renderer/spoken-question');
+  assert.equal(isSameQuestion('Why did you choose Riverpod over Bloc?', 'So again, why did you choose Riverpod over Bloc?'), true);
+  assert.equal(isSameQuestion('How do you test it?', 'How do you deploy it?'), false);
+  assert.equal(isSameQuestion('', 'x'), false);
+  assert.equal(asksEarlier('How would you handle offline sync? Our drivers are in rural areas.'), true, 'the turn check looks at this one');
+  assert.equal(asksEarlier('We are a logistics company. We have forty engineers.'), false);
+});

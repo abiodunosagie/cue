@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('cue', {
   memoryState: () => ipcRenderer.invoke('memory:state'),
   preparedState: () => ipcRenderer.invoke('prepared:state'),
   preparedRun: () => ipcRenderer.invoke('prepared:run'),
+  turnCheck: (text) => ipcRenderer.invoke('turn:check', text),
   practiceStart: () => ipcRenderer.invoke('practice:start'),
   setupTest: () => ipcRenderer.invoke('setup:test'),
   profileSwitch: (name) => ipcRenderer.invoke('profile:switch', name),

@@ -89,7 +89,8 @@
   // Is the heard text a whole question yet, so it can be answered? Spoken
   // questions often open with a filler ("and why Riverpod here", "so what does
   // this do", "okay, how do you test it"); the check reads past it.
-  const LEADING_FILLER_RE = /^(?:(?:and|so|but|okay|ok|alright|all right|right|um+|uh+|well|now|then|also)\b[\s,.]*)+/i;
+  const FILLERS = 'and|so|but|okay|ok|alright|all right|right|yeah|um+|uh+|well|now|then|also';
+  const LEADING_FILLER_RE = new RegExp('^(?:(?:' + FILLERS + ')\\b[\\s,.]*)+', 'i');
   const BEHAVIORAL_PATTERNS = [
     /tell me about a time/i,
     /give me an example/i,
@@ -119,7 +120,82 @@
     return /(about that|for us|to us|with you|for you|about it|to share|you handle|you approach|your experience|your background)\s*$/i.test(trimmed);
   }
 
-  const api = { isLikelyCompleteQuestion, modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
+  // What the interviewer wants answered, judged on their last sentence, not on
+  // everything they said: an explanation that opens with "what" ("what we do is
+  // logistics") or a rhetorical question ("what does that mean? it means...")
+  // is not a question to answer. Returns { state, question }:
+  //  - 'question': the last sentence asks something; question is that sentence,
+  //    with the one before it when it is short and points back ("how would you
+  //    approach that?", "why did you choose it over Bloc?");
+  //  - 'checkin': it only ends on "does that make sense?", "okay?" or a tag ("..., right?");
+  //  - 'statement': it ends on a statement (a question may hide earlier; main's gate decides).
+  // A last sentence that only checks in, or only gives room to answer ("take
+  // your time", "be honest"), leaves the question before it standing.
+  const CHECKINS = 'does that make sense|makes sense|you know what i mean|you know|right|okay|ok|alright|are you with me|are you following|with me|yeah|cool|good|great|any questions so far|is that clear|got it|' +
+    'take your time|no rush|be honest|just curious|go ahead|feel free|whenever you are ready|whenever you\'re ready|in your own words|briefly|in a nutshell|no pressure|over to you|your turn';
+  const CHECKIN_RE = new RegExp('^(?:(?:' + FILLERS + ')\\b[\\s,.]*)*(' + CHECKINS + ')\\b[\\s?!.]*$', 'i');
+  // A wh-word followed by its subject opens a statement: "what we do is", "how
+  // we work is", "what you'll be doing is", "what I'd like to see is".
+  const DECLARATIVE_WH = /^(what|how|why|where|who|which|when)\s+(we|i|they|he|she|it|our|my|their|this|that|the team|the company|you'll|you will|you'd|you would be|you're going|you are going)\b/i;
+  const ASKS_RE = /\b(i'd|i would) (love|like) to (hear|know|understand|see)\b|\b(walk|talk|take) (me|us) through\b|\bcan you (tell|describe|explain|share|show|walk)\b|\btell (me|us) (about|how|what|why)\b/i;
+  const REFERS_BACK = /\b(that|this|it|those|these|them)\b/i;
+  // A statement with a tag ("we are remote, right?") only checks in.
+  const TAG_CHECK_RE = /,\s*(right|okay|ok|yeah|yes|correct|no)\?$/i;
+  // Sentences, without splitting after "e.g." or "Mr." (the dot is hidden, then put back).
+  const ABBREVIATION_RE = /\b(e\.g|i\.e|etc|vs|mr|mrs|ms|dr|approx)\./gi;
+  function sentencesOf(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim().replace(ABBREVIATION_RE, (m) => m.slice(0, -1) + '\u0000')
+      .split(/(?<=[.?!])\s+/).map((x) => x.replace(/\u0000/g, '.').trim()).filter(Boolean);
+  }
+  // Heard with no punctuation at all (some local transcribers), a long turn is
+  // one "sentence": its start says nothing about a question at its end, so main's
+  // turn check decides instead.
+  const UNPUNCTUATED_WORDS = 30;
+  function isQuestionSentence(sentence) {
+    const t = sentence.replace(LEADING_FILLER_RE, '').trim();
+    if (!t) return false;
+    if (/\?$/.test(t)) return true;
+    if (DECLARATIVE_WH.test(t)) return false;
+    return ASKS_RE.test(t) || isLikelyCompleteQuestion(t);
+  }
+  function questionToAnswer(text) {
+    const all = sentencesOf(text);
+    let end = all.length;
+    // A tag after a question still asks it ("is that something you have done, right?").
+    const onlyTag = (x) => TAG_CHECK_RE.test(x) && !isQuestionSentence(x.replace(TAG_CHECK_RE, '').trim());
+    while (end > 0 && (CHECKIN_RE.test(all[end - 1]) || onlyTag(all[end - 1]))) end--;
+    if (!end) return { state: all.length ? 'checkin' : 'statement', question: '' };
+    const last = all[end - 1];
+    if (all.length === 1 && !/[?]$/.test(last) && last.split(/\s+/).length >= UNPUNCTUATED_WORDS) return { state: 'statement', question: '' };
+    if (!isQuestionSentence(last)) return { state: end < all.length ? 'checkin' : 'statement', question: '' };
+    const words = last.split(/\s+/).length;
+    const question = words <= 8 && end > 1 && REFERS_BACK.test(last) ? all[end - 2] + ' ' + last : last;
+    return { state: 'question', question };
+  }
+
+  // The interviewer asking again what was just answered ("sorry, so again, why
+  // Riverpod?"): the shorter question's content words all appear in the other,
+  // and the two share at least half their words overall.
+  const SAME_QUESTION_OVERLAP = 0.5;
+  const contentWords = (t) => new Set(String(t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+    .filter((w) => w.length > 2 && !/^(the|and|you|your|what|how|why|can|could|would|did|does|tell|about|that|this|with|for|are|was|again|just|then|sorry|so|okay)$/.test(w))
+    .map((w) => w.replace(/(ing|ed|es|s)$/, '')));
+  function isSameQuestion(a, b) {
+    const x = contentWords(a);
+    const y = contentWords(b);
+    if (!x.size || !y.size) return false;
+    let shared = 0;
+    for (const w of x) if (y.has(w)) shared++;
+    return Math.min(x.size, y.size) >= 2 && shared === Math.min(x.size, y.size) && shared / (x.size + y.size - shared) >= SAME_QUESTION_OVERLAP;
+  }
+
+  // Whether a turn that did not end on a question may still hold one earlier
+  // for main's turn check: any earlier sentence asks something.
+  function asksEarlier(text) {
+    return sentencesOf(text).slice(0, -1).some(isQuestionSentence);
+  }
+
+  const api = { questionToAnswer, isSameQuestion, asksEarlier, isLikelyCompleteQuestion, modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
   if (typeof window !== 'undefined') window.SpokenQuestion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

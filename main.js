@@ -34,6 +34,7 @@ const Profiles = require('./src/profiles');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
+const { checkTurn, noAnswer } = require('./src/turn-check');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT } = require('./src/stt-streaming');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
@@ -1356,6 +1357,17 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
+// A long interviewer turn that ends on a statement: is a question in it waiting
+// for an answer? (renderer.js finalizeQuestion, src/turn-check.js)
+ipcMain.handle('turn:check', async (_e, text) => {
+  if (typeof text !== 'string' || !text.trim()) return noAnswer();
+  const llm = createLLM({ ...store.getSettings(), smart: false });
+  if (!llm.ready) return noAnswer();
+  const startedAt = Date.now();
+  const verdict = await checkTurn({ llm, text });
+  console.log(`[timing] turn check: ${verdict.answer ? 'answer' : 'wait'} after ${Date.now() - startedAt}ms`);
+  return verdict;
+});
 registerSetupIpc({
   ipcMain,
   send,

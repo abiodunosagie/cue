@@ -1160,16 +1160,29 @@
   const STATEMENT_SETTLE_MS = 1100;
   // A walkthrough of the candidate's own project is loaded (main.js announceProject).
   let walkthroughLoaded = false;
-  let heardAt = 0;
+  // A turn that ended on a statement or a check-in but may hold a question
+  // (a long one, or one that asked something earlier) gets this pause after
+  // the last words, then main's turn check. Longer than both settles above.
+  const TURN_CHECK_PAUSE_MS = 2000;
+  const TURN_CHECK_MIN_WORDS = 20;
+  // The interviewer asking again, within this long, what was just answered gets
+  // a pointer to the answer above instead of a second copy.
+  const REPEAT_WINDOW_MS = 60000;
+  let lastGatedTurn = '';
+  let lastAnswered = { text: '', at: 0 };
+  let pendingAnswered = '';
+  // The candidate said a real sentence since the interviewer last spoke: they
+  // are answering on their own, so a late turn check does not answer for them.
+  let userAnswering = false;
 
-  const isLikelyCompleteQuestion = (text) => window.SpokenQuestion.isLikelyCompleteQuestion(text);
+  let heardAt = 0;
 
   // ---- Get question confidence level ----
   function getQuestionConfidence(text) {
     const trimmed = (text || '').trim();
     if (trimmed.length < 8) return 'low';
     if (/\?$/.test(trimmed)) return 'high';
-    if (isLikelyCompleteQuestion(trimmed)) return 'medium';
+    if (window.SpokenQuestion.questionToAnswer(trimmed).state === 'question') return 'medium';
     if (trimmed.length > 20) return 'accumulating';
     return 'low';
   }
@@ -1280,6 +1293,7 @@
 
     // Cancel any pending soft-clear (interviewer is still talking)
     clearTimeout(softClearTimer);
+    userAnswering = false;
     composer.classList.remove('stt-dimmed');
 
     const current = input.value.trim();
@@ -1294,29 +1308,38 @@
     updateQuestionReadyState();
     updateSendButtonState(); // FIX #9: Update send button state
 
-    // Wait for the interviewer to stop, then check the question is complete. A
-    // question mark from the transcriber means they finished: answer fast. A
-    // complete-looking question without one gets a little longer, in case they
-    // are still going. (This used to be a flat 1.8s, the biggest fixed delay.)
+    // Wait for the interviewer to stop, then read what they said the way a person
+    // would: an explanation is not answered, and the question in it is
+    // (window.SpokenQuestion.questionToAnswer judges the last sentence). A question
+    // mark from the transcriber means they finished: answer fast. A turn that ends
+    // on a statement gets a longer pause, then the Fast model says whether a
+    // question in it is waiting (main.js turn:check).
     clearTimeout(questionFinalizeTimer);
     const settleMs = /\?\s*$/.test(input.value.trim()) ? QUESTION_SETTLE_MS : STATEMENT_SETTLE_MS;
     heardAt = Date.now();
     questionFinalizeTimer = setTimeout(function finalizeQuestion() {
-      if (!isLikelyCompleteQuestion(input.value)) return;
+      const heard = window.SpokenQuestion.questionToAnswer(input.value);
       // If the user edited the heard question, leave sending to them (Enter).
-      const untouched = input.value.trim() === (lastSTTValue || '').trim();
-      if (settings && settings.autoAnswer !== false && untouched) {
-        // Still streaming the previous answer: wait for it instead of dropping this question.
-        // New interviewer words or the user answering clear this timer; setBusy's
-        // failsafe bounds it if an answer never finishes.
-        if (busy) { questionFinalizeTimer = setTimeout(finalizeQuestion, 700); return; }
-        if (inputFromSTT) { cue.log(`[timing] auto-answer sent ${Date.now() - heardAt}ms after the last words`); send(); }
+      const autoSends = settings && settings.autoAnswer !== false && isUntouchedSTT();
+      if (heard.state === 'question') {
+        if (autoSends) {
+          // Still streaming the previous answer: wait for it instead of dropping this question.
+          // New interviewer words or the user answering clear this timer; setBusy's
+          // failsafe bounds it if an answer never finishes.
+          if (busy) { questionFinalizeTimer = setTimeout(finalizeQuestion, 700); return; }
+          autoSend(heard.question);
+          return;
+        }
+        composer.classList.add('stt-ready');
+        updateSendButtonState(); // FIX #9: Update send button when ready
+        showToast('Press Enter to answer', 2500);
         return;
       }
-      composer.classList.add('stt-ready');
-      updateSendButtonState(); // FIX #9: Update send button when ready
-      // Subtle notification that question is ready
-      showToast('Press Enter to answer', 2500);
+      // A statement or a check-in is not answered by itself; one that may hide a
+      // question earlier goes to main's turn check after the longer pause.
+      if (autoSends && input.value !== lastGatedTurn && mayHoldQuestion(input.value)) {
+        questionFinalizeTimer = setTimeout(() => gateTurn(input.value), Math.max(0, TURN_CHECK_PAUSE_MS - settleMs));
+      }
     }, settleMs);
 
     // After 8s of no new words, save to history and keep stable
@@ -1330,6 +1353,39 @@
     }, 8000);
   }
 
+  // The heard question the auto-answer will send, once cue is free. A repeat
+  // of the answer just given only points at it. The question becomes
+  // "answered" when its answer finishes (llm:done), not when it is sent.
+  function autoSend(question, label) {
+    if (Date.now() - lastAnswered.at < REPEAT_WINDOW_MS && window.SpokenQuestion.isSameQuestion(question, lastAnswered.text)) {
+      showToast('Same question as before: the answer is above.', 3000);
+      hardClearSTTFill();
+      return;
+    }
+    cue.log(`[timing] auto-answer sent ${Date.now() - heardAt}ms after the last words${label ? ' (' + label + ')' : ''}`);
+    pendingAnswered = question;
+    send(question);
+  }
+
+  const isUntouchedSTT = () => inputFromSTT && input.value.trim() === (lastSTTValue || '').trim();
+  const mayHoldQuestion = (text) => String(text || '').trim().split(/\s+/).length >= TURN_CHECK_MIN_WORDS || window.SpokenQuestion.asksEarlier(text);
+
+  // After the longer pause: ask main whether a question in the turn is waiting.
+  // Once per turn text; dropped when new words came, the text was edited, or the
+  // candidate started answering on their own.
+  async function gateTurn(text) {
+    lastGatedTurn = text;
+    const verdict = await cue.turnCheck(text).catch((e) => { cue.log(`[turn check] failed: ${e && e.message ? e.message : e}`); return null; });
+    if (!verdict || !verdict.answer || input.value !== text || !isUntouchedSTT() || userAnswering) return;
+    const sendWhenFree = () => {
+      if (input.value !== text) return; // the interviewer went on meanwhile
+      // Shares questionFinalizeTimer with finalizeQuestion, so new words cancel this wait too.
+      if (busy) { questionFinalizeTimer = setTimeout(sendWhenFree, 700); return; }
+      autoSend(verdict.question, 'turn check');
+    };
+    sendWhenFree();
+  }
+
   // ---- Soft clear: don't immediately wipe question when user speaks ----
   function softClearSTTFill(text) {
     // When the user speaks (You channel), don't immediately clear
@@ -1339,8 +1395,8 @@
     // talking over questions, so a complete question that auto-answer will send
     // is kept for it. One it will not send (auto-answer off, or the question
     // edited) clears as usual, so the next question never joins onto it.
-    const autoSends = settings && settings.autoAnswer !== false && input.value.trim() === (lastSTTValue || '').trim();
-    if (walkthroughLoaded && autoSends && isLikelyCompleteQuestion(input.value)) return;
+    const autoSends = settings && settings.autoAnswer !== false && isUntouchedSTT();
+    if (walkthroughLoaded && autoSends && window.SpokenQuestion.questionToAnswer(input.value).state === 'question') return;
     
     // FIX #3: Reset userSpeechStart at the beginning before setting new timestamp
     // This ensures we always track from fresh when a new soft-clear cycle begins
@@ -1354,7 +1410,7 @@
 
     // A real sentence means the user is answering on their own, so hold the
     // auto-answer. "mm-hm" or "okay" is under three content words and leaves it armed.
-    if (window.ReadingTracker.tokenize(text).length >= 3) clearTimeout(questionFinalizeTimer);
+    if (window.ReadingTracker.tokenize(text).length >= 3) { clearTimeout(questionFinalizeTimer); userAnswering = true; }
 
     // Re-armed on every 'you' final, so this fires ~800ms after the user stops.
     // The 2s test below is measured from the FIRST final of this cycle, so a brief
@@ -1455,13 +1511,17 @@
   input.addEventListener('blur', () => { composer.classList.remove('focused'); syncPlaceholder(); });
   $('#input-area').addEventListener('click', () => input.focus());
 
-  function send() {
-    const text = input.value.trim();
+  // asked: the question found in what the interviewer said (auto-answer); the
+  // whole heard text still decides whether it points at the screen, since the
+  // screen is often named in the explanation before the question.
+  function send(asked) {
+    const heardText = input.value.trim();
+    const text = (typeof asked === 'string' && asked.trim()) || heardText;
     if (!text) { runMode('assist', ''); return; }
     const wasFromSTT = inputFromSTT;
     
     // Save to history before clearing (in case user wants to redo)
-    saveToQuestionHistory(text);
+    saveToQuestionHistory(heardText || text);
     
     input.value = '';
     inputFromSTT = false;
@@ -1477,10 +1537,10 @@
     // If text came from STT (interviewer question), use answerThis mode, or
     // assist (which reads the screen) when the question points at the screen.
     // Otherwise use ask mode (user typed their own question)
-    const mode = wasFromSTT ? window.SpokenQuestion.modeForSpokenQuestion(text) : 'ask';
+    const mode = wasFromSTT ? window.SpokenQuestion.modeForSpokenQuestion(heardText || text) : 'ask';
     runMode(mode, text);
   }
-  $('#send-btn').addEventListener('click', send);
+  $('#send-btn').addEventListener('click', () => send());
   input.addEventListener('keydown', (e) => {
     // Ctrl+Z / Cmd+Z: restore last question if input is empty
     if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !input.value.trim()) {
@@ -2221,8 +2281,12 @@
     showToast('Quick start ready. The full solution comes in below it.', 2600);
     if (busy) armBusyFailsafe();
   });
-  cue.on('llm:done', () => { const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update(); });
+  cue.on('llm:done', () => {
+    const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update();
+    if (pendingAnswered) { lastAnswered = { text: pendingAnswered, at: Date.now() }; pendingAnswered = ''; }
+  });
   cue.on('llm:error', ({ message, action }) => {
+    pendingAnswered = ''; // not answered: asking again gets a fresh answer
     // Keep what already streamed (an opener the user may be saying aloud) and
     // show the error as its own line under it.
     if (aiEl && aiEl.dataset.raw.trim()) {
