@@ -62,7 +62,7 @@ async function requestPermissions() {
   }
   // Windows has no OS-level "ask" dialog (systemPreferences.askForMediaAccess is
   // macOS-only), mic access is governed entirely by the Settings toggle the user
-  // flips themselves, which getPermissionStatus() below reads directly.
+  // flips themselves, which getPermissionStatus() above reads directly.
 
   const status = await getPermissionStatus();
   return status.mic === 'granted' && status.screen === 'granted';

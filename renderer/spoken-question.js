@@ -183,7 +183,7 @@
   const SAME_QUESTION_OVERLAP = 0.5;
   const contentWords = (t) => new Set(String(t || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
     .filter((w) => w.length > 2 && !/^(the|and|you|your|what|how|why|can|could|would|did|does|tell|about|that|this|with|for|are|was|again|just|then|sorry|so|okay)$/.test(w))
-    .map((w) => w.replace(/(ing|ed|es|s)$/, '')));
+    .map((w) => (w.length > 5 ? w.replace(/(ing|ed|es|s)$/, '') : w)));
   function isSameQuestion(a, b) {
     const x = contentWords(a);
     const y = contentWords(b);

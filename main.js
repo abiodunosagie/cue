@@ -230,7 +230,7 @@ function pushTranscript(turn) {
   if (isMicEcho(turn)) return;
   transcript.push(turn);
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
-  interviewMemory.addTurn(turn);
+  interviewMemory.addTurn(turn, { profile: store.getSettings().activeProfile });
 }
 
 // -------- practice interview --------
@@ -1345,7 +1345,7 @@ ipcMain.handle('platform:info', () => ({
   winBuild: WIN_BUILD,
   winSupportsContentProtection: WIN_SUPPORTS_CONTENT_PROTECTION
 }));
-registerRoundsIpc({
+const rounds = registerRoundsIpc({
   ipcMain, store, createLLM, interviewMemory, send,
   schedulePrepare, preparedState, clearInterview
 });
@@ -1598,6 +1598,10 @@ function launchApp() {
   // Build the prepared answers if the profile changed since the last run, then
   // any other profile's that are missing.
   prepareAnswers({ force: false }).then(prepareOtherProfiles, prepareOtherProfiles);
+  // An interview left open too long to continue is kept as a round of its profile.
+  // After the window loads, so the status line that reports it is there to show.
+  const staleInterview = interviewMemory.takeStale();
+  if (staleInterview) win.webContents.once('did-finish-load', () => rounds.saveStaleRound(staleInterview));
   screenWatcher.start();
 }
 

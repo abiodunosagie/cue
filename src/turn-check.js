@@ -37,7 +37,8 @@ function parseTurnCheck(reply) {
 
 // { answer, question }; any failure or the timeout means do not answer.
 function checkTurn({ llm, text, timeoutMs = TURN_CHECK_TIMEOUT_MS }) {
-  const heard = String(text || '').replace(/<\/?turn>/gi, '').slice(-MAX_TURN_CHARS);
+  // No angle brackets at all: nothing heard can pose as, or close, the fence.
+  const heard = String(text || '').replace(/[<>]/g, ' ').slice(-MAX_TURN_CHARS);
   return quickAsk({ llm, system: TURN_CHECK_SYSTEM, text: '<turn>\n' + heard + '\n</turn>', maxTokens: TURN_CHECK_MAX_TOKENS, timeoutMs })
     .then(parseTurnCheck, noAnswer);
 }

@@ -109,7 +109,8 @@ async function assertPublicHost(hostname, lookup = dns.promises.lookup) {
 const http = require('http');
 const https = require('https');
 function checkedLookup(hostname, options, callback) {
-  dns.lookup(hostname, { all: true, verbatim: true }, (error, addresses) => {
+  // "localhost." with its trailing dot is still localhost.
+  dns.lookup(String(hostname || '').replace(/\.$/, ''), { all: true, verbatim: true }, (error, addresses) => {
     if (error) return callback(error);
     const list = (addresses || []).filter((a) => !isPrivateAddress(a.address));
     if (!addresses.length || list.length !== addresses.length) return callback(new Error('That address is not a public website.'));
@@ -235,7 +236,7 @@ async function fetchSiteText({ url, fetchImpl = nodeFetch, lookup, onPage = () =
   let links = pageLinks(home, url);
   const drawn = homeText.length < MIN_PAGE_TEXT && !!render;
   if (drawn) {
-    // The public-address check already passed for this name above.
+    // Drawn through cue's loopback proxy, which checks every address the page reaches.
     const page = await render(url);
     homeText = String(page.text || '');
     links = usefulLinks(page.links || [], url);
@@ -282,7 +283,7 @@ function parseResearch(reply) {
   try { parsed = JSON.parse(raw.slice(start, end + 1)); } catch { throw new Error('The model did not return company notes.'); }
   // Kept and put in every later prompt: no tag characters, so the notes can never pose as prompt structure.
   const notes = typeof parsed.notes === 'string' ? parsed.notes.replace(/[<>]/g, '').trim().slice(0, MAX_NOTES_CHARS) : '';
-  const whyCompany = typeof parsed.whyCompany === 'string' ? parsed.whyCompany.trim().replace(/\s*—\s*/g, ', ') : '';
+  const whyCompany = typeof parsed.whyCompany === 'string' ? parsed.whyCompany.replace(/[<>]/g, '').trim().replace(/\s*\u2014\s*/g, ', ') : '';
   if (!notes) throw new Error('The model did not return company notes.');
   return { notes, whyCompany };
 }
@@ -293,8 +294,8 @@ async function research({ rawUrl, llm, quickAsk, background, fetchImpl, lookup, 
   const url = normalizeUrl(rawUrl);
   if (!llm.ready) throw new Error('Set up the Smart model in Settings > Keys first.');
   const site = await fetchSiteText({ url, fetchImpl, lookup, onPage, render });
-  const reply = await quickAsk({ llm, system: RESEARCH_SYSTEM, text: researchPrompt(site.text.replace(/<\/?website>/gi, ''), url, background), maxTokens: RESEARCH_MAX_TOKENS, timeoutMs: RESEARCH_TIMEOUT_MS });
+  const reply = await quickAsk({ llm, system: RESEARCH_SYSTEM, text: researchPrompt(site.text.replace(/[<>]/g, ' '), url, background), maxTokens: RESEARCH_MAX_TOKENS, timeoutMs: RESEARCH_TIMEOUT_MS });
   return { url, pages: site.pages, ...parseResearch(reply) };
 }
 
-module.exports = { normalizeUrl, htmlToText, fetchPageText, fetchSiteText, pageLinks, usefulLinks, researchPrompt, parseResearch, research, isPrivateAddress };
+module.exports = { normalizeUrl, htmlToText, fetchPageText, fetchSiteText, pageLinks, usefulLinks, researchPrompt, parseResearch, research, isPrivateAddress, checkedLookup };

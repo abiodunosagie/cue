@@ -38,6 +38,9 @@ function isRecord(r) {
 
 function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNCE_MS } = {}) {
   let record = emptyRecord(now());
+  // An interview found too old at launch, handed out once (takeStale) so it
+  // can be kept as a round of its profile before it is gone.
+  let stale = null;
   // Bumped by clear(), so an answer that started streaming before Clear is
   // dropped instead of writing the old interview back to disk.
   let generation = 0;
@@ -68,14 +71,18 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     if (!file) return record;
     let parsed = null;
     try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return record; }
-    if (!isRecord(parsed) || now() - parsed.updatedAt > STALE_MS) { clear(); return record; }
+    if (!isRecord(parsed)) { clear(); return record; }
+    if (now() - parsed.updatedAt > STALE_MS) { stale = parsed; clear(); return record; }
     record = parsed;
     return record;
   }
 
   function touch() { record.updatedAt = now(); scheduleSave(); }
 
-  function addTurn(turn) {
+  // profile: the job profile in use, kept with the interview from its first
+  // words, so its round goes to that profile even if another is active later.
+  function addTurn(turn, { profile } = {}) {
+    if (!record.profile && profile) record.profile = String(profile);
     record.turns.push({ channel: turn.channel, text: String(turn.text || ''), ts: turn.ts || now() });
     if (record.turns.length > MAX_TURNS) record.turns.splice(0, record.turns.length - MAX_TURNS);
     touch();
@@ -152,8 +159,18 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     return '';
   }
 
+  // The interview's round was saved (src/ipc/rounds.js); kept on disk, so a
+  // restart and a later Clear do not save it again.
+  function markRoundSaved(startedAt) {
+    if (record.startedAt !== startedAt) return;
+    record.roundSaved = true;
+    touch();
+  }
+
   return {
     load,
+    markRoundSaved,
+    takeStale() { const s = stale; stale = null; return s; },
     recentCodingSolve,
     addTurn,
     addAnswer,
@@ -165,7 +182,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
     generation() { return generation; },
     turns() { return record.turns.slice(); },
     answers() { return record.answers.slice(); },
-    summary() { return { startedAt: record.startedAt, updatedAt: record.updatedAt, turnCount: record.turns.length, answerCount: record.answers.length }; }
+    summary() { return { startedAt: record.startedAt, updatedAt: record.updatedAt, turnCount: record.turns.length, answerCount: record.answers.length, profile: record.profile || '', roundSaved: !!record.roundSaved }; }
   };
 }
 

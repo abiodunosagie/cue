@@ -42,8 +42,8 @@ async function summarizeRound({ llm, turns, companyNotes }) {
   if (!canSummarize(turns)) throw new Error('This interview is too short to learn from yet.');
   if (!llm || !llm.ready) throw new Error('Set up the Smart model in Settings > Keys first.');
   const text = (companyNotes ? 'What we already know about the company (for context):\n' + String(companyNotes).slice(0, 3000) + '\n\n' : '') +
-    'The transcript:\n<transcript>\n' + transcriptText(turns).replace(/<\/?transcript>/gi, '') + '\n</transcript>';
-  const notes = String(await quickAsk({ llm, system: ROUND_SYSTEM, text, maxTokens: ROUND_MAX_TOKENS, timeoutMs: ROUND_TIMEOUT_MS }) || '').trim().replace(/\s*—\s*/g, ', ');
+    'The transcript:\n<transcript>\n' + transcriptText(turns).replace(/[<>]/g, ' ') + '\n</transcript>';
+  const notes = String(await quickAsk({ llm, system: ROUND_SYSTEM, text, maxTokens: ROUND_MAX_TOKENS, timeoutMs: ROUND_TIMEOUT_MS }) || '').trim().replace(/\s*\u2014\s*/g, ', ');
   if (!notes) throw new Error('The model did not return notes for this round.');
   return notes;
 }

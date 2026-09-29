@@ -149,6 +149,8 @@ let data = null;
 function deepMerge(base, over) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
   for (const k of Object.keys(over || {})) {
+    // A key that would reach the object's prototype is never merged.
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
     if (over[k] && typeof over[k] === 'object' && !Array.isArray(over[k]) && typeof base[k] === 'object') {
       out[k] = deepMerge(base[k], over[k]);
     } else {
@@ -170,7 +172,15 @@ function load() {
   catch {
     // A damaged file is never overwritten by the defaults: it is kept next to
     // it, so the profiles and keys in it can be recovered.
-    try { fs.copyFileSync(FILE, FILE.replace(/\.json$/, '') + '.damaged-' + Date.now() + '.json'); } catch { /* best effort */ }
+    try {
+      const dir = path.dirname(FILE);
+      const base = path.basename(FILE, '.json');
+      // One copy per damaged content, and only the newest few: they hold API keys too.
+      const copies = fs.readdirSync(dir).filter((f) => f.startsWith(base + '.damaged-')).sort();
+      const same = copies.some((f) => { try { return fs.readFileSync(path.join(dir, f), 'utf8') === raw; } catch { return false; } });
+      if (!same) fs.copyFileSync(FILE, path.join(dir, base + '.damaged-' + Date.now() + '.json'));
+      for (const old of copies.slice(0, Math.max(0, copies.length - 2))) fs.unlinkSync(path.join(dir, old));
+    } catch { /* best effort */ }
     data = deepMerge(DEFAULTS, {});
   }
   data.panelOpacity = PanelOpacity.normalize(data.panelOpacity);

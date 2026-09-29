@@ -535,7 +535,6 @@ const MODES = {
 
   // A typed question about the candidate's own project while a walkthrough is
   // loaded: projectAsk in the author's voice.
-  walkthroughAsk: null, // set below from projectAsk
 
   // Cmd+Shift+E while a walkthrough is loaded: what is on screen now (a file in
   // the IDE or a screen of the running app) and what to say about it. The
