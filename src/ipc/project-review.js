@@ -78,7 +78,11 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     if (!current) return { error: 'Nothing is loaded yet.' };
     if (state.busy) return { error: BUSY };
     send('llm:start', { userBubble: `${current.purpose === 'walkthrough' ? 'Walkthrough of' : 'Review of'} ${current.name}`, small: false, coding: true });
-    send('llm:token', { text: current.report });
+    // A walkthrough's likely questions follow it, so the owner can read and check them before the interview.
+    const qa = current.qa.length
+      ? '\n\n**Likely questions, answered at once when asked:**\n\n' + current.qa.map((q, i) => `**${i + 1}. ${q.question}**\n${q.answer}`).join('\n\n')
+      : '';
+    send('llm:token', { text: current.report + qa });
     send('llm:done', {});
     return { ok: true };
   });
