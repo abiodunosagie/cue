@@ -56,7 +56,37 @@
     return t.trim().length >= 6 && FIX_PATTERNS.some((p) => p.test(t)) && OWN_CODE_ANCHORS.some((p) => p.test(t));
   }
 
-  const api = { modeForSpokenQuestion, isExplainRequest, isFixRequest };
+  // While the candidate shows their own project: a question about what is on
+  // screen. Only used with a walkthrough loaded (main.js), and still narrow,
+  // because a normal question must keep its spoken answer with the CV behind it:
+  // "why do you want to work here?", "where do you see yourself?", "explain
+  // your approach to testing" and "that part of your job" are not screen questions.
+  //  - this, that, these or those before a thing in code or on an app screen;
+  //  - "explain this", "walk me through that";
+  //  - it or this done "here" ("why do you do it here?");
+  //  - where something is handled, stored or defined in the app;
+  //  - what a tap or click does, "show me where", "what am I looking at".
+  const SCREEN_THING = '(?:widget|screen|page|file|folder|component|class|function|method|provider|notifier|bloc|cubit|controller|repository|button|sheet|dialog|form|field|route|router|query|table|layout|code|line|endpoint|migration|test)(?:e?s)?';
+  const SCREEN_QUESTION_PATTERNS = [
+    new RegExp('\\b(this|that|these|those) ' + SCREEN_THING + '\\b', 'i'),
+    /\b(explain|walk (me|us) through|talk (me|us) through) (this|that)\b/i,
+    /\b(why|what|how)\b.{0,40}\b(it|this|that)\b.{0,20}\b(right |in |over )?here\b/i,
+    /\bwhere (is|are|does|do you|did you)\b.{0,40}\b(handled|calculated|computed|stored|saved|kept|defined|called|done|set up|happen|happens|live|lives|come from|comes from)\b/i,
+    /\bwhere in (the|this|your) (code|app|project|codebase)\b/i,
+    /\bwhat (happens|would happen|did you do) (when|if) (i|you|we|the user|a user|someone) (tap|taps|click|clicks|press|presses|open|opens|scroll|scrolls|swipe|swipes)\b/i,
+    /\b(show|point) (me|us) (where|how|the|that|this)\b/i,
+    /\bwhat am i (looking at|seeing)\b/i
+  ];
+  function isScreenQuestion(text) {
+    const t = String(text || '');
+    return t.trim().length >= 6 && SCREEN_QUESTION_PATTERNS.some((p) => p.test(t));
+  }
+  // A heard question that points at the screen, either way cue knows of.
+  function refersToScreen(text) {
+    return SCREEN_REFERENCE.test(text || '') || isScreenQuestion(text);
+  }
+
+  const api = { modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
   if (typeof window !== 'undefined') window.SpokenQuestion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

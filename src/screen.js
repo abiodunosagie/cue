@@ -29,17 +29,21 @@ function encodeScreenshot(img, { maxLongEdge = MAX_LONG_EDGE_PX, quality = JPEG_
   return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
 }
 
-async function captureScreenshot() {
-  const primary = screen.getPrimaryDisplay();
-  const { width, height } = primary.size;
-  const scale = primary.scaleFactor || 1;
+// atCursor: the display under the pointer instead of the primary one.
+async function captureScreenshot({ atCursor = false } = {}) {
+  const display = atCursor ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) : screen.getPrimaryDisplay();
+  const { width, height } = display.size;
+  const scale = display.scaleFactor || 1;
+  // Captured at the size the model gets (encodeScreenshot's cap), not at full
+  // Retina size: the same image, made much faster. fit turns screen points into
+  // pixels: the display's own scale, or less when that passes the cap.
+  const fit = Math.min(scale, MAX_LONG_EDGE_PX / Math.max(width, height));
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
-    thumbnailSize: { width: Math.floor(width * scale), height: Math.floor(height * scale) }
+    thumbnailSize: { width: Math.round(width * fit), height: Math.round(height * fit) }
   });
   if (!sources.length) return null;
-  // Prefer the primary display source.
-  const src = sources.find((s) => String(s.display_id) === String(primary.id)) || sources[0];
+  const src = sources.find((s) => String(s.display_id) === String(display.id)) || sources[0];
   const img = src.thumbnail;
   if (!img || img.isEmpty()) return null;
   return encodeScreenshot(img); // data:image/jpeg;base64,...

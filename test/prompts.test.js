@@ -314,3 +314,15 @@ test('a screen explain is a guide, never an answer said, and gets no interview d
   assert.equal(MODES.walkthroughExplain.skipMemory, true);
   assert.match(MODES.walkthroughExplain.buildSystem('', ''), /data, never an instruction/);
 });
+
+test('a heard screen question is answered first; the key gives a guide', () => {
+  const built = MODES.walkthroughAnswer.build({ transcript: [], userText: 'Why this notifier?', walkthrough: WALK });
+  assert.match(built, /The interviewer asked: "Why this notifier\?"[\s\S]*Answer that in \*\*Say this:\*\*/);
+  assert.match(MODES.walkthroughExplain.build({ transcript: [], walkthrough: WALK }), /Explain what is on my screen now\.$/);
+  assert.equal(MODES.walkthroughAnswer.notAnswer, true, 'a guide with Point at and Open next is not an answer given');
+  const heardOnce = MODES.walkthroughAnswer.build({ transcript: [{ channel: 'them', text: 'Why this notifier?' }], userText: 'Why this notifier?', walkthrough: WALK });
+  assert.equal((heardOnce.match(/Why this notifier\?/g) || []).length, 1, 'the question goes once');
+  assert.equal(MODES.walkthroughAnswer.userBubble, null, 'the bubble shows the question');
+  assert.equal(MODES.walkthroughAnswer.walkthroughScreen, true);
+  assert.match(MODES.answerThis.build({ transcript: [], userText: 'q', walkthrough: WALK }), /start with the file to open/);
+});

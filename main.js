@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const store = require('./src/store');
 const readingTracker = require('./renderer/reading-tracker');
-const { isExplainRequest, isFixRequest } = require('./renderer/spoken-question');
+const { isExplainRequest, isFixRequest, refersToScreen } = require('./renderer/spoken-question');
 const { captureScreenshot, captureMaskedScreen, captureMaskedPage, encodeScreenshot, MAX_DATA_URL_BYTES } = require('./src/screen');
 const { readScrollPages, fitPages } = require('./src/scroll-reader');
 const { createQuestionBundle } = require('./src/question-bundle');
@@ -138,7 +138,8 @@ let currentLibraryId = null;
 // kept across New question, cleared with the interview.
 const projectMemory = createProjectMemory({
   file: path.join(app.getPath('userData'), 'cue-project-review.json'),
-  cloneDir: path.join(app.getPath('userData'), 'cue-projects')
+  cloneDir: path.join(app.getPath('userData'), 'cue-projects'),
+  onChange: announceProject
 });
 projectMemory.load();
 // The coding question in front of the candidate, across its tabs: every view
@@ -453,6 +454,7 @@ function createWindow() {
     // A reloaded panel shows the question cue still holds, and has no script
     // running: never keep dropping interview speech for one.
     announceQuestion();
+    announceProject();
     scriptActive = false;
     recording.reset();
     win.showInactive();
@@ -947,6 +949,13 @@ function announceQuestion() {
   send('question:changed', { views: questionBundle.viewCount(), screens: questionBundle.count() });
 }
 
+// What project is loaded, for the panel: with a walkthrough, a heard question
+// is kept even when the candidate keeps talking over it (renderer.js softClearSTTFill).
+function announceProject() {
+  const current = projectMemory.get();
+  send('project:changed', { loaded: !!current, purpose: current ? current.purpose : '' });
+}
+
 function reportCaptureFailure(e, frame, context) {
   recordEvent({ level: 'error', event: 'screen_capture_failed', msg: e && e.message ? e.message : String(e), frame, context });
   send('status', { message: captureFailedMessage() });
@@ -966,14 +975,20 @@ function toggleScrollReading() {
   send('scrollReading:changed', { scrollReading });
 }
 
+// A heard question as its bubble: quoted, cut to one line.
+function quotedQuestion(text) {
+  const t = text || '';
+  return `"${t.slice(0, 60)}${t.length > 60 ? '…' : ''}"`;
+}
+
 // options.oneShot: read one screen, never wait for scrolling (see readView).
 async function runFeature(mode, userText, options = {}) {
   if (state.busy) return;
   // A question about the code just written ("walk me through your code", "why
   // a map here?") is answered from that code, not from the resume.
+  // The text that was sent; the interviewer's newest turn only when none was (a bare Assist key press).
+  const heard = mode === 'answerThis' || mode === 'assist' ? userText || openerQuestion(mode, '', transcript) : '';
   if ((mode === 'answerThis' || mode === 'assist') && interviewMemory.recentCodingSolve()) {
-    // The text that was sent; the interviewer's newest turn only when none was (a bare Assist key press).
-    const heard = userText || openerQuestion(mode, '', transcript);
     if (isExplainRequest(heard)) { mode = 'explainCode'; userText = heard; }
   }
   // The candidate typing about an error in the code they are writing: read the
@@ -984,7 +999,11 @@ async function runFeature(mode, userText, options = {}) {
   const reviewed = projectMemory.get();
   const walkthrough = reviewed && reviewed.purpose === 'walkthrough' ? reviewed : null;
   const hasCodingSolve = interviewMemory.codingHistory({ count: 1 }).length > 0;
-  mode = projectMode({ mode, userText, memory: reviewed, hasCodingSolve });
+  mode = projectMode({ mode, userText, screenQuestion: refersToScreen(heard), memory: reviewed, hasCodingSolve });
+  // During a walkthrough, a heard question about what is on screen ("why this
+  // class?", "what happens when I tap that?") is answered from the screen; the
+  // answer's prompt and bubble need the question itself.
+  if (mode === 'walkthroughAnswer') userText = heard;
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -1011,7 +1030,8 @@ async function runFeature(mode, userText, options = {}) {
     modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
-      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' ? userText : mode === 'answerThis' ? `"${(userText || '').slice(0, 60)}${userText && userText.length > 60 ? '…' : ''}"` : null);
+      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' ? userText
+        : mode === 'answerThis' || mode === 'walkthroughAnswer' ? quotedQuestion(userText) : null);
     const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
     send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, showWait: def.tier === 'coding' });
 
@@ -1086,7 +1106,9 @@ async function runFeature(mode, userText, options = {}) {
             imageDataUrls = urls.map((url, i) => ({ url, label: screens[i].label }));
           }
         } else {
-          imageDataUrl = await captureScreenshot();
+          // Showing a project, the candidate works on the display under the pointer
+          // (the IDE or the simulator may be on a second monitor).
+          imageDataUrl = await captureScreenshot({ atCursor: !!def.walkthroughScreen });
         }
         if (!imageDataUrl && !imageDataUrls) throw new Error('No screen source was available.');
       }
@@ -1660,7 +1682,10 @@ function registerShortcuts() {
   shortcutState.length = globalShortcut.register('CommandOrControl+Shift+.', cycleAnswerLength);
   shortcutState.buyTime = globalShortcut.register('CommandOrControl+Shift+B', () => runFeature('buyTime', ''));
   // E for explain: the words to walk the interviewer through the code just written.
-  shortcutState.explainCode = globalShortcut.register('CommandOrControl+Shift+E', () => runFeature('explainCode', ''));
+  shortcutState.explainCode = globalShortcut.register('CommandOrControl+Shift+E', () => {
+    if (state.busy) send('status', { message: 'Already answering. Press it again when this answer is done.' });
+    else runFeature('explainCode', '');
+  });
   // Move cue without the mouse: in a screen share the pointer always shows, and
   // dragging an invisible window makes it wander for no visible reason.
   const moveMods = isMac ? 'Control+Alt+Command+' : 'Control+Alt+Shift+';

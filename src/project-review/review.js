@@ -179,10 +179,13 @@ function isProjectQuestion(question, index) {
 // project, a typed question goes to the Coding model only when it names a file
 // or class (else the Smart answer, which carries the walkthrough, is faster),
 // and Explain covers the file or app screen being shown unless there is code
-// written for this question to explain.
-function projectMode({ mode, userText, memory, hasCodingSolve }) {
+// written for this question to explain. A heard question (answerThis or
+// assist) that points at the screen is answered from the screen too;
+// screenQuestion says it does (main.js, renderer/spoken-question.js refersToScreen).
+function projectMode({ mode, userText, screenQuestion = false, memory, hasCodingSolve }) {
   if (!memory) return mode;
   const walkthrough = memory.purpose === 'walkthrough';
+  if ((mode === 'answerThis' || mode === 'assist') && walkthrough && !hasCodingSolve && screenQuestion) return 'walkthroughAnswer';
   if (mode === 'ask' && userText) {
     if (!walkthrough) return isProjectQuestion(userText, memory.index) ? 'projectAsk' : mode;
     return filesForQuestion(userText, memory.index, '').length ? 'walkthroughAsk' : mode;

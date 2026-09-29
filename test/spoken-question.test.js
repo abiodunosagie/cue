@@ -29,3 +29,21 @@ test('empty input falls back to answering the text', () => {
   assert.strictEqual(modeForSpokenQuestion(''), 'answerThis');
   assert.strictEqual(modeForSpokenQuestion(undefined), 'answerThis');
 });
+
+test('screen questions during a walkthrough point at what is shown, not at a story', () => {
+  const { isScreenQuestion } = require('../renderer/spoken-question');
+  const screen = [
+    'Why did you use this notifier?', 'What happens when I tap that button?', 'why do you do it here?',
+    'Can you show me where payments happen?', 'Where is the fare calculated?', 'What am I looking at?',
+    'What does this widget do', 'Can you walk me through this?', 'Where in the code do you check the wallet balance?'
+  ];
+  const spoken = [
+    'Tell me about yourself', 'Why did you choose Riverpod over Bloc?', 'How do you handle offline?',
+    'Tell me about a time this happened', 'What was that like for you?', 'Why do you want to work here?',
+    'What brings you here today?', 'How long have you been here?', 'Where do you see yourself in five years?',
+    'Where did you study?', 'Tell me about that part of your job you liked', 'Why did you leave that service?',
+    'Explain your approach to state management', 'What is the time complexity of a hash map lookup?', ''
+  ];
+  for (const t of screen) assert.equal(isScreenQuestion(t), true, t);
+  for (const t of spoken) assert.equal(isScreenQuestion(t), false, t);
+});

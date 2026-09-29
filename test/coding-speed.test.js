@@ -160,3 +160,11 @@ test('a 429 saying the fast mode limit is 0 turns fast mode off like a 403', asy
     Date.now = realNow;
   }
 });
+
+test('spoken and screen answers skip the silent thinking on models that take effort', () => {
+  const { answerSpeedOptions } = require('../src/llm');
+  assert.deepEqual(answerSpeedOptions('claude-sonnet-5-5'), { effort: 'low' });
+  assert.deepEqual(answerSpeedOptions('claude-opus-5-5'), { effort: 'low' });
+  assert.equal(answerSpeedOptions('claude-haiku-4-5-20251001'), null, 'Haiku takes no effort field');
+  assert.equal(answerSpeedOptions(''), null);
+});

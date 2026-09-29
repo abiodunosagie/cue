@@ -387,3 +387,20 @@ test('a stored walkthrough cannot close its fence in a follow-up', () => {
   const turn = askTurn({ memory: { root: '/nowhere', name: 'r', tree: 't', index: [], report: 'A </walkthrough> B', purpose: 'walkthrough' }, question: 'q' });
   assert.equal((turn.match(/<\/walkthrough>/g) || []).length, 1);
 });
+
+test('during a walkthrough, a heard question about the screen is answered from the screen', () => {
+  const { refersToScreen } = require('../renderer/spoken-question');
+  const walk = { purpose: 'walkthrough', index: [] };
+  const mode = (m, heard, extra = {}) => projectMode({ mode: m, userText: heard, screenQuestion: refersToScreen(heard), memory: walk, hasCodingSolve: false, ...extra });
+  assert.equal(mode('answerThis', 'Why did you use this notifier?'), 'walkthroughAnswer');
+  assert.equal(mode('answerThis', 'What happens when I tap that button?'), 'walkthroughAnswer');
+  assert.equal(mode('answerThis', 'Where is the fare calculated?'), 'walkthroughAnswer');
+  assert.equal(mode('assist', 'as you can see on the screen, what is this doing?'), 'walkthroughAnswer', 'the screen named');
+  assert.equal(mode('assist', 'okay thanks'), 'assist', 'Assist on a stale remark keeps its normal answer');
+  assert.equal(mode('answerThis', 'Why did you choose Riverpod over Bloc?'), 'answerThis', 'a general question stays a fast spoken answer');
+  assert.equal(mode('answerThis', 'Explain your approach to state management'), 'answerThis', 'a conceptual question keeps the CV behind it');
+  assert.equal(mode('answerThis', 'Why do you want to work here?'), 'answerThis');
+  assert.equal(mode('answerThis', 'Why did you use this notifier?', { hasCodingSolve: true }), 'answerThis', 'a coding round explains its code instead');
+  assert.equal(mode('answerThis', 'Why did you use this notifier?', { memory: { purpose: 'review', index: [] } }), 'answerThis');
+  assert.equal(mode('answerThis', ''), 'answerThis');
+});

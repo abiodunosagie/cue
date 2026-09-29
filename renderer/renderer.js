@@ -1158,6 +1158,8 @@
   // ---- Question completeness detection ----
   const QUESTION_SETTLE_MS = 600;
   const STATEMENT_SETTLE_MS = 1100;
+  // A walkthrough of the candidate's own project is loaded (main.js announceProject).
+  let walkthroughLoaded = false;
   let heardAt = 0;
 
   function isLikelyCompleteQuestion(text) {
@@ -1368,6 +1370,12 @@
     // When the user speaks (You channel), don't immediately clear
     // Instead, dim the input and wait — they might just be acknowledging
     if (!inputFromSTT) return;
+    // Walking the interviewer through their own project, the candidate keeps
+    // talking over questions, so a complete question that auto-answer will send
+    // is kept for it. One it will not send (auto-answer off, or the question
+    // edited) clears as usual, so the next question never joins onto it.
+    const autoSends = settings && settings.autoAnswer !== false && input.value.trim() === (lastSTTValue || '').trim();
+    if (walkthroughLoaded && autoSends && isLikelyCompleteQuestion(input.value)) return;
     
     // FIX #3: Reset userSpeechStart at the beginning before setting new timestamp
     // This ensures we always track from fresh when a new soft-clear cycle begins
@@ -1611,6 +1619,7 @@
   }
   showQuestion(0, 0);
   cue.on('question:changed', ({ views, screens }) => showQuestion(views, screens));
+  cue.on('project:changed', ({ loaded, purpose }) => { walkthroughLoaded = !!loaded && purpose === 'walkthrough'; });
   document.getElementById('question-next-btn').addEventListener('click', () => cue.nextQuestion());
 
   // Hide / collapse

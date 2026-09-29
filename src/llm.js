@@ -357,7 +357,16 @@ function codingSpeedOptions(model, speed, apiKey) {
   return Object.keys(out).length ? out : null;
 }
 
-async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, imageDataUrls, maxTokens, onToken, onActivity, onThinking, speedOptions }) {
+// Spoken and screen answers (every tier but coding): Sonnet 5.5 thinks before
+// its first word by default. Measured 2026-09-30 on a walkthrough answer with a
+// screenshot: 5.2 to 5.9 s to the first word by default, 1.4 to 2.0 s with
+// effort low, same quality for a few spoken sentences. Refused (an older model
+// or a proxy), the plain request follows as the next stage.
+function answerSpeedOptions(model) {
+  return EFFORT_MODEL.test(String(model || '')) ? { effort: 'low' } : null;
+}
+
+async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, imageDataUrls, maxTokens, onToken, onActivity, onThinking, speedOptions, stageLabel = 'coding' }) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
   const images = turnImages(imageDataUrl, imageDataUrls);
@@ -422,7 +431,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
       const reason = (error && (error.status || error.code)) || 'no status';
       const message = hideKey(error && error.message ? error.message : String(error), apiKey).slice(0, 200);
       const next = stages[i + 1];
-      console.log(`[timing] coding stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastRefused ? (noFastMode ? ', fast mode not on this account, off until restart' : ', fast mode paused for 10 minutes') : ''}`);
+      console.log(`[timing] ${stageLabel} stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastRefused ? (noFastMode ? ', fast mode not on this account, off until restart' : ', fast mode paused for 10 minutes') : ''}`);
     }
   }
 }
@@ -588,7 +597,10 @@ function createLLM(settings, { tier: requestedTier } = {}) {
 
   const ready = !configurationError && !!model;
   const maxTokens = MAX_TOKENS[tier];
-  const speedOptions = tier === 'coding' && provider === 'anthropic' ? codingSpeedOptions(model, settings.codingSpeed, apiKey) : null;
+  let speedOptions = null;
+  if (provider === 'anthropic') speedOptions = tier === 'coding' ? codingSpeedOptions(model, settings.codingSpeed, apiKey) : answerSpeedOptions(model);
+  // Names the request in the timing log when a speed stage is refused.
+  const stageLabel = tier === 'coding' ? 'coding' : 'answer';
 
   return {
     provider, model, apiKey, baseURL,
@@ -596,7 +608,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
     configurationError,
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
-      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, ...params, imageDataUrls: capImages(provider, params.imageDataUrls), turns: sanitizeTurns(params.turns) };
+      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, stageLabel, ...params, imageDataUrls: capImages(provider, params.imageDataUrls), turns: sanitizeTurns(params.turns) };
       try {
         if (provider === 'openai') return await streamOpenAI(args);
         if (provider === CUSTOM_PROVIDER) return await streamOpenAI(args);
@@ -636,5 +648,6 @@ module.exports = {
   CURRENT_ANTHROPIC_DEFAULT_SMART,
   CURRENT_ANTHROPIC_DEFAULT_CODING,
   PUBLIK_PROVIDER,
-  isRateLimitError
+  isRateLimitError,
+  answerSpeedOptions
 };
