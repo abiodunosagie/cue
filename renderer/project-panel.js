@@ -5,7 +5,9 @@
 // Everything shown here is text from main, set with textContent.
 (function () {
   const $ = (id) => document.getElementById(id);
-  let picked = '';
+  // The ticked projects' folders: one for a review, up to three apps of one
+  // system (a rider app and a driver app) for a walkthrough.
+  let picked = [];
 
   function status(text) { $('project-status').textContent = text || ''; }
 
@@ -25,17 +27,17 @@
       empty.className = 'proj-empty';
       empty.textContent = 'No recent projects found in your editors (IntelliJ, Android Studio, PyCharm, WebStorm, VS Code, Cursor). Paste the folder path below.';
       list.append(empty);
-      picked = '';
+      picked = [];
       return;
     }
-    picked = projects[0].path;
+    picked = [projects[0].path];
     projects.forEach((p, i) => {
       const row = document.createElement('label');
       row.className = 'project-row' + (i === 0 ? ' on' : '');
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.name = 'project-pick';
-      radio.checked = i === 0;
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.name = 'project-pick';
+      box.checked = i === 0;
       const text = document.createElement('span');
       text.className = 'p-text';
       const name = document.createElement('span');
@@ -45,11 +47,11 @@
       meta.className = 'p-meta';
       meta.textContent = [p.open ? `open in ${p.editor}` : `${p.editor}, ${when(p.at)}`, p.shown || p.path].filter(Boolean).join(' · ');
       text.append(name, meta);
-      row.append(radio, text);
-      radio.addEventListener('change', () => {
-        picked = p.path;
+      row.append(box, text);
+      box.addEventListener('change', () => {
+        picked = box.checked ? [...picked.filter((x) => x !== p.path), p.path] : picked.filter((x) => x !== p.path);
         $('project-path').value = '';
-        list.querySelectorAll('.project-row').forEach((r) => r.classList.toggle('on', r === row));
+        row.classList.toggle('on', box.checked);
       });
       list.append(row);
     });
@@ -58,8 +60,10 @@
   function showLoaded(loaded) {
     $('project-loaded').classList.toggle('hidden', !loaded);
     if (!loaded) return;
+    const answered = loaded.questions ? ` ${loaded.questions} likely questions are answered already and show at once.` : '';
+    const moved = loaded.changed ? ' The code has new commits since it was made: press Walk through it again to bring it up to date.' : '';
     $('project-loaded-text').textContent = loaded.purpose === 'walkthrough'
-      ? `Walkthrough of ${loaded.name} ready (${when(loaded.reviewedAt)}). In the interview, press Cmd+Shift+E on any file or app screen. Answers to questions you hear or type use it too. It stays until you press Forget it.`
+      ? `Walkthrough of ${loaded.name} ready (${when(loaded.reviewedAt)}).${answered} In the interview, press Cmd+Shift+E on any file or app screen. Answers to questions you hear or type use it too. It stays until you press Forget it.${moved}`
       : `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`;
   }
 
@@ -82,12 +86,16 @@
   async function start(purpose) {
     if (starting) return;
     const typed = $('project-path').value.trim();
-    const value = typed || picked;
-    if (!value) { status('Pick a project or paste its folder path.'); return; }
+    // Several folders can be pasted, separated by commas, for one walkthrough.
+    // A walkthrough can read several apps: ticked, or pasted with commas between.
+    // A review reads one codebase, and a pasted path is taken whole for it.
+    const values = typed ? (purpose === 'walkthrough' ? typed.split(',').map((t) => t.trim()).filter(Boolean) : [typed]) : picked;
+    if (!values.length) { status('Pick a project or paste its folder path.'); return; }
+    if (purpose === 'review' && values.length > 1) { status('Review it reads one project. Untick the others, or press Walk through it to read them together.'); return; }
     starting = true;
     starters().forEach((b) => { b.disabled = true; });
     status('Starting...');
-    const res = await window.cue.projectStart({ value, purpose }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
+    const res = await window.cue.projectStart({ values, purpose }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
     starting = false;
     starters().forEach((b) => { b.disabled = false; });
     const what = purpose === 'walkthrough' ? 'The walkthrough' : 'The review';

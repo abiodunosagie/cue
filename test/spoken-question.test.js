@@ -47,3 +47,11 @@ test('screen questions during a walkthrough point at what is shown, not at a sto
   for (const t of screen) assert.equal(isScreenQuestion(t), true, t);
   for (const t of spoken) assert.equal(isScreenQuestion(t), false, t);
 });
+
+test('a heard question counts as whole past a leading filler, and a short one only when it ends on a real word', () => {
+  const { isLikelyCompleteQuestion } = require('../renderer/spoken-question');
+  const whole = ['and why Riverpod here', 'so what does this notifier do', 'okay, how do you test it?', 'Tell me about yourself', 'How do you handle state in a large app', 'why this notifier and not bloc'];
+  const notYet = ['how do you', 'what is the', 'okay nice', 'and that is all for now', 'so um', ''];
+  for (const t of whole) assert.equal(isLikelyCompleteQuestion(t), true, t);
+  for (const t of notYet) assert.equal(isLikelyCompleteQuestion(t), false, t);
+});

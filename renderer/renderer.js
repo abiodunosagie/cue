@@ -1162,42 +1162,7 @@
   let walkthroughLoaded = false;
   let heardAt = 0;
 
-  function isLikelyCompleteQuestion(text) {
-    const trimmed = (text || '').trim();
-    
-    // Must be substantial (not just filler words)
-    if (trimmed.length < 12) return false;
-    
-    // High confidence: ends with question mark
-    if (/\?$/.test(trimmed)) return true;
-    
-    // High confidence: behavioral interview patterns (these are complete even without ?)
-    const behavioralPatterns = [
-      /tell me about a time/i,
-      /give me an example/i,
-      /describe a (situation|time|project|challenge)/i,
-      /walk me through/i,
-      /can you (tell|describe|explain|share)/i,
-      /what (was|were|is|are) your/i,
-      /how (did|do|would) you/i,
-      /why (did|do|are|should)/i,
-      /what (did|do|would) you/i,
-      /tell me about yourself/i,
-      /tell me about your/i,
-      /what.{1,30}(biggest|greatest|most|hardest|proudest)/i,
-      /have you ever/i
-    ];
-    if (behavioralPatterns.some(p => p.test(trimmed))) return true;
-    
-    // Medium confidence: question starters with substantial content
-    const questionStarters = /^(what|how|why|when|where|who|which|tell|describe|explain|can|could|would|should|have|did|do|is|are|was|were)/i;
-    if (questionStarters.test(trimmed) && trimmed.length > 25) return true;
-    
-    // Medium confidence: ends with common question endings
-    if (/(about that|for us|to us|with you|for you|about it|to share|you handle|you approach|your experience|your background)\s*$/i.test(trimmed)) return true;
-    
-    return false;
-  }
+  const isLikelyCompleteQuestion = (text) => window.SpokenQuestion.isLikelyCompleteQuestion(text);
 
   // ---- Get question confidence level ----
   function getQuestionConfidence(text) {

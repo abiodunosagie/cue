@@ -529,11 +529,11 @@
       </div>
       <div class="sc-body">
         <p class="rec-advice"><strong>Review it:</strong> for a codebase you were handed. You get how it is built, what to fix first and how.</p>
-        <p class="rec-advice"><strong>Walk through it:</strong> for a project you built. You get a script in your voice: which app screens to show, which files to open, what to say at each, and answers to likely questions. In the interview, press Cmd+Shift+E on any file or app screen and cue tells you what to say about it.</p>
+        <p class="rec-advice"><strong>Walk through it:</strong> for a project you built. Tick more than one app when they belong together, like a rider app and a driver app. You get a script in your voice: which app screens to show, which files to open, what to say at each, and answers to likely questions that show at once. In the interview, press Cmd+Shift+E on any file or app screen and cue tells you what to say about it.</p>
         <p class="rec-advice">cue reads the source files. Secrets in them are hidden before anything is sent to your AI provider.</p>
         <div class="sc-label" id="project-list-label">Recent in your editors</div>
-        <div id="project-list" class="project-list" role="radiogroup" aria-labelledby="project-list-label"></div>
-        <label class="sc-label" for="project-path">Or a folder path or GitHub link</label>
+        <div id="project-list" class="project-list" role="group" aria-labelledby="project-list-label"></div>
+        <label class="sc-label" for="project-path">Or a folder path or GitHub link (for a walkthrough of several apps, separate the folders with commas)</label>
         <input id="project-path" type="text" autocomplete="off" spellcheck="false" placeholder="~/Downloads/their-app or https://github.com/owner/repo" />
         <div id="project-loaded" class="project-loaded hidden">
           <span id="project-loaded-text"></span>

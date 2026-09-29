@@ -86,7 +86,40 @@
     return SCREEN_REFERENCE.test(text || '') || isScreenQuestion(text);
   }
 
-  const api = { modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
+  // Is the heard text a whole question yet, so it can be answered? Spoken
+  // questions often open with a filler ("and why Riverpod here", "so what does
+  // this do", "okay, how do you test it"); the check reads past it.
+  const LEADING_FILLER_RE = /^(?:(?:and|so|but|okay|ok|alright|all right|right|um+|uh+|well|now|then|also)\b[\s,.]*)+/i;
+  const BEHAVIORAL_PATTERNS = [
+    /tell me about a time/i,
+    /give me an example/i,
+    /describe a (situation|time|project|challenge)/i,
+    /walk me through/i,
+    /can you (tell|describe|explain|share)/i,
+    /what (was|were|is|are) your/i,
+    /how (did|do|would) you/i,
+    /why (did|do|are|should)/i,
+    /what (did|do|would) you/i,
+    /tell me about yourself/i,
+    /tell me about your/i,
+    /what.{1,30}(biggest|greatest|most|hardest|proudest)/i,
+    /have you ever/i
+  ];
+  const QUESTION_STARTERS = /^(what|how|why|when|where|who|which|tell|describe|explain|can|could|would|should|have|did|do|is|are|was|were)/i;
+  // A short question ("why Riverpod here") is whole only when it does not stop on
+  // a word that needs more after it ("how do you", "what is the", "why do you want to").
+  const UNFINISHED_END = /\b(you|your|the|a|an|to|do|does|did|is|are|was|were|we|i|of|for|in|on|at|with|and|or|about|how|what|why|would|could|should|can|will|want|like|use|make|get|this|that|my|our|their)\s*$/i;
+  function isLikelyCompleteQuestion(text) {
+    const trimmed = String(text || '').trim().replace(LEADING_FILLER_RE, '');
+    if (trimmed.length < 12) return false;
+    if (/\?$/.test(trimmed)) return true;
+    if (BEHAVIORAL_PATTERNS.some((p) => p.test(trimmed))) return true;
+    if (QUESTION_STARTERS.test(trimmed) && trimmed.length > 25) return true;
+    if (/^(why|how|what|where|which)\b/i.test(trimmed) && trimmed.split(/\s+/).length >= 3 && !UNFINISHED_END.test(trimmed)) return true;
+    return /(about that|for us|to us|with you|for you|about it|to share|you handle|you approach|your experience|your background)\s*$/i.test(trimmed);
+  }
+
+  const api = { isLikelyCompleteQuestion, modeForSpokenQuestion, isExplainRequest, isFixRequest, isScreenQuestion, refersToScreen };
   if (typeof window !== 'undefined') window.SpokenQuestion = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

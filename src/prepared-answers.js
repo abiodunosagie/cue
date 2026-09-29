@@ -11,7 +11,7 @@ const { writeFileAtomic, removeFileAndTemp } = require('./atomic-file');
 const { tokenize, countShared } = require('../renderer/reading-tracker');
 const { quickAsk } = require('./quick-ask');
 
-const MAX_ITEMS = 30;
+const MAX_ITEMS = 40;
 const MAX_ANSWER_CHARS = 2000;
 // Word overlap (shared distinct content words over all of them) cannot tell
 // "how do you manage state in Flutter" from "how do you test state management
@@ -25,8 +25,8 @@ const CONFIRM_TIMEOUT_MS = 1500;
 // Same idea, different word, after stemming.
 // Keys are stemmed forms: tokenize turns "repositories" into "repositori".
 const SYNONYMS = { application: 'app', program: 'app', codebase: 'project', repo: 'project', repository: 'project', repositori: 'project' };
-// Room for about 20 questions with 3 or 4 phrasings and a spoken answer each.
-const PREPARE_MAX_TOKENS = 8000;
+// Room for about 30 questions with 3 or 4 phrasings and a spoken answer each.
+const PREPARE_MAX_TOKENS = 12000;
 
 // Everything a prepared answer is built from (not the same list as the fields a
 // job profile carries, src/profiles.js). A change to any of it makes the bank stale.
@@ -51,9 +51,11 @@ function canPrepare(settings) {
 
 const PREPARE_INSTRUCTIONS =
   'This time there is no single question to answer. Apply every rule above about voice, length and using only the candidate\'s real stories to each answer below.\n\n' +
-  'List the 20 questions this interviewer is most likely to ask for this role, and write the answer the candidate should say out loud to each. ' +
+  'List the 30 questions this interviewer is most likely to ask for this role, and write the answer the candidate should say out loud to each. ' +
   'Cover: the intro ("tell me about yourself"), why this role and company, the main technical topics in the job description, ' +
-  'the behavioral questions the stories answer, strengths and weaknesses, questions about this company when company notes are given, and salary if a target is given.\n\n' +
+  'the behavioral questions the stories answer, strengths and weaknesses, questions about this company when company notes are given, salary if a target is given, ' +
+  'and the questions interviewers ask about any project on a CV: the project you are proudest of, the hardest bug or problem you solved, why you chose its architecture and state management, ' +
+  'how you tested it, how it handles bad networks and errors, how it would scale, and what you would do differently.\n\n' +
   'For each question also give 3 or 4 other ways an interviewer might phrase it.\n\n' +
   'Reply with JSON only, no prose and no code fence: an array of objects {"question": string, "variants": [string], "answer": string}.';
 
@@ -122,7 +124,9 @@ function confirmSameQuestion({ llm, heard, prepared, timeoutMs = CONFIRM_TIMEOUT
 
 // Banks for the last few profiles, keyed by the hash of the profile each was
 // made from, so switching back to another job's profile needs no rebuild.
-const MAX_BANKS = 5;
+// Up to MAX_PROFILES in src/profiles.js, with room for stale banks of edited
+// profiles, so a live profile's bank is never pushed out.
+const MAX_BANKS = 30;
 
 function readItems(list) {
   return parseItems(JSON.stringify(Array.isArray(list) ? list : []));

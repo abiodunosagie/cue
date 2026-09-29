@@ -30,6 +30,7 @@ const { registerRecordingIpc } = require('./src/ipc/recording');
 const { registerProjectReviewIpc } = require('./src/ipc/project-review');
 const { createProjectMemory } = require('./src/project-review/memory');
 const { projectMode, askTurn } = require('./src/project-review/review');
+const Profiles = require('./src/profiles');
 const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./src/prepared-answers');
 const { followUpPrompt, createFollowUpBank, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
@@ -729,8 +730,7 @@ async function prepareAnswers({ force }) {
   preparing.running = true; preparing.error = '';
   send('prepared:state', preparedState());
   try {
-    const items = await askForItems({ llm, settings, turns: [], prompt: PREPARE_INSTRUCTIONS, maxTokens: PREPARE_MAX_TOKENS, timeoutMs: PREPARE_TIMEOUT_MS });
-    if (!items.length) throw new Error('the model did not return usable answers');
+    const items = await bankItems(llm, settings);
     // The profile may have changed while this ran; then this bank is already stale.
     if (profileHash(store.getSettings()) === hash) preparedStore.replace(hash, items);
     else schedulePrepare();
@@ -744,6 +744,46 @@ async function prepareAnswers({ force }) {
   return preparedState();
 }
 
+// The likely questions and answers for one profile's settings; throws when the
+// model gave nothing usable.
+async function bankItems(llm, settings) {
+  const items = await askForItems({ llm, settings, turns: [], prompt: PREPARE_INSTRUCTIONS, maxTokens: PREPARE_MAX_TOKENS, timeoutMs: PREPARE_TIMEOUT_MS });
+  if (!items.length) throw new Error('the model did not return usable answers');
+  return items;
+}
+
+// Every other job profile gets its bank too, one at a time after the active
+// one, so switching profile right before an interview finds answers ready.
+// Shares the running flag with prepareAnswers, so only one bank is built at a
+// time; a profile that fails is tried again at the next launch.
+async function prepareOtherProfiles() {
+  if (preparing.running) return;
+  preparing.running = true;
+  try {
+    for (const name of Profiles.names(store.getSettings())) {
+      const current = store.getSettings();
+      if (name === current.activeProfile) continue;
+      let settings;
+      try { settings = { ...current, ...Profiles.switchTo(current, name).fields }; } catch { continue; }
+      const hash = profileHash(settings);
+      if (!canPrepare(settings) || preparedStore.isCurrent(hash)) continue;
+      const llm = createLLM({ ...settings, smart: true });
+      if (!llm.ready) return;
+      try {
+        const items = await bankItems(llm, settings);
+        preparedStore.replace(hash, items);
+        console.log(`[prepared] ${items.length} answers ready for the ${name} profile`);
+      } catch (e) {
+        recordEvent({ level: 'error', event: 'prepare_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareOtherProfiles', context: { provider: settings.provider } });
+      }
+    }
+  } finally {
+    preparing.running = false;
+    // An edit to the active profile while these ran was skipped: build it now.
+    if (!preparedStore.isCurrent(profileHash(store.getSettings()))) schedulePrepare();
+  }
+}
+
 // Profile edits come in bursts (typing, then Save); prepare once they settle.
 function schedulePrepare() {
   clearTimeout(prepareTimer);
@@ -755,13 +795,22 @@ function schedulePrepare() {
 // bank made from the current profile. A close but not near-identical question
 // is confirmed by the Fast model first.
 async function findPreparedAnswer(mode, userText, settings) {
-  if (mode !== 'answerThis' || normalizeLength(settings.answerLength) !== 'medium') return null;
-  // The job's prepared bank and this interview's follow-ups: the closer match wins.
-  const fromBank = preparedStore.match(userText || '', profileHash(settings));
-  const fromFollowUps = findMatch(followUps.items(), userText || '');
-  const match = !fromBank ? fromFollowUps : !fromFollowUps ? fromBank : (fromFollowUps.score > fromBank.score ? fromFollowUps : fromBank);
+  const screen = mode === 'walkthroughAnswer';
+  if ((mode !== 'answerThis' && !screen) || normalizeLength(settings.answerLength) !== 'medium') return null;
+  // The job's prepared bank, the walkthrough's likely questions and this
+  // interview's follow-ups: the closest match wins.
+  const project = projectMemory.get();
+  const candidates = [
+    preparedStore.match(userText || '', profileHash(settings)),
+    project && project.purpose === 'walkthrough' ? findMatch(project.qa, userText || '') : null,
+    findMatch(followUps.items(), userText || '')
+  ].filter(Boolean);
+  const match = candidates.reduce((best, m) => (!best || m.score > best.score ? m : best), null);
   if (!match) return null;
   if (match.direct) return match.item;
+  // A question about the screen that is only close to a saved one is answered
+  // from the screen: the saved answer may be about another file.
+  if (screen) return null;
   const fast = createLLM({ ...settings, smart: false });
   if (!fast.ready) return null;
   return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.item.question })) ? match.item : null;
@@ -1343,6 +1392,10 @@ registerCodingLibraryIpc({ ipcMain, codingLibrary });
 const recording = registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin: () => win });
 registerProjectReviewIpc({
   ipcMain, createLLM, getSettings: () => store.getSettings(), send, state, projectMemory,
+  answerSystem: () => {
+    const settings = store.getSettings();
+    return MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', [], { answerTexts: spokenAnswerTexts() }), rulesWithFocus(settings));
+  },
   userDataDir: app.getPath('userData'),
   cloneDir: path.join(app.getPath('userData'), 'cue-projects')
 });
@@ -1888,8 +1941,9 @@ function launchApp() {
 
   createWindow();
   registerShortcuts();
-  // Build the prepared answers if the profile changed since the last run.
-  prepareAnswers({ force: false });
+  // Build the prepared answers if the profile changed since the last run, then
+  // any other profile's that are missing.
+  prepareAnswers({ force: false }).then(prepareOtherProfiles, prepareOtherProfiles);
   screenWatcher.start();
 }
 

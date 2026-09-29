@@ -179,12 +179,42 @@ function kindOf(files) {
 //    animations, sample data), which is data, not code;
 //  - JSON or HTML over 20 KB anywhere (API docs, Postman exports, fixtures);
 //  - the owner's own working notes (session guides, AI assistant notes,
-//    progress logs), which are private and not part of the app.
+//    progress and issue logs, the task tracker), which are private and not part of the app.
 const WALK_DATA_MAX_CHARS = 20000;
-const WALK_NOTES_RE = /(^|\/)(SESSION_GUIDE|CLAUDE|AGENTS|GEMINI)\.md$|(^|\/)progress\.txt$|(^|\/)\.dev\//i;
+const WALK_NOTES_RE = /(^|\/)(SESSION_GUIDE|CLAUDE|AGENTS|GEMINI)\.md$|(^|\/)(progress|llm|ISSUES)\.txt$|(^|\/)\.dev\/|(^|\/)docs\/(task-tracker\.tsv|track-profile\.json)$/i;
 function walkthroughWorthy({ rel, chars }) {
   if (/^assets\//.test(rel) || WALK_NOTES_RE.test(rel)) return false;
   return !(/\.(json|html)$/.test(rel) && chars > WALK_DATA_MAX_CHARS);
 }
 
-module.exports = { collectProject, maskSecrets, treeOf, kindOf, SECRET_FILE_RE, walkthroughWorthy };
+// Several apps of one system (a rider app and a driver app) read as one
+// project: each is read on its own, so its entry points still come first, and
+// every path is prefixed with the app's folder relative to root, the folders'
+// common parent, so a follow-up can find a file again. kind is the first app's.
+function commonParent(roots) {
+  const split = roots.map((r) => path.resolve(r).split(path.sep));
+  const out = [];
+  for (let i = 0; split.every((p) => i < p.length - 1 && p[i] === split[0][i]); i++) out.push(split[0][i]);
+  return out.join(path.sep) || path.sep;
+}
+
+function collectProjects(roots, options = {}) {
+  const root = commonParent(roots);
+  const files = [];
+  const skipped = {};
+  let totalChars = 0;
+  let truncated = false;
+  let kind = 'other';
+  roots.forEach((r, i) => {
+    const got = collectProject(r, options);
+    if (i === 0) kind = kindOf(got.files);
+    const prefix = path.relative(root, path.resolve(r)).split(path.sep).join('/');
+    for (const f of got.files) files.push({ ...f, rel: prefix + '/' + f.rel });
+    for (const [why, n] of Object.entries(got.skipped)) skipped[why] = (skipped[why] || 0) + n;
+    totalChars += got.totalChars;
+    truncated = truncated || got.truncated;
+  });
+  return { root, files, skipped, totalChars, truncated, kind };
+}
+
+module.exports = { collectProject, collectProjects, commonParent, maskSecrets, treeOf, kindOf, SECRET_FILE_RE, walkthroughWorthy };

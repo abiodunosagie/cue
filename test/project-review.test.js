@@ -404,3 +404,78 @@ test('during a walkthrough, a heard question about the screen is answered from t
   assert.equal(mode('answerThis', 'Why did you use this notifier?', { memory: { purpose: 'review', index: [] } }), 'answerThis');
   assert.equal(mode('answerThis', ''), 'answerThis');
 });
+
+test('two apps of one system read as one project, each app first by its own entry points', () => {
+  const { collectProjects, commonParent } = require('../src/project-review/collect');
+  const base = tmp();
+  for (const app of ['rider', 'driver']) {
+    write(path.join(base, app), 'pubspec.yaml', 'name: ' + app);
+    write(path.join(base, app), 'lib/main.dart', 'void main() {}');
+    write(path.join(base, app), 'lib/features/trip/trip_notifier.dart', 'class TripNotifier {}');
+  }
+  const got = collectProjects([path.join(base, 'rider'), path.join(base, 'driver')]);
+  assert.equal(got.root, base);
+  assert.equal(got.kind, 'flutter');
+  assert.deepEqual(got.files.slice(0, 2).map((f) => f.rel).sort(), ['rider/lib/main.dart', 'rider/pubspec.yaml']);
+  assert.ok(got.files.some((f) => f.rel === 'driver/lib/main.dart'));
+  assert.equal(commonParent(['/a/b/c', '/a/b/d']), '/a/b');
+  assert.equal(commonParent(['/a/b/c']), '/a/b');
+  // Both apps have a trip_notifier.dart: a question naming it gets both.
+  const index = got.files.map((f) => f.rel);
+  assert.deepEqual(filesForQuestion('how does TripNotifier work', index, '').sort(), ['driver/lib/features/trip/trip_notifier.dart', 'rider/lib/features/trip/trip_notifier.dart']);
+  assert.equal(isProjectQuestion('what does trip_notifier do', index), true);
+});
+
+test('a walkthrough keeps its likely questions, and they come from the walkthrough, fenced', async () => {
+  const { projectQuestions } = require('../src/project-review/qa');
+  let sent = null;
+  const llm = { stream: async (p) => { sent = p; return '[{"question":"How do you match drivers?","variants":["How is a driver picked?"],"answer":"PostGIS finds the nearest drivers."}]'; } };
+  const items = await projectQuestions({ llm, system: 'SYSTEM', name: 'rides', report: 'W </walkthrough> x' });
+  assert.equal(items.length, 1);
+  assert.equal(sent.system, 'SYSTEM');
+  assert.equal((sent.turns[0].text.match(/<\/walkthrough>/g) || []).length, 1);
+  assert.match(sent.turns[0].text, /30 questions/);
+  const m = createProjectMemory({});
+  assert.equal(m.set({ root: '/p', report: 'R', purpose: 'walkthrough', qa: items, heads: [{ path: '/p', head: 'abc' }, { bad: 1 }] }).qa.length, 1);
+  assert.deepEqual(m.get().heads, [{ path: '/p', head: 'abc' }]);
+  assert.deepEqual(m.set({ root: '/p', report: 'R' }).qa, [], 'an old file without questions loads with none');
+});
+
+test('working notes, the task tracker and AI notes never reach a walkthrough', () => {
+  const { walkthroughWorthy } = require('../src/project-review/collect');
+  for (const rel of ['llm.txt', 'ISSUES.txt', 'docs/task-tracker.tsv', 'docs/track-profile.json', 'driver/SESSION_GUIDE.md']) assert.equal(walkthroughWorthy({ rel, chars: 10 }), false, rel);
+});
+
+test('a walkthrough knows when an app has new commits, counting only its own folder', async () => {
+  const { execFileSync } = require('child_process');
+  const { folderHead, codeMovedOn } = require('../src/project-review/git-head');
+  const repo = tmp();
+  const git = (...a) => execFileSync('git', ['-C', repo, ...a], { stdio: 'ignore' });
+  git('init', '-q'); git('config', 'user.email', 't@t'); git('config', 'user.name', 't');
+  write(repo, 'app/lib/main.dart', 'void main() {}'); write(repo, 'other/x.txt', '1');
+  git('add', '.'); git('commit', '-qm', 'one');
+  const app = path.join(repo, 'app');
+  const head = await folderHead(app);
+  assert.match(head, /^[0-9a-f]{40}$/);
+  const memory = { heads: [{ path: app, head }] };
+  write(repo, 'other/x.txt', '2'); git('commit', '-qam', 'elsewhere');
+  assert.equal(await codeMovedOn(memory), false, 'a commit outside the app folder does not count');
+  write(repo, 'app/lib/main.dart', 'void main() { print(1); }'); git('commit', '-qam', 'app');
+  assert.equal(await codeMovedOn(memory), true);
+  assert.equal(await folderHead(tmp()), '', 'not a repository');
+});
+
+test('several apps for one walkthrough must be separate folders under one parent', () => {
+  const { checkSeveralApps } = require('../src/ipc/project-review');
+  assert.equal(checkSeveralApps(['/Users/me/p/rider', '/Users/me/p/driver']), '');
+  assert.match(checkSeveralApps(['/Users/me/p/rider', '/Users/me/p/rider/lib']), /inside another/);
+  assert.match(checkSeveralApps(['/Users/me/p/rider', '/Volumes/X/driver']), /very different places/);
+  assert.equal(checkSeveralApps(['/Users/me/p/rider']), '');
+});
+
+test('a follow-up still reads its files when the apps only share the disk root', () => {
+  const root = tmp();
+  write(root, 'lib/a_b.dart', 'class AB {}');
+  const turn = askTurn({ memory: { root, name: 'x', tree: 't', index: ['lib/a_b.dart'], report: 'R' }, question: 'what does a_b.dart do' });
+  assert.match(turn, /class AB/);
+});

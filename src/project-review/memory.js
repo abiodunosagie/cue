@@ -11,10 +11,12 @@
 const fs = require('fs');
 const path = require('path');
 const { writeFileAtomic, removeFileAndTemp } = require('../atomic-file');
+const { parseItems } = require('../prepared-answers');
 
 const MAX_REPORT_CHARS = 120000;
 const MAX_TREE_CHARS = 60000;
-const MAX_INDEX = 5000;
+// Room for every file of three apps read together for one walkthrough (collect.js MAX_FILES each).
+const MAX_INDEX = 12000;
 
 function clean(m) {
   if (!m || typeof m !== 'object' || typeof m.root !== 'string' || !m.root) return null;
@@ -29,6 +31,12 @@ function clean(m) {
     report,
     // A review of a codebase the candidate was handed, or a walkthrough of their own.
     purpose: m.purpose === 'walkthrough' ? 'walkthrough' : 'review',
+    // A walkthrough's likely questions with their answers (src/project-review/qa.js).
+    qa: parseItems(JSON.stringify(Array.isArray(m.qa) ? m.qa : [])),
+    // Each app's git commit when it was read, to tell when the code moved on.
+    heads: (Array.isArray(m.heads) ? m.heads : [])
+      .filter((h) => h && typeof h.path === 'string' && typeof h.head === 'string')
+      .slice(0, 3).map((h) => ({ path: h.path, head: h.head.slice(0, 64) })), // one per app, up to MAX_WALK_APPS
     reviewedAt: Number(m.reviewedAt) || 0
   };
 }

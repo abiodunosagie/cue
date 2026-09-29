@@ -81,7 +81,7 @@ async function review({ llm, project, analyzer, purpose, onStatus = () => {}, on
   const words = purposeOf(purpose);
   const budgetChars = Math.floor(budgetTokens * CHARS_PER_TOKEN);
   const analyzerInfo = analyzer && analyzer.tool ? { tool: analyzer.tool, count: analyzer.findings.length, text: formatFindings(analyzer.findings) } : null;
-  const notSaid = [analyzer && analyzer.note, project.truncated ? 'the project passed cue\'s size cap and its last files were not read' : ''].filter(Boolean).join(' ');
+  const notSaid = [analyzer && analyzer.note, project.note, project.truncated ? 'the project passed cue\'s size cap and its last files were not read' : ''].filter(Boolean).join(' ');
   const map = mapBlock({ name: project.name, kind: project.kind, tree: project.tree, analyzer: analyzerInfo, note: notSaid, skippedNote: skippedNote(project.skipped) });
   const parts = planParts(project.files, Math.max(20000, budgetChars - map.length));
   log(`[timing] ${words.log}: ${project.files.length} files, ${parts.length} part${parts.length === 1 ? '' : 's'}, budget ${budgetChars} chars (${llm.model})`);
@@ -136,25 +136,32 @@ const ISSUE_RE = /\b(?:issue|problem|point|item|fix)\s*(?:number\s*)?#?\s*(\d{1,
 const snake = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
 const baseOf = (rel) => path.basename(rel).replace(/\.\w+$/, '').toLowerCase();
 
-// The file (from the index) a word in the question names: a file name
+// The files (from the index) a word in the question names: a file name
 // (login_screen, login_screen.dart) or a class name of two or more words
-// (LoginScreen). A single plain word (main, home, user) names nothing.
-function fileNamed(token, byBase) {
+// (LoginScreen). A single plain word (main, home, user) names nothing. Two apps
+// read together can each have a file of that name, so all of them come back.
+function filesNamed(token, byBase) {
   const bare = token.replace(/\.\w+$/, '');
   const named = /_/.test(bare) || /\.\w+$/.test(token) ? bare.toLowerCase()
     : /^[A-Z]?[a-z0-9]+(?:[A-Z][a-z0-9]+)+$/.test(bare) ? snake(bare) : '';
-  return named ? byBase.get(named) || '' : '';
+  return named ? byBase.get(named) || [] : [];
+}
+
+// Base name to every indexed path with it.
+function basesOf(index) {
+  const byBase = new Map();
+  for (const rel of index) byBase.set(baseOf(rel), [...(byBase.get(baseOf(rel)) || []), rel]);
+  return byBase;
 }
 
 // The files a question is about: named by file or class name, or by an issue
 // number from the review (the paths in that issue's section).
 function filesForQuestion(question, index, report) {
   const q = String(question || '');
-  const byBase = new Map(index.map((rel) => [baseOf(rel), rel]));
+  const byBase = basesOf(index);
   const hits = new Set();
   for (const token of q.match(/[A-Za-z_][A-Za-z0-9_.]{2,}/g) || []) {
-    const rel = fileNamed(token, byBase);
-    if (rel) hits.add(rel);
+    for (const rel of filesNamed(token, byBase)) hits.add(rel);
   }
   const issue = ISSUE_RE.exec(q);
   if (issue && report) {
@@ -170,8 +177,8 @@ function filesForQuestion(question, index, report) {
 function isProjectQuestion(question, index) {
   const q = String(question || '');
   if (PROJECT_PHRASE_RE.test(q) || ISSUE_RE.test(q)) return true;
-  const byBase = new Map(index.map((rel) => [baseOf(rel), rel]));
-  return (q.match(/[A-Za-z_][A-Za-z0-9_.]{2,}/g) || []).some((t) => !!fileNamed(t, byBase));
+  const byBase = basesOf(index);
+  return (q.match(/[A-Za-z_][A-Za-z0-9_.]{2,}/g) || []).some((t) => filesNamed(t, byBase).length > 0);
 }
 
 // Which mode a request runs as when a project is loaded. A review answers
@@ -212,7 +219,9 @@ function askTurn({ memory, question }) {
     try { if (fs.lstatSync(abs).isSymbolicLink()) continue; } catch { continue; }
     let real;
     try { real = fs.realpathSync(abs); } catch { continue; }
-    if (!real.startsWith(root + path.sep) || SECRET_FILE_RE.test(path.relative(root, real))) continue;
+    // Inside root, also when root is the disk itself ('/' + sep would be '//').
+    const within = path.relative(root, real);
+    if (!within || within.startsWith('..') || path.isAbsolute(within) || SECRET_FILE_RE.test(within)) continue;
     let text;
     try { text = maskSecrets(fs.readFileSync(real, 'utf8'), rel); } catch { continue; }
     if (size + text.length > ASK_FILE_CHARS) break;
