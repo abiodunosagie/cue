@@ -23,7 +23,7 @@ const { parseDocumentFile } = require('./src/resume');
 const { createLLM } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
-const { LENGTH_MODES, nextLength, lengthRule, normalizeLength } = require('./renderer/answer-length');
+const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
 const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
 const { registerRecordingIpc } = require('./src/ipc/recording');
@@ -696,10 +696,10 @@ async function setCapturing(active) {
 }
 
 // -------- feature runner --------
+// -------- prepared answers (src/prepare.js) --------
 const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer, prepareFollowUps } = createPrepare({
-  store, createLLM, preparedStore, followUps, projectMemory, interviewMemory, send, recordEvent,
-  getTranscript: () => transcript,
-  spokenAnswerTexts: () => spokenAnswerTexts()
+  store, createLLM, preparedStore, followUps, projectMemory, interviewMemory, send, recordEvent, spokenAnswerTexts,
+  getTranscript: () => transcript
 });
 
 // The earlier coding solves a mode builds on: the last two for a new solve,
@@ -1347,9 +1347,7 @@ ipcMain.handle('platform:info', () => ({
 }));
 registerRoundsIpc({
   ipcMain, store, createLLM, interviewMemory, send,
-  schedulePrepare: () => schedulePrepare(),
-  preparedState: () => preparedState(),
-  clearInterview: () => clearInterview()
+  schedulePrepare, preparedState, clearInterview
 });
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
@@ -1490,7 +1488,7 @@ function registerShortcuts() {
   }
 }
 
-// -------- permissions (checks in src/permissions.js) --------
+// -------- permissions window (the checks are in src/permissions.js) --------
 function createPermissionsWindow() {
   const { workArea } = screen.getPrimaryDisplay();
   const W = 500, H = 540;

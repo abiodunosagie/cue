@@ -1,13 +1,13 @@
 // The teleprompter (the Script button), created by renderer.js with what it
-// shares: $, cue and icon, the #messages view, showStatus, and getSettings(),
-// since renderer.js replaces its settings object on every save.
+// shares: cue, the #messages view, showStatus, and getSettings(), since
+// renderer.js replaces its settings object on every save.
 // The candidate reads a script they wrote, for example an intro video. The
 // words move with their voice (window.ScriptFollow): the word just said is
 // lit, words read are dimmed, and the view scrolls only as far as they have
 // read. Silence holds it still. Speech during a script never reaches the
 // interview (main drops it from the transcript and memory).
 (function () {
-  window.createTeleprompter = function ({ $, cue, icon, messages, showStatus, getSettings }) {
+  window.createTeleprompter = function ({ cue, messages, showStatus, getSettings }) {
     const teleprompter = (() => {
       const COUNTDOWN_S = 5;
       const READ_LINE = 0.35;       // the word being said sits this far down the view

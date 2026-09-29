@@ -4,7 +4,7 @@
   window.createHistorySidebar = function ({ icon }) {
     let tsSidebarInterimEl = null;
     let sidebarOpen = false;
-    // Track last committed row per channel — all chunks from same speaker go in one row
+    // Track last committed row per channel, all chunks from same speaker go in one row
     const tsLastRow = { you: null, them: null };
     const tsRowTimer = { you: null, them: null };
     const TS_SENTENCE_GAP_MS = 10000; // 10s silence = new row
@@ -90,13 +90,13 @@
         const useExisting = existingRow && existingRow.isConnected;
 
         if (useExisting) {
-          // Append to existing row — accumulates sentence fragments
+          // Append to existing row, accumulates sentence fragments
           const txt = existingRow.querySelector('.ts-text');
           if (txt) {
             txt.textContent = txt.textContent ? txt.textContent + ' ' + text : text;
           }
         } else {
-          // Start a new row (no buttons — just clean history view)
+          // Start a new row (no buttons, just clean history view)
           const row = document.createElement('div');
           row.className = 'ts-turn ts-' + channel;
 

@@ -48,7 +48,7 @@ function registerPublikIpc({ ipcMain, app, shell, store, send, recordEvent, publ
     };
     view.line = publik.balanceLine(view);
     // CONTRACT §12: the first-run card (shown while connected && !cardShown),
-    // the settings button, and the low-starter banner — all computed here so
+    // the settings button, and the low-starter banner, all computed here so
     // the renderer only paints.
     view.card = publik.ctaView(view);
     view.settingsCta = publik.settingsCta(view);
@@ -159,7 +159,7 @@ function registerPublikIpc({ ipcMain, app, shell, store, send, recordEvent, publ
     return publikState();
   });
   // "Later" or the primary button on the first-run card: the card was shown for
-  // this starter grant. Touches publik.cardShown only — the key stays in place
+  // this starter grant. Touches publik.cardShown only, the key stays in place
   // and the free starter is kept (§12.1).
   ipcMain.handle('publik:card-seen', () => {
     try { publik.markCardSeen(store); } catch (e) { recordEvent({ level: 'error', event: 'publik_card_seen_failed', msg: e.message, frame: 'publik:card-seen', context: {} }); }
@@ -176,7 +176,8 @@ function registerPublikIpc({ ipcMain, app, shell, store, send, recordEvent, publ
     shell.openExternal(target).catch(() => {});
   });
 
-  return { publikState, publikPush, publikProvision, publikNoteHeaders, publikRefreshWallet, publikScheduleWalletRefresh, publikHandleRevoked, publikHandleErrorAction };
+  // What the answer path in main.js needs; the rest stays behind the IPC.
+  return { publikNoteHeaders, publikScheduleWalletRefresh, publikHandleErrorAction };
 }
 
 module.exports = { registerPublikIpc };

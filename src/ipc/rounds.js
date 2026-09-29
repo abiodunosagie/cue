@@ -1,6 +1,7 @@
 // IPC for interview rounds: what an interview taught is kept in the job
 // profile it was for, so the next round with that company builds on it
-// (src/rounds.js). Main passes in what these need.
+// (src/rounds.js). Also the Clear interview handler, which saves the round
+// first, then clears. Main passes in what these need.
 const { summarizeRound, appendRound, canSummarize } = require('../rounds');
 
 function registerRoundsIpc({ ipcMain, store, createLLM, interviewMemory, send, schedulePrepare, preparedState, clearInterview }) {

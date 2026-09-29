@@ -5,7 +5,7 @@ const { systemPreferences, desktopCapturer } = require('electron');
 // systemPreferences.getMediaAccessStatus('screen') is unreliable: it can return
 // 'not-determined' or 'denied' even after the user has granted Screen Recording,
 // especially in dev mode (unsigned / no proper app bundle).  As a fallback we
-// actually attempt a capture and inspect the thumbnail — if it contains any
+// actually attempt a capture and inspect the thumbnail, if it contains any
 // non-zero pixel data, macOS is giving us real screen content, i.e. granted.
 async function verifyScreenAccess() {
   const sysStatus = systemPreferences.getMediaAccessStatus('screen');
@@ -61,7 +61,7 @@ async function requestPermissions() {
     }
   }
   // Windows has no OS-level "ask" dialog (systemPreferences.askForMediaAccess is
-  // macOS-only) — mic access is governed entirely by the Settings toggle the user
+  // macOS-only), mic access is governed entirely by the Settings toggle the user
   // flips themselves, which getPermissionStatus() below reads directly.
 
   const status = await getPermissionStatus();

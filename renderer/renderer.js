@@ -516,7 +516,7 @@
 
   // ---- teleprompter (the Script button) -----------------------------------
   // renderer/teleprompter-panel.js
-  const teleprompter = window.createTeleprompter({ $, cue, icon, messages, showStatus, getSettings: () => settings });
+  const teleprompter = window.createTeleprompter({ cue, messages, showStatus, getSettings: () => settings });
 
   // ---- transcript helpers ------------------------------------------------
   // NOTE: The old transcript-list element was renamed to ts-list.

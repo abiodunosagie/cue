@@ -30,9 +30,6 @@ function createPrepare({ store, createLLM, preparedStore, followUps, projectMemo
     };
   }
 
-  // One Smart call writes the likely questions and their spoken answers, with the
-  // same context and rules as a live answer. Skipped when the bank already matches
-  // the profile, unless forced from Settings.
   // Questions with spoken answers, written with the candidate's context in the
   // system prompt exactly as for a live answer, so they follow the same voice,
   // length and no-invented-stories rules. Used for the prepared bank and follow-ups.
@@ -41,6 +38,9 @@ function createPrepare({ store, createLLM, preparedStore, followUps, projectMemo
     return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
   }
 
+  // One Smart call writes the likely questions and their spoken answers, with the
+  // same context and rules as a live answer. Skipped when the bank already matches
+  // the profile, unless forced from Settings.
   async function prepareAnswers({ force }) {
     const settings = store.getSettings();
     const hash = profileHash(settings);
