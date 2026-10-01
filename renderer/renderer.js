@@ -2305,7 +2305,7 @@
     const found = RoleFocus.detectRoleFocus($('#job-description').value);
     note.textContent = found
       ? 'Auto reads this job description as ' + RoleFocus.LABELS[found] + ': answers present you as ' + RoleFocus.SUMMARIES[found] + '.'
-      : 'Auto: add the job description and cue picks Mobile or Full stack from it.';
+      : 'Auto: add the job description and cue picks ' + Object.values(RoleFocus.LABELS).join(', ').replace(/, ([^,]*)$/, ' or $1') + ' from it.';
   }
   document.querySelectorAll('#role-focus-seg button').forEach((button) => button.addEventListener('click', () => {
     settings.roleFocus = button.dataset.roleFocus;

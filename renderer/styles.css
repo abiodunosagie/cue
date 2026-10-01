@@ -488,6 +488,8 @@ button:focus { outline: none; }
 .s-seg-grid { display: grid; gap: 2px; }
 .s-seg-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .s-seg-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* One row when the panel is wide, even rows when it is narrow. */
+.s-seg-grid-fit { grid-template-columns: repeat(auto-fit, minmax(74px, 1fr)); }
 .s-seg-grid button { overflow: hidden; text-overflow: ellipsis; }
 #provider-publik { grid-column: 1 / -1; }
 .s-seg button { flex: 1; padding: 5px 10px; border-radius: 6px; border: none; background: transparent; color: rgba(255,255,255,0.62); font: 500 12px var(--font); cursor: pointer; white-space: nowrap; transition: background 140ms ease, color 140ms ease; }

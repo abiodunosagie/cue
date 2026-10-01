@@ -28,7 +28,9 @@ test('a hand-set focus wins over the job description; unknown values mean auto',
   assert.equal(resolveRoleFocus({ roleFocus: 'fullstack', jobDescription: 'Flutter developer' }), 'fullstack');
   assert.equal(resolveRoleFocus({ roleFocus: 'auto', jobDescription: 'Flutter developer' }), 'mobile');
   assert.equal(resolveRoleFocus({ roleFocus: '', jobDescription: 'Flutter developer' }), 'mobile');
-  assert.equal(normalizeRoleFocus('backend'), 'auto');
+  assert.equal(normalizeRoleFocus('devops'), 'auto');
+  assert.equal(normalizeRoleFocus('frontend'), 'frontend');
+  assert.equal(resolveRoleFocus({ roleFocus: 'backend', jobDescription: 'Flutter developer' }), 'backend');
   assert.equal(resolveRoleFocus({}), null);
 });
 
@@ -56,4 +58,42 @@ test('the longest focus line always survives the rules cap', () => {
     assert.ok(prompt.includes(line));
   }
   assert.ok(MAX_RULES_WITH_FOCUS_CHARS > MAX_AI_RULES_CHARS);
+});
+
+test('a web posting reads as front end, even when it says mobile-first', () => {
+  assert.equal(detectRoleFocus('Front-end Software Engineer. React, TypeScript, Next.js. Mobile-first responsive design.'), 'frontend');
+  assert.equal(detectRoleFocus('Frontend Developer (Vue 3, Tailwind CSS).'), 'frontend');
+  assert.equal(detectRoleFocus('UI engineer building our web app in Angular.'), 'frontend');
+});
+
+test('a server-only posting reads as back end; React Native stays mobile', () => {
+  assert.equal(detectRoleFocus('Senior Backend Engineer. Node.js, PostgreSQL, microservices.'), 'backend');
+  assert.equal(detectRoleFocus('Back-end developer: build REST APIs in Django.'), 'backend');
+  assert.equal(detectRoleFocus('React Native developer for our iOS and Android apps.'), 'mobile');
+  assert.equal(detectRoleFocus('React frontend plus Node.js APIs and PostgreSQL.'), 'fullstack');
+});
+
+test('front end and back end each get their own focus line', () => {
+  assert.doesNotMatch(FOCUS_RULES.backend, /web interface/);
+  assert.doesNotMatch(FOCUS_RULES.frontend, /APIs, data models/);
+  assert.equal(rulesWithFocus({ aiRules: '', roleFocus: 'frontend' }), FOCUS_RULES.frontend);
+});
+
+test('the job title decides over passing words elsewhere in the posting', () => {
+  assert.equal(detectRoleFocus('Back-end Engineer at a mobile-first fintech. Python, Postgres, Django.'), 'backend');
+  assert.equal(detectRoleFocus('Backend engineer. Node.js, PostgreSQL. Our mobile app consumes your APIs.'), 'backend');
+  assert.equal(detectRoleFocus('Java Backend Developer, Spring Boot, MySQL; Android client team'), 'backend');
+  assert.equal(detectRoleFocus('Backend engineer for web app platform in Django and PostgreSQL'), 'backend');
+  assert.equal(detectRoleFocus('We use iOS and React for our site. Frontend engineer'), 'frontend');
+  assert.equal(detectRoleFocus('Frontend dev. React Native not required. Typescript'), 'frontend');
+  assert.equal(detectRoleFocus('Flutter developer; our front-end team uses React and we have a web app'), 'mobile');
+});
+
+test('a title alone decides, with no stack words at all', () => {
+  assert.equal(detectRoleFocus('Backend Engineer, Lagos.'), 'backend');
+  assert.equal(detectRoleFocus('Backend Engineer for our Flutter app.'), 'backend');
+  assert.equal(detectRoleFocus('Frontend Engineer, remote.'), 'frontend');
+  assert.equal(detectRoleFocus('Mobile Engineer, remote.'), 'mobile');
+  // No title: a web posting that names iOS Safari reads as mobile, as before.
+  assert.equal(detectRoleFocus('React app tested on iOS Safari'), 'mobile');
 });
