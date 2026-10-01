@@ -224,6 +224,10 @@ function turnImages(imageDataUrl, imageDataUrls) {
 // context models) and cue sends at most 48, each under the 2000px many-image limit.
 const MAX_IMAGES = { groq: 3, azure: 50 };
 
+function imageLimit(provider) {
+  return MAX_IMAGES[provider] || Infinity;
+}
+
 function capImages(provider, imageDataUrls) {
   const max = MAX_IMAGES[provider];
   return Array.isArray(imageDataUrls) && max && imageDataUrls.length > max ? imageDataUrls.slice(-max) : imageDataUrls;
@@ -638,6 +642,7 @@ const _test = { resetFastMode: () => fastModePausedUntil.clear(), turnImages, op
 module.exports = {
   _test,
   createLLM,
+  imageLimit,
   hideKey,
   codingSpeedOptions,
   streamAnthropic,

@@ -20,7 +20,7 @@ const { registerProjectsIpc } = require('./src/ipc/projects');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
-const { createLLM } = require('./src/llm');
+const { createLLM, imageLimit } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
@@ -69,7 +69,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, fixCode: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, screenQuestions: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, fixCode: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -729,8 +729,12 @@ function priorSolvesFor(def, mode) {
 // Reading while scrolling (Settings > Answer style, default On): Cmd+H starts
 // reading, the candidate scrolls and switches tabs, Cmd+H again solves.
 let scrollReader = null;
+// 'questions' while the questions key reads a page: that key ends only its own
+// reading, so a coding question is never answered as a form by mistake.
+let scrollReaderPurpose = null;
 const cmdH = isMac ? '⌘H' : 'Ctrl+H';
 const noMouseKey = (letter) => (isMac ? 'Ctrl+Option+⌘' : 'Ctrl+Alt+Shift+') + letter;
+const questionsKey = noMouseKey('A');
 
 // The gather in progress (a promise), so a Cmd+H solve waits for it instead of
 // reading the screen at the same time; and questionEpoch, which Next question
@@ -776,25 +780,29 @@ function savedSolutionLabel(item) {
 
 // The screens of one view, unencoded ({ thumb, image }): read while the
 // candidate scrolls and switches tabs when reading is on, else the screen as it is.
-// purpose: 'solve' or 'gather', for the status line and the timing log.
+// purpose: 'solve', 'gather' or 'questions', for the status line and the timing log.
 // oneShot: the screen as it is, whatever the setting (a solve cue started on
 // its own, when the candidate is not showing it anything).
 async function readView(startedAt, purpose, { oneShot = false } = {}) {
   const capture = () => captureMaskedPage(cueWindowBounds(), { keepPanel: true });
-  if (oneShot || !store.getSettings().scrollReading) {
+  // Scrolling is the whole point of the questions key, so it reads whatever the setting.
+  if (oneShot || (purpose !== 'questions' && !store.getSettings().scrollReading)) {
     const shot = await capture();
     return shot ? [shot] : [];
   }
-  const finishes = purpose === 'gather' ? 'to stop reading' : 'to solve';
+  const key = purpose === 'questions' ? questionsKey : cmdH;
+  const finishes = purpose === 'gather' ? 'to stop reading' : purpose === 'questions' ? 'to answer them' : 'to solve';
+  const showing = purpose === 'questions' ? 'scrolled past every question' : 'shown everything';
   const reader = readScrollPages({
     capture,
     onPage: (count) => send('status', { message: count === 1
-      ? `Reading. Scroll and switch tabs until you have shown everything, then ${cmdH} ${finishes}.`
-      : `${count} screens read. Keep going, or ${cmdH} ${finishes}.` })
+      ? `Reading. Scroll and switch tabs until you have ${showing}, then ${key} ${finishes}.`
+      : `${count} screens read. Keep going, or ${key} ${finishes}.` })
   });
   scrollReader = reader;
+  scrollReaderPurpose = purpose;
   let pages;
-  try { pages = await reader.done; } finally { scrollReader = null; }
+  try { pages = await reader.done; } finally { scrollReader = null; scrollReaderPurpose = null; }
   console.log(`[timing] ${purpose}: ${pages.length} page${pages.length === 1 ? '' : 's'} read after ${Date.now() - startedAt}ms`);
   return pages;
 }
@@ -822,6 +830,24 @@ async function solveScreens(startedAt, { oneShot = false } = {}) {
   // Also replaces "then Cmd+H to solve": a later press would only say it is already answering.
   else send('status', { message: 'Read the screen. Solving it now.' });
   return { urls: urls.map((url, i) => ({ url, label: screens[i].label })), views };
+}
+
+// The images for the questions key: the page as the candidate scrolled it,
+// in scroll order, labelled. Never the coding question bundle: a form is not
+// a coding task, and it must not leak into the next Cmd+H solve.
+async function questionScreens(startedAt) {
+  if (gathering) await gathering;
+  const pages = await readView(startedAt, 'questions');
+  if (!pages.length) throw new Error('No screen source was available.');
+  const urls = fitPages(pages.map((p) => p.image), encodeScreenshot, MAX_DATA_URL_BYTES);
+  // A provider that takes fewer images keeps the last ones (src/llm.js capImages),
+  // so the first questions would be missing from an answer that looks complete.
+  const { provider } = store.getSettings();
+  const limit = imageLimit(provider);
+  send('status', { message: urls.length > limit
+    ? `Read ${urls.length} screens, but ${provider} takes only ${limit} images: the first ${urls.length - limit} are left out. Use another provider for long pages.`
+    : urls.length > 1 ? `Read ${urls.length} screens. Answering every question on them, in order.` : 'Read the screen. Answering every question on it.' });
+  return urls.map((url, i) => ({ url, label: `Screen ${i + 1} of ${urls.length}` }));
 }
 
 // Gather key: read this view into the question bundle without solving, so the
@@ -954,7 +980,8 @@ async function runFeature(mode, userText, options = {}) {
       ? def.userBubble
       : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' ? userText
         : mode === 'answerThis' || mode === 'walkthroughAnswer' ? quotedQuestion(userText) : null);
-    const category = mode !== 'leetcode' ? detectCategory(transcript) : null;
+    // A page of written questions mixes every kind, so no one category fits it.
+    const category = mode !== 'leetcode' && mode !== 'screenQuestions' ? detectCategory(transcript) : null;
     send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, showWait: def.tier === 'coding' });
 
     if (!llm.ready) {
@@ -1018,6 +1045,10 @@ async function runFeature(mode, userText, options = {}) {
           views = screens.views;
           if (screens.urls.length > 1) imageDataUrls = screens.urls;
           else imageDataUrl = screens.urls[0].url;
+        } else if (mode === 'screenQuestions') {
+          const screens = await questionScreens(startedAt);
+          if (screens.length > 1) imageDataUrls = screens;
+          else imageDataUrl = screens[0].url;
         } else if (mode === 'checkProgress' && questionBundle.count()) {
           // The question's screens as cue read them, then the editor now, so
           // the check can test cue's solution against the question itself.
@@ -1112,6 +1143,8 @@ async function runFeature(mode, userText, options = {}) {
             turns: [{ role: 'user', text: userTurn }],
             imageDataUrl,
             imageDataUrls,
+            // Only a mode that sets its own limit; otherwise the tier's stays.
+            ...(def.maxTokens ? { maxTokens: def.maxTokens } : {}),
             onToken: (t) => {
               if (!live()) return;
               if (!streamedAny && stage) console.log(`[timing] ${mode}: ${stage} first word after ${Date.now() - startedAt}ms (${streamLlm.model})`);
@@ -1483,6 +1516,16 @@ function registerShortcuts() {
   // question: forget the last question's screens and code.
   shortcutState.gather = globalShortcut.register(moveMods + 'G', gatherView);
   shortcutState.nextQuestion = globalShortcut.register(moveMods + 'N', nextQuestion);
+  // A for answer all: read a page of written questions while the candidate
+  // scrolls it (an application form, a recorded-video page), press again to
+  // answer every one in order. Ends only its own reading, never a Cmd+H one.
+  shortcutState.screenQuestions = globalShortcut.register(moveMods + 'A', () => {
+    if (scrollReader && scrollReaderPurpose === 'questions') scrollReader.finish();
+    else if (scrollReader) send('status', { message: `Still reading a coding question. Press ${cmdH} to finish it first.` });
+    else if (gathering) send('status', { message: 'Still adding the last view. Press again in a moment.' });
+    else if (state.busy) send('status', { message: 'Already answering. It shows here in a moment.' });
+    else runFeature('screenQuestions', '');
+  });
   // C for check: what is done on screen, anything wrong, and the next step.
   shortcutState.checkProgress = globalShortcut.register('CommandOrControl+Shift+C', () => runFeature('checkProgress', ''));
   for (const [name, wasRegistered] of Object.entries(shortcutState)) {

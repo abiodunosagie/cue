@@ -192,7 +192,9 @@ function buildInterviewContext(settings, mode, transcript, { answerTexts = [] } 
   // Coding problems never need personal context
   if (mode === 'leetcode') return null;
 
-  const category = detectCategory(transcript || []);
+  // A page of written questions mixes every kind (motivation, technical, salary),
+  // so it gets every block; heard speech picks one category for the rest.
+  const category = mode === 'screenQuestions' ? 'all' : detectCategory(transcript || []);
 
   const resume    = settings.resumeText || '';
   const jd        = settings.jobDescription || '';
@@ -281,6 +283,16 @@ function buildInterviewContext(settings, mode, transcript, { answerTexts = [] } 
 
     case 'technical':
       // Resume skills section is most relevant here — already included above
+      break;
+
+    // Not built from the cases above: a form wants every block, but not the
+    // behavioral "no stories" note (the prompt covers that) or the questions to ask.
+    case 'all':
+      if (hasStories) blocks.push('Your STAR Stories (use these for behavioral questions):\n' + clip(stories.trim(), STORIES_LIMIT));
+      if (whyCo)    blocks.push('Why This Company:\n' + clip(whyCo, 500));
+      if (whyLeave) blocks.push('Why Leaving Current Role:\n' + clip(whyLeave, 300));
+      if (workStyle) blocks.push('Work Style / Values:\n' + clip(workStyle, 400));
+      if (salary)   blocks.push('Salary Target:\n' + salary);
       break;
 
     case 'general':

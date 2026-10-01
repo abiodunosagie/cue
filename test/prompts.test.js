@@ -326,3 +326,45 @@ test('a heard screen question is answered first; the key gives a guide', () => {
   assert.equal(MODES.walkthroughAnswer.walkthroughScreen, true);
   assert.match(MODES.answerThis.build({ transcript: [], userText: 'q', walkthrough: WALK }), /start with the file to open/);
 });
+
+test('screenQuestions answers every written question on the page, numbered in page order', () => {
+  const { screensNote } = require('../src/prompts');
+  const def = MODES.screenQuestions;
+  assert.equal(def.needsScreen, true);
+  const system = def.buildSystem('CONTEXT BLOCK', '');
+  assert.match(system, /^CONTEXT BLOCK/);
+  assert.match(system, /every question/i);
+  assert.match(system, /never only the first/i);
+  assert.match(system, /\*\*1\. /);
+  assert.match(system, /first person/i);
+  assert.match(system, /Skip plain form fields/);
+  // Several screens: overlap is one question, answered once.
+  const many = def.build({ transcript: [], userText: '', pages: 3 });
+  assert.match(many, /3 screenshots/);
+  assert.match(many, /answered once/);
+  assert.match(many, /these screens/);
+  // One screen: no scroll note.
+  const one = def.build({ transcript: [], userText: '', pages: 1 });
+  assert.doesNotMatch(one, /screenshots/);
+  assert.match(one, /this screen/);
+  assert.equal(screensNote(1), '');
+  assert.equal(screensNote(undefined), '');
+});
+
+test('screenQuestions gets every profile block, whatever was heard', () => {
+  const { buildInterviewContext } = require('../src/interview-context');
+  const settings = { resumeText: 'Flutter engineer at Acme.', starStories: 'STORY ONE', whyCompany: 'WHY CO', whyLeaving: 'WHY LEAVE', workStyle: 'STYLE', salaryTarget: 'SALARY' };
+  const heardSalary = [{ channel: 'them', text: 'What are your salary expectations?' }];
+  const all = buildInterviewContext(settings, 'screenQuestions', heardSalary);
+  for (const part of ['STORY ONE', 'WHY CO', 'WHY LEAVE', 'STYLE', 'SALARY']) assert.ok(all.includes(part), part);
+  // Other modes still pick one category from what was heard.
+  const assist = buildInterviewContext(settings, 'assist', heardSalary);
+  assert.ok(!assist.includes('STORY ONE'));
+});
+
+test('screenQuestions has room for every answer and never reads out meta talk', () => {
+  const def = MODES.screenQuestions;
+  assert.ok(def.maxTokens >= 3000);
+  assert.match(def.buildSystem(null, ''), /never mention notes, stories, a profile or what is or is not saved/);
+  assert.match(def.buildSystem(null, ''), /never say that no story exists/);
+});

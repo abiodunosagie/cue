@@ -548,3 +548,9 @@ test('coding tier falls back to the fast model when only fast is set', () => {
     models: { azure: { fast: 'my-deployment-fast', smart: '' } } }, { tier: 'coding' });
   assert.equal(azure.model, 'my-deployment-fast');
 });
+
+test('imageLimit names the provider image cap, unlimited when none is documented', () => {
+  const { imageLimit } = require('../src/llm');
+  assert.equal(imageLimit('groq'), 3);
+  assert.equal(imageLimit('anthropic'), Infinity);
+});

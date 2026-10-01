@@ -15,8 +15,8 @@
   $('#hide-kbd').textContent = isMac ? '⌘⇧H' : 'Ctrl+Shift+H';
   // Keyboard moves keep the mouse pointer still, which matters when the screen is shared.
   $('.drag-pill').title = isMac
-    ? 'Drag to move. Without the mouse: Ctrl+Option+⌘ with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view'
-    : 'Drag to move. Without the mouse: Ctrl+Alt+Shift with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view';
+    ? 'Drag to move. Without the mouse: Ctrl+Option+⌘ with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view, with A reads a page of written questions as you scroll and answers them all'
+    : 'Drag to move. Without the mouse: Ctrl+Alt+Shift with the arrow keys moves cue, with U or D scrolls the answer, with C copies the code in view, with A reads a page of written questions as you scroll and answers them all';
 
   // ---- paint icons -------------------------------------------------------
   $('#logo-btn').innerHTML = icon('logo', { size: 18 });
