@@ -41,7 +41,7 @@ module.exports = [
   {
     id: 'flutter-three-trees',
     roles: ['mobile'],
-    anchors: ['flutter', 'widget', 'widgets'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'Can you explain the widget tree, the element tree and the render tree in Flutter?',
     variants: [
@@ -78,8 +78,8 @@ module.exports = [
   },
   {
     id: 'api-pagination-design',
-    roles: ['backend'],
-    anchors: ['api', 'pagination', 'rest'],
+    roles: ['backend', 'frontend'],
+    anchors: [],
     level: 'senior',
     question: 'How would you design pagination for an API that returns a large list?',
     variants: [

@@ -22,7 +22,7 @@ module.exports = [
   {
     id: 'flutter-mvvm',
     roles: ['mobile'],
-    anchors: ['flutter', 'mvvm', 'viewmodel'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How does MVVM work in a Flutter app?',
     variants: [
@@ -40,7 +40,7 @@ module.exports = [
   {
     id: 'flutter-repository-pattern',
     roles: ['mobile'],
-    anchors: ['flutter', 'repository'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'What is the repository pattern and why do you use it?',
     variants: [
@@ -58,7 +58,7 @@ module.exports = [
   {
     id: 'flutter-use-cases',
     roles: ['mobile'],
-    anchors: ['flutter', 'use case', 'usecase', 'use cases'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'What are use cases in clean architecture, and are they always needed?',
     variants: [
@@ -76,7 +76,7 @@ module.exports = [
   {
     id: 'flutter-folder-structure',
     roles: ['mobile'],
-    anchors: ['flutter', 'folder', 'feature first', 'structure'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you organise the folders in a Flutter project?',
     variants: [
@@ -95,7 +95,7 @@ module.exports = [
   {
     id: 'flutter-modularization',
     roles: ['mobile'],
-    anchors: ['flutter', 'monorepo', 'melos', 'packages', 'modules'],
+    anchors: ['flutter', 'melos'],
     level: 'senior',
     question: 'How would you split a large Flutter app into packages or modules?',
     variants: [
@@ -113,7 +113,7 @@ module.exports = [
   {
     id: 'flutter-environments-flavors',
     roles: ['mobile'],
-    anchors: ['flutter', 'flavor', 'flavors', 'environment', 'dart-define'],
+    anchors: ['flutter', 'dart-define'],
     level: 'mid',
     question: 'How do you manage development, staging and production environments in Flutter?',
     variants: [
@@ -132,7 +132,7 @@ module.exports = [
   {
     id: 'flutter-solid',
     roles: ['mobile'],
-    anchors: ['solid', 'flutter', 'dart'],
+    anchors: ['flutter', 'dart'],
     level: 'senior',
     question: 'How do the SOLID principles show up in your Flutter code?',
     variants: [
@@ -151,7 +151,7 @@ module.exports = [
   {
     id: 'flutter-error-architecture',
     roles: ['mobile'],
-    anchors: ['flutter', 'either', 'failure', 'dartz'],
+    anchors: ['flutter', 'either', 'dartz'],
     level: 'senior',
     question: 'How do you pass errors from the data layer up to the UI in a clean way?',
     variants: [
@@ -169,7 +169,7 @@ module.exports = [
   {
     id: 'flutter-offline-first-architecture',
     roles: ['mobile'],
-    anchors: ['flutter', 'offline'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How would you design an offline first Flutter app?',
     variants: [
@@ -189,7 +189,7 @@ module.exports = [
   {
     id: 'flutter-big-app-scaling-team',
     roles: ['mobile'],
-    anchors: ['flutter', 'lint', 'analysis_options', 'conventions'],
+    anchors: ['flutter', 'analysis_options'],
     level: 'senior',
     question: 'How do you keep code quality high in a Flutter codebase with several developers?',
     variants: [
@@ -208,7 +208,7 @@ module.exports = [
   {
     id: 'flutter-design-system',
     roles: ['mobile'],
-    anchors: ['flutter', 'theme', 'design system', 'themedata'],
+    anchors: ['flutter', 'themedata'],
     level: 'mid',
     question: 'How do you build a design system or theme in a Flutter app?',
     variants: [
@@ -227,7 +227,7 @@ module.exports = [
   {
     id: 'flutter-configuration-di-startup',
     roles: ['mobile'],
-    anchors: ['flutter', 'startup', 'splash', 'main'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'What happens in your app at start up, and how do you keep it fast?',
     variants: [
@@ -246,7 +246,7 @@ module.exports = [
   {
     id: 'flutter-architecture-tradeoff',
     roles: ['mobile'],
-    anchors: ['flutter', 'architecture'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you decide on the architecture for a new Flutter project?',
     variants: [

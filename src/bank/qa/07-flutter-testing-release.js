@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'flutter-testing-strategy',
     roles: ['mobile'],
-    anchors: ['flutter', 'testing', 'tests'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you test a Flutter app?',
     variants: [
@@ -20,7 +20,7 @@ module.exports = [
   {
     id: 'flutter-widget-tests',
     roles: ['mobile'],
-    anchors: ['flutter', 'widget test', 'pumpwidget', 'testwidgets'],
+    anchors: ['flutter', 'widget test'],
     level: 'mid',
     question: 'How do you write a widget test in Flutter?',
     variants: [
@@ -38,7 +38,7 @@ module.exports = [
   {
     id: 'flutter-mocking',
     roles: ['mobile'],
-    anchors: ['flutter', 'mocktail', 'mockito', 'mock', 'fake'],
+    anchors: ['flutter', 'mocktail', 'mockito'],
     level: 'mid',
     question: 'How do you mock dependencies in Dart tests, mocks versus fakes?',
     variants: [
@@ -56,7 +56,7 @@ module.exports = [
   {
     id: 'flutter-golden-tests',
     roles: ['mobile'],
-    anchors: ['flutter', 'golden', 'goldens', 'screenshot'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'What are golden tests, and do you use them?',
     variants: [
@@ -74,7 +74,7 @@ module.exports = [
   {
     id: 'flutter-integration-tests',
     roles: ['mobile'],
-    anchors: ['flutter', 'integration test', 'patrol', 'e2e'],
+    anchors: ['flutter', 'integration test', 'patrol'],
     level: 'senior',
     question: 'How do you do end to end or integration testing for a Flutter app?',
     variants: [
@@ -92,7 +92,7 @@ module.exports = [
   {
     id: 'flutter-ci-cd',
     roles: ['mobile'],
-    anchors: ['flutter', 'ci', 'cd', 'fastlane', 'codemagic', 'github actions'],
+    anchors: ['flutter', 'fastlane', 'codemagic'],
     level: 'senior',
     question: 'How do you set up CI/CD for a Flutter app?',
     variants: [
@@ -110,7 +110,7 @@ module.exports = [
   {
     id: 'flutter-app-signing-release',
     roles: ['mobile'],
-    anchors: ['flutter', 'signing', 'keystore', 'testflight', 'play console', 'app store'],
+    anchors: ['flutter', 'testflight'],
     level: 'mid',
     question: 'How do you release a Flutter app to the App Store and Google Play?',
     variants: [
@@ -129,7 +129,7 @@ module.exports = [
   {
     id: 'flutter-crash-reporting',
     roles: ['mobile'],
-    anchors: ['flutter', 'crashlytics', 'sentry', 'crash', 'crashes'],
+    anchors: ['flutter', 'crashlytics', 'sentry'],
     level: 'mid',
     question: 'How do you monitor crashes and errors in production?',
     variants: [
@@ -147,7 +147,7 @@ module.exports = [
   {
     id: 'flutter-shorebird-ota',
     roles: ['mobile'],
-    anchors: ['flutter', 'shorebird', 'code push', 'hotfix'],
+    anchors: ['flutter', 'shorebird'],
     level: 'senior',
     question: 'How do you ship an urgent fix to a mobile app quickly?',
     variants: [
@@ -165,7 +165,7 @@ module.exports = [
   {
     id: 'flutter-analytics',
     roles: ['mobile'],
-    anchors: ['flutter', 'analytics', 'events', 'tracking'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you add analytics to a mobile app without making a mess?',
     variants: [
@@ -183,7 +183,7 @@ module.exports = [
   {
     id: 'flutter-test-coverage-tdd',
     roles: ['mobile'],
-    anchors: ['flutter', 'tdd', 'coverage'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'Do you practise TDD, and how do you think about test coverage?',
     variants: [
@@ -200,7 +200,7 @@ module.exports = [
   {
     id: 'flutter-code-review',
     roles: ['mobile'],
-    anchors: ['flutter', 'code review', 'pull request'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'What do you look for when reviewing Flutter code?',
     variants: [
@@ -218,7 +218,7 @@ module.exports = [
   {
     id: 'flutter-version-upgrades',
     roles: ['mobile'],
-    anchors: ['flutter', 'upgrade', 'dependencies', 'pubspec'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you manage Flutter and package upgrades in a production app?',
     variants: [
@@ -236,7 +236,7 @@ module.exports = [
   {
     id: 'flutter-performance-monitoring',
     roles: ['mobile'],
-    anchors: ['flutter', 'monitoring', 'performance monitoring', 'startup time'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you monitor app performance in production, not just crashes?',
     variants: [

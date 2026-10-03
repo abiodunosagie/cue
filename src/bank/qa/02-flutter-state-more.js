@@ -22,7 +22,7 @@ module.exports = [
   {
     id: 'flutter-inheritedwidget',
     roles: ['mobile'],
-    anchors: ['flutter', 'inheritedwidget', 'provider'],
+    anchors: ['flutter', 'inheritedwidget'],
     level: 'mid',
     question: 'What is an InheritedWidget and how does Provider build on it?',
     variants: [
@@ -134,7 +134,7 @@ module.exports = [
   {
     id: 'flutter-rebuild-scope',
     roles: ['mobile'],
-    anchors: ['flutter', 'rebuild', 'rebuilds'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you stop unnecessary rebuilds in a Flutter app?',
     variants: [
@@ -154,7 +154,7 @@ module.exports = [
   {
     id: 'flutter-global-state-auth',
     roles: ['mobile'],
-    anchors: ['flutter', 'auth', 'login'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you manage the logged in user and authentication state across the app?',
     variants: [
@@ -174,7 +174,7 @@ module.exports = [
   {
     id: 'flutter-state-persistence',
     roles: ['mobile'],
-    anchors: ['flutter', 'hydrated', 'persist'],
+    anchors: ['flutter', 'hydrated'],
     level: 'mid',
     question: 'How do you keep state when the app is killed and reopened?',
     variants: [
@@ -193,7 +193,7 @@ module.exports = [
   {
     id: 'flutter-streams-in-state',
     roles: ['mobile'],
-    anchors: ['flutter', 'stream', 'streams', 'streambuilder'],
+    anchors: ['flutter', 'streambuilder'],
     level: 'mid',
     question: 'How do you use streams in Flutter, and what are the pitfalls of StreamBuilder?',
     variants: [
@@ -211,7 +211,7 @@ module.exports = [
   {
     id: 'flutter-form-state',
     roles: ['mobile'],
-    anchors: ['flutter', 'form', 'forms', 'validation'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you handle forms and validation in Flutter?',
     variants: [
@@ -229,7 +229,7 @@ module.exports = [
   {
     id: 'flutter-dependency-injection',
     roles: ['mobile'],
-    anchors: ['flutter', 'get_it', 'injection'],
+    anchors: ['flutter', 'get_it'],
     level: 'senior',
     question: 'How do you do dependency injection in Flutter?',
     variants: [

@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'ts-type-vs-interface',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'interface', 'type alias'],
+    anchors: ['typescript'],
     level: 'mid',
     question: 'What is the difference between a type alias and an interface in TypeScript?',
     variants: [
@@ -21,7 +21,7 @@ module.exports = [
   {
     id: 'ts-generics',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'generic', 'generics'],
+    anchors: ['typescript'],
     level: 'mid',
     question: 'How do you use generics in TypeScript?',
     variants: [
@@ -39,7 +39,7 @@ module.exports = [
   {
     id: 'ts-any-unknown-never',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'any', 'unknown', 'never'],
+    anchors: ['typescript'],
     level: 'mid',
     question: 'What is the difference between any, unknown and never?',
     variants: [
@@ -57,7 +57,7 @@ module.exports = [
   {
     id: 'ts-narrowing-discriminated-unions',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'union', 'discriminated union', 'narrowing', 'type guard'],
+    anchors: ['typescript'],
     level: 'senior',
     question: 'What are discriminated unions and how does narrowing work in TypeScript?',
     variants: [
@@ -75,7 +75,7 @@ module.exports = [
   {
     id: 'ts-utility-types',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'partial', 'pick', 'omit', 'record', 'utility types'],
+    anchors: ['typescript'],
     level: 'mid',
     question: 'Which TypeScript utility types do you use most?',
     variants: [
@@ -94,7 +94,7 @@ module.exports = [
   {
     id: 'ts-strict-mode',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'strict', 'tsconfig'],
+    anchors: ['typescript', 'tsconfig'],
     level: 'mid',
     question: 'What does strict mode in TypeScript do, and would you turn it on in an existing project?',
     variants: [
@@ -112,7 +112,7 @@ module.exports = [
   {
     id: 'ts-enums-vs-unions',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'enum', 'enums', 'as const'],
+    anchors: ['typescript'],
     level: 'mid',
     question: 'Do you use enums in TypeScript, or union types?',
     variants: [
@@ -130,7 +130,7 @@ module.exports = [
   {
     id: 'ts-runtime-validation',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'zod', 'validation', 'schema'],
+    anchors: ['typescript', 'zod'],
     level: 'senior',
     question: 'TypeScript types disappear at runtime, so how do you validate data from an API or a form?',
     variants: [
@@ -148,7 +148,7 @@ module.exports = [
   {
     id: 'ts-typing-react',
     roles: ['frontend'],
-    anchors: ['typescript', 'react', 'props'],
+    anchors: ['typescript', 'react'],
     level: 'mid',
     question: 'How do you type React components, props and events in TypeScript?',
     variants: [
@@ -167,7 +167,7 @@ module.exports = [
   {
     id: 'ts-mapped-conditional-types',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'mapped type', 'conditional type', 'infer'],
+    anchors: ['typescript'],
     level: 'senior',
     question: 'What are mapped types and conditional types in TypeScript?',
     variants: [
@@ -186,7 +186,7 @@ module.exports = [
   {
     id: 'ts-satisfies',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'satisfies', 'type assertion'],
+    anchors: ['typescript'],
     level: 'senior',
     question: 'What does the satisfies operator do, and how is it different from a type annotation or as?',
     variants: [
@@ -204,7 +204,7 @@ module.exports = [
   {
     id: 'ts-monorepo-shared-types',
     roles: ['frontend', 'backend'],
-    anchors: ['typescript', 'monorepo', 'shared types', 'trpc', 'openapi'],
+    anchors: ['typescript', 'trpc', 'openapi'],
     level: 'senior',
     question: 'How do you keep types in sync between the front end and the back end?',
     variants: [

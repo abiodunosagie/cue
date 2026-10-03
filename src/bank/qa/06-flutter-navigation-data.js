@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'flutter-gorouter',
     roles: ['mobile'],
-    anchors: ['flutter', 'gorouter', 'go_router', 'routing', 'navigation'],
+    anchors: ['flutter', 'gorouter', 'go_router'],
     level: 'mid',
     question: 'How do you handle navigation in Flutter, and why GoRouter?',
     variants: [
@@ -22,7 +22,7 @@ module.exports = [
   {
     id: 'flutter-route-guards',
     roles: ['mobile'],
-    anchors: ['flutter', 'gorouter', 'redirect', 'guard'],
+    anchors: ['flutter', 'gorouter'],
     level: 'senior',
     question: 'How do you protect routes that need login or a certain role?',
     variants: [
@@ -40,7 +40,7 @@ module.exports = [
   {
     id: 'flutter-deep-links',
     roles: ['mobile'],
-    anchors: ['flutter', 'deep link', 'deep links', 'universal links', 'app links'],
+    anchors: ['flutter', 'universal links', 'app links'],
     level: 'senior',
     question: 'How do you implement deep links in a Flutter app?',
     variants: [
@@ -59,7 +59,7 @@ module.exports = [
   {
     id: 'flutter-nested-navigation',
     roles: ['mobile'],
-    anchors: ['flutter', 'shellroute', 'bottom navigation', 'tabs'],
+    anchors: ['flutter', 'shellroute'],
     level: 'senior',
     question: 'How do you keep separate navigation stacks for each tab in a bottom navigation bar?',
     variants: [
@@ -77,7 +77,7 @@ module.exports = [
   {
     id: 'flutter-http-dio',
     roles: ['mobile'],
-    anchors: ['flutter', 'dio', 'http', 'interceptor', 'interceptors'],
+    anchors: ['flutter', 'dio'],
     level: 'mid',
     question: 'How do you set up networking in a Flutter app?',
     variants: [
@@ -95,7 +95,7 @@ module.exports = [
   {
     id: 'flutter-json-models',
     roles: ['mobile'],
-    anchors: ['flutter', 'json', 'fromjson', 'serialization'],
+    anchors: ['flutter'],
     level: 'junior',
     question: 'How do you convert JSON into Dart models safely?',
     variants: [
@@ -133,7 +133,7 @@ module.exports = [
   {
     id: 'flutter-caching-strategy',
     roles: ['mobile'],
-    anchors: ['flutter', 'cache', 'caching'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you cache API data in a mobile app?',
     variants: [
@@ -152,7 +152,7 @@ module.exports = [
   {
     id: 'flutter-pagination-client',
     roles: ['mobile'],
-    anchors: ['flutter', 'pagination', 'infinite scroll'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you implement pagination and infinite scroll in a Flutter app?',
     variants: [
@@ -170,7 +170,7 @@ module.exports = [
   {
     id: 'flutter-realtime-websockets',
     roles: ['mobile'],
-    anchors: ['flutter', 'websocket', 'websockets', 'realtime', 'socket'],
+    anchors: ['flutter', 'websocket', 'websockets'],
     level: 'senior',
     question: 'How would you add real time updates to a Flutter app?',
     variants: [
@@ -225,7 +225,7 @@ module.exports = [
   {
     id: 'flutter-file-upload',
     roles: ['mobile'],
-    anchors: ['flutter', 'upload', 'image picker', 'multipart'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you upload images or files from a Flutter app?',
     variants: [
@@ -243,7 +243,7 @@ module.exports = [
   {
     id: 'flutter-connectivity',
     roles: ['mobile'],
-    anchors: ['flutter', 'connectivity', 'internet'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you handle poor or no internet connection in a Flutter app?',
     variants: [
@@ -261,7 +261,7 @@ module.exports = [
   {
     id: 'flutter-maps-location',
     roles: ['mobile'],
-    anchors: ['flutter', 'location', 'maps', 'google maps', 'gps'],
+    anchors: ['flutter', 'google maps'],
     level: 'senior',
     question: 'How do you handle location tracking and maps in a Flutter app?',
     variants: [
@@ -280,7 +280,7 @@ module.exports = [
   {
     id: 'flutter-api-versioning-client',
     roles: ['mobile'],
-    anchors: ['flutter', 'force update', 'versioning', 'remote config'],
+    anchors: ['flutter', 'remote config'],
     level: 'senior',
     question: 'How do you handle old app versions when the API changes?',
     variants: [

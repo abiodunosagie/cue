@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'flutter-keys',
     roles: ['mobile'],
-    anchors: ['flutter', 'key', 'keys', 'globalkey'],
+    anchors: ['flutter', 'globalkey'],
     level: 'mid',
     question: 'What are keys in Flutter and when do you need them?',
     variants: [
@@ -21,7 +21,7 @@ module.exports = [
   {
     id: 'flutter-layout-constraints',
     roles: ['mobile'],
-    anchors: ['flutter', 'constraints', 'layout', 'overflow'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How does layout work in Flutter, and how do you fix overflow errors?',
     variants: [
@@ -41,7 +41,7 @@ module.exports = [
   {
     id: 'flutter-long-lists',
     roles: ['mobile'],
-    anchors: ['flutter', 'listview', 'list', 'lists', 'slivers'],
+    anchors: ['flutter', 'listview', 'slivers'],
     level: 'mid',
     question: 'How do you build a long list in Flutter that stays smooth?',
     variants: [
@@ -59,7 +59,7 @@ module.exports = [
   {
     id: 'flutter-jank-devtools',
     roles: ['mobile'],
-    anchors: ['flutter', 'jank', 'devtools', 'fps', 'performance'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'The app janks when scrolling. How do you find and fix the problem?',
     variants: [
@@ -79,7 +79,7 @@ module.exports = [
   {
     id: 'flutter-animations',
     roles: ['mobile'],
-    anchors: ['flutter', 'animation', 'animations', 'animationcontroller'],
+    anchors: ['flutter', 'animationcontroller'],
     level: 'mid',
     question: 'How do you do animations in Flutter, implicit versus explicit?',
     variants: [
@@ -98,7 +98,7 @@ module.exports = [
   {
     id: 'flutter-responsive-design',
     roles: ['mobile'],
-    anchors: ['flutter', 'responsive', 'tablet', 'mediaquery', 'layoutbuilder'],
+    anchors: ['flutter', 'mediaquery', 'layoutbuilder'],
     level: 'mid',
     question: 'How do you make a Flutter app work on phones, tablets and different screen sizes?',
     variants: [
@@ -116,7 +116,7 @@ module.exports = [
   {
     id: 'flutter-custom-painter',
     roles: ['mobile'],
-    anchors: ['flutter', 'custompainter', 'canvas', 'paint'],
+    anchors: ['flutter', 'custompainter'],
     level: 'senior',
     question: 'When would you use CustomPainter or a custom render object?',
     variants: [
@@ -135,7 +135,7 @@ module.exports = [
   {
     id: 'flutter-images-performance',
     roles: ['mobile'],
-    anchors: ['flutter', 'image', 'images', 'cached_network_image'],
+    anchors: ['flutter', 'cached_network_image'],
     level: 'mid',
     question: 'How do you handle images efficiently in a Flutter app?',
     variants: [
@@ -153,7 +153,7 @@ module.exports = [
   {
     id: 'flutter-stateless-stateful-lifecycle',
     roles: ['mobile'],
-    anchors: ['flutter', 'stateful', 'stateless', 'initstate', 'lifecycle'],
+    anchors: ['flutter', 'initstate'],
     level: 'junior',
     question: 'What is the lifecycle of a StatefulWidget?',
     variants: [
@@ -172,7 +172,7 @@ module.exports = [
   {
     id: 'flutter-buildcontext',
     roles: ['mobile'],
-    anchors: ['flutter', 'buildcontext', 'context'],
+    anchors: ['flutter', 'buildcontext'],
     level: 'mid',
     question: 'What is BuildContext and what are common mistakes with it?',
     variants: [
@@ -189,7 +189,7 @@ module.exports = [
   {
     id: 'flutter-platform-adaptive',
     roles: ['mobile'],
-    anchors: ['flutter', 'cupertino', 'ios', 'adaptive'],
+    anchors: ['flutter', 'cupertino', 'ios'],
     level: 'mid',
     question: 'How do you make a Flutter app feel native on both iOS and Android?',
     variants: [
@@ -207,7 +207,7 @@ module.exports = [
   {
     id: 'flutter-accessibility',
     roles: ['mobile'],
-    anchors: ['flutter', 'accessibility', 'semantics', 'screen reader'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you make a Flutter app accessible?',
     variants: [
@@ -225,7 +225,7 @@ module.exports = [
   {
     id: 'flutter-keyboard-forms-ux',
     roles: ['mobile'],
-    anchors: ['flutter', 'keyboard', 'textfield', 'focus'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you handle the keyboard and focus in Flutter forms?',
     variants: [
@@ -243,7 +243,7 @@ module.exports = [
   {
     id: 'flutter-app-size',
     roles: ['mobile'],
-    anchors: ['flutter', 'app size', 'apk', 'bundle'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you reduce the size of a Flutter app?',
     variants: [
@@ -262,7 +262,7 @@ module.exports = [
   {
     id: 'flutter-impeller',
     roles: ['mobile'],
-    anchors: ['flutter', 'impeller', 'skia', 'shader'],
+    anchors: ['flutter', 'impeller', 'skia'],
     level: 'senior',
     question: 'What is Impeller and why did Flutter move away from Skia?',
     variants: [
@@ -281,7 +281,7 @@ module.exports = [
   {
     id: 'flutter-widget-composition',
     roles: ['mobile'],
-    anchors: ['flutter', 'widget', 'widgets', 'helper'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'Why should you split UI into small widget classes instead of helper methods?',
     variants: [

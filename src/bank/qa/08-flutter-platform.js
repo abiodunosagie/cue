@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'flutter-platform-channels',
     roles: ['mobile'],
-    anchors: ['flutter', 'platform channel', 'method channel', 'pigeon', 'native'],
+    anchors: ['flutter', 'platform channel', 'method channel', 'pigeon'],
     level: 'senior',
     question: 'How do you call native Android or iOS code from Flutter?',
     variants: [
@@ -22,7 +22,7 @@ module.exports = [
   {
     id: 'flutter-ffi',
     roles: ['mobile'],
-    anchors: ['flutter', 'ffi', 'dart:ffi', 'rust'],
+    anchors: ['flutter', 'ffi', 'dart:ffi'],
     level: 'senior',
     question: 'What is Dart FFI and when would you use it instead of platform channels?',
     variants: [
@@ -41,7 +41,7 @@ module.exports = [
   {
     id: 'flutter-permissions',
     roles: ['mobile'],
-    anchors: ['flutter', 'permission', 'permissions', 'permission_handler'],
+    anchors: ['flutter', 'permission_handler'],
     level: 'mid',
     question: 'How do you handle runtime permissions in a Flutter app?',
     variants: [
@@ -59,7 +59,7 @@ module.exports = [
   {
     id: 'flutter-push-notifications',
     roles: ['mobile'],
-    anchors: ['flutter', 'push', 'notification', 'notifications', 'fcm'],
+    anchors: ['flutter', 'fcm'],
     level: 'senior',
     question: 'How do you implement push notifications in Flutter?',
     variants: [
@@ -78,7 +78,7 @@ module.exports = [
   {
     id: 'flutter-background-tasks',
     roles: ['mobile'],
-    anchors: ['flutter', 'background', 'workmanager'],
+    anchors: ['flutter', 'workmanager'],
     level: 'senior',
     question: 'How do you run work in the background in a Flutter app?',
     variants: [
@@ -96,7 +96,7 @@ module.exports = [
   {
     id: 'flutter-app-lifecycle',
     roles: ['mobile'],
-    anchors: ['flutter', 'lifecycle', 'applifecyclestate', 'resumed', 'paused'],
+    anchors: ['flutter', 'applifecyclestate'],
     level: 'mid',
     question: 'How do you react to the app going to the background or coming back?',
     variants: [
@@ -114,7 +114,7 @@ module.exports = [
   {
     id: 'flutter-security',
     roles: ['mobile'],
-    anchors: ['flutter', 'security', 'secure', 'pinning', 'obfuscation'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How do you secure a Flutter app, especially one handling money or health data?',
     variants: [
@@ -133,7 +133,7 @@ module.exports = [
   {
     id: 'flutter-localization',
     roles: ['mobile'],
-    anchors: ['flutter', 'localization', 'l10n', 'i18n', 'arb', 'translation'],
+    anchors: ['flutter', 'l10n', 'arb'],
     level: 'mid',
     question: 'How do you add multiple languages to a Flutter app?',
     variants: [
@@ -151,7 +151,7 @@ module.exports = [
   {
     id: 'flutter-payments',
     roles: ['mobile'],
-    anchors: ['flutter', 'payment', 'payments', 'stripe', 'paystack', 'in-app purchase'],
+    anchors: ['flutter', 'stripe', 'paystack', 'in-app purchase'],
     level: 'senior',
     question: 'How do you integrate payments in a mobile app safely?',
     variants: [
@@ -170,7 +170,7 @@ module.exports = [
   {
     id: 'flutter-biometrics',
     roles: ['mobile'],
-    anchors: ['flutter', 'biometric', 'biometrics', 'face id', 'fingerprint', 'local_auth'],
+    anchors: ['flutter', 'face id', 'local_auth'],
     level: 'mid',
     question: 'How do you add biometric login like Face ID or fingerprint?',
     variants: [
@@ -188,7 +188,7 @@ module.exports = [
   {
     id: 'flutter-camera-media',
     roles: ['mobile'],
-    anchors: ['flutter', 'camera', 'video', 'qr', 'scanner'],
+    anchors: ['flutter'],
     level: 'mid',
     question: 'How do you build camera or scanning features in Flutter?',
     variants: [
@@ -205,7 +205,7 @@ module.exports = [
   {
     id: 'flutter-web-desktop',
     roles: ['mobile'],
-    anchors: ['flutter web', 'flutter desktop', 'web', 'desktop'],
+    anchors: ['flutter web', 'flutter desktop'],
     level: 'mid',
     question: 'Would you use Flutter for web or desktop, and what are the trade-offs?',
     variants: [
@@ -223,7 +223,7 @@ module.exports = [
   {
     id: 'flutter-maps-native-views',
     roles: ['mobile'],
-    anchors: ['flutter', 'platform view', 'platform views', 'webview'],
+    anchors: ['flutter', 'platform view', 'platform views'],
     level: 'senior',
     question: 'What are platform views in Flutter, and what do they cost?',
     variants: [
@@ -241,7 +241,7 @@ module.exports = [
   {
     id: 'flutter-vs-native-react-native',
     roles: ['mobile'],
-    anchors: ['flutter', 'react native', 'native', 'kotlin', 'swift'],
+    anchors: ['flutter', 'react native', 'kotlin', 'swift'],
     level: 'mid',
     question: 'Why Flutter instead of native development or React Native?',
     variants: [
@@ -279,7 +279,7 @@ module.exports = [
   {
     id: 'flutter-iot-bluetooth',
     roles: ['mobile'],
-    anchors: ['flutter', 'bluetooth', 'ble', 'nfc'],
+    anchors: ['flutter'],
     level: 'senior',
     question: 'How would you build a Bluetooth Low Energy feature in Flutter?',
     variants: [

@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'js-closures',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'closure', 'closures'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'What is a closure in JavaScript, and where do you use one?',
     variants: [
@@ -23,7 +23,7 @@ module.exports = [
   {
     id: 'js-event-loop',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'event loop', 'microtask', 'promise'],
+    anchors: ['javascript', 'event loop'],
     level: 'senior',
     question: 'How does the JavaScript event loop work?',
     variants: [
@@ -43,7 +43,7 @@ module.exports = [
   {
     id: 'js-promises-async',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'promise', 'promises', 'async', 'await'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'How do promises and async await work, and how do you handle errors with them?',
     variants: [
@@ -61,7 +61,7 @@ module.exports = [
   {
     id: 'js-this-binding',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'this', 'bind', 'arrow function'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'How does this work in JavaScript, and how do arrow functions change it?',
     variants: [
@@ -79,7 +79,7 @@ module.exports = [
   {
     id: 'js-prototypes',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'prototype', 'prototypes', 'inheritance'],
+    anchors: ['javascript'],
     level: 'senior',
     question: 'How does prototypal inheritance work in JavaScript?',
     variants: [
@@ -97,7 +97,7 @@ module.exports = [
   {
     id: 'js-hoisting-scope',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'hoisting', 'var', 'let', 'const'],
+    anchors: ['javascript'],
     level: 'junior',
     question: 'What is the difference between var, let and const, and what is hoisting?',
     variants: [
@@ -115,7 +115,7 @@ module.exports = [
   {
     id: 'js-equality-types',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'equality', 'coercion', 'typeof'],
+    anchors: ['javascript'],
     level: 'junior',
     question: 'What is the difference between == and === in JavaScript?',
     variants: [
@@ -133,7 +133,7 @@ module.exports = [
   {
     id: 'js-debounce-throttle',
     roles: ['frontend'],
-    anchors: ['javascript', 'debounce', 'throttle'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'What is the difference between debounce and throttle, and when do you use each?',
     variants: [
@@ -151,7 +151,7 @@ module.exports = [
   {
     id: 'js-modules',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'esm', 'commonjs', 'modules', 'import'],
+    anchors: ['javascript', 'esm', 'commonjs'],
     level: 'mid',
     question: 'What is the difference between ES modules and CommonJS?',
     variants: [
@@ -169,7 +169,7 @@ module.exports = [
   {
     id: 'js-memory-leaks-browser',
     roles: ['frontend'],
-    anchors: ['javascript', 'memory leak', 'memory leaks', 'garbage collection'],
+    anchors: ['javascript'],
     level: 'senior',
     question: 'What causes memory leaks in a web app, and how do you find them?',
     variants: [
@@ -188,7 +188,7 @@ module.exports = [
   {
     id: 'js-map-set-weakmap',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'map', 'set', 'weakmap'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'When would you use a Map, a Set or a WeakMap instead of a plain object or array?',
     variants: [
@@ -206,7 +206,7 @@ module.exports = [
   {
     id: 'js-immutability',
     roles: ['frontend'],
-    anchors: ['javascript', 'immutable', 'immutability', 'spread'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'Why does immutability matter in front end code, and how do you update nested state?',
     variants: [
@@ -224,7 +224,7 @@ module.exports = [
   {
     id: 'js-array-methods',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'reduce', 'map', 'filter', 'array'],
+    anchors: ['javascript'],
     level: 'junior',
     question: 'How do map, filter and reduce work, and when would you use a plain loop instead?',
     variants: [
@@ -242,7 +242,7 @@ module.exports = [
   {
     id: 'js-generators-iterators',
     roles: ['frontend', 'backend'],
-    anchors: ['javascript', 'generator', 'generators', 'iterator', 'yield'],
+    anchors: ['javascript'],
     level: 'senior',
     question: 'What are iterators and generators in JavaScript?',
     variants: [
@@ -280,7 +280,7 @@ module.exports = [
   {
     id: 'js-error-handling-frontend',
     roles: ['frontend'],
-    anchors: ['javascript', 'error', 'errors', 'try catch'],
+    anchors: ['javascript'],
     level: 'mid',
     question: 'How do you handle errors in a front end application?',
     variants: [

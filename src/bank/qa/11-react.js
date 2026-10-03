@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'react-useeffect',
     roles: ['frontend'],
-    anchors: ['react', 'useeffect', 'effect'],
+    anchors: ['react', 'useeffect'],
     level: 'mid',
     question: 'How does useEffect work, and what are the common mistakes with it?',
     variants: [
@@ -23,7 +23,7 @@ module.exports = [
   {
     id: 'react-usememo-usecallback',
     roles: ['frontend'],
-    anchors: ['react', 'usememo', 'usecallback', 'memo'],
+    anchors: ['react', 'usememo', 'usecallback'],
     level: 'mid',
     question: 'When do you use useMemo, useCallback and React.memo?',
     variants: [
@@ -42,7 +42,7 @@ module.exports = [
   {
     id: 'react-rerenders',
     roles: ['frontend'],
-    anchors: ['react', 're-render', 'rerender', 'rerenders'],
+    anchors: ['react'],
     level: 'senior',
     question: 'What causes a React component to re-render, and how do you optimise rendering?',
     variants: [
@@ -60,7 +60,7 @@ module.exports = [
   {
     id: 'react-context',
     roles: ['frontend'],
-    anchors: ['react', 'context', 'usecontext'],
+    anchors: ['react', 'usecontext'],
     level: 'mid',
     question: 'When do you use React Context, and what are its performance pitfalls?',
     variants: [
@@ -100,7 +100,7 @@ module.exports = [
   {
     id: 'react-controlled-uncontrolled',
     roles: ['frontend'],
-    anchors: ['react', 'controlled', 'uncontrolled', 'form', 'forms'],
+    anchors: ['react'],
     level: 'mid',
     question: 'What are controlled and uncontrolled components, and how do you handle forms in React?',
     variants: [
@@ -119,7 +119,7 @@ module.exports = [
   {
     id: 'react-custom-hooks',
     roles: ['frontend'],
-    anchors: ['react', 'custom hook', 'hooks', 'rules of hooks'],
+    anchors: ['react', 'rules of hooks'],
     level: 'mid',
     question: 'How do you write custom hooks, and what are the rules of hooks?',
     variants: [
@@ -138,7 +138,7 @@ module.exports = [
   {
     id: 'react-error-boundaries-suspense',
     roles: ['frontend'],
-    anchors: ['react', 'error boundary', 'suspense'],
+    anchors: ['react', 'error boundary'],
     level: 'mid',
     question: 'What are error boundaries and Suspense in React?',
     variants: [
@@ -157,7 +157,7 @@ module.exports = [
   {
     id: 'react-concurrent-transitions',
     roles: ['frontend'],
-    anchors: ['react', 'usetransition', 'usedeferredvalue', 'concurrent'],
+    anchors: ['react', 'usetransition', 'usedeferredvalue'],
     level: 'senior',
     question: 'What did concurrent rendering bring in React 18, like useTransition and useDeferredValue?',
     variants: [
@@ -194,7 +194,7 @@ module.exports = [
   {
     id: 'react-refs',
     roles: ['frontend'],
-    anchors: ['react', 'useref', 'ref', 'refs', 'forwardref'],
+    anchors: ['react', 'useref', 'forwardref'],
     level: 'mid',
     question: 'What is useRef for, and when is it better than state?',
     variants: [
@@ -213,7 +213,7 @@ module.exports = [
   {
     id: 'react-reducer',
     roles: ['frontend'],
-    anchors: ['react', 'usereducer', 'reducer'],
+    anchors: ['react', 'usereducer'],
     level: 'mid',
     question: 'When do you use useReducer instead of useState?',
     variants: [
@@ -232,7 +232,7 @@ module.exports = [
   {
     id: 'react-lists-virtualization',
     roles: ['frontend'],
-    anchors: ['react', 'virtualization', 'virtualized', 'large list'],
+    anchors: ['react'],
     level: 'senior',
     question: 'How do you render a list of thousands of rows in React without it being slow?',
     variants: [
@@ -250,7 +250,7 @@ module.exports = [
   {
     id: 'react-code-splitting',
     roles: ['frontend'],
-    anchors: ['react', 'lazy', 'code splitting', 'bundle'],
+    anchors: ['react'],
     level: 'mid',
     question: 'How do you reduce the JavaScript bundle size of a React app?',
     variants: [
@@ -285,7 +285,7 @@ module.exports = [
   {
     id: 'react-component-architecture',
     roles: ['frontend'],
-    anchors: ['react', 'component', 'components', 'architecture'],
+    anchors: ['react'],
     level: 'senior',
     question: 'How do you structure components and folders in a large React codebase?',
     variants: [

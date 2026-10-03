@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'web-core-web-vitals',
     roles: ['frontend'],
-    anchors: ['core web vitals', 'lcp', 'cls', 'inp', 'lighthouse'],
+    anchors: ['core web vitals', 'lcp', 'cls', 'inp'],
     level: 'senior',
     question: 'What are Core Web Vitals and how do you improve them?',
     variants: [
@@ -22,7 +22,7 @@ module.exports = [
   {
     id: 'web-accessibility',
     roles: ['frontend'],
-    anchors: ['accessibility', 'a11y', 'aria', 'wcag', 'screen reader'],
+    anchors: ['aria', 'wcag'],
     level: 'mid',
     question: 'How do you make a web application accessible?',
     variants: [
@@ -41,7 +41,7 @@ module.exports = [
   {
     id: 'web-css-layout',
     roles: ['frontend'],
-    anchors: ['css', 'flexbox', 'grid'],
+    anchors: ['css', 'flexbox'],
     level: 'mid',
     question: 'When do you use Flexbox and when do you use CSS Grid?',
     variants: [
@@ -60,7 +60,7 @@ module.exports = [
   {
     id: 'web-css-specificity',
     roles: ['frontend'],
-    anchors: ['css', 'specificity', 'cascade', 'important'],
+    anchors: ['css'],
     level: 'junior',
     question: 'How does CSS specificity work, and how do you avoid specificity wars?',
     variants: [
@@ -79,7 +79,7 @@ module.exports = [
   {
     id: 'web-browser-rendering',
     roles: ['frontend'],
-    anchors: ['browser', 'rendering', 'reflow', 'repaint', 'critical rendering path'],
+    anchors: ['css', 'javascript'],
     level: 'senior',
     question: 'What happens when the browser renders a page, and what are reflow and repaint?',
     variants: [
@@ -99,7 +99,7 @@ module.exports = [
   {
     id: 'web-cors',
     roles: ['frontend', 'backend'],
-    anchors: ['cors', 'cross origin', 'preflight'],
+    anchors: ['cors'],
     level: 'mid',
     question: 'What is CORS and how do you fix a CORS error?',
     variants: [
@@ -117,7 +117,7 @@ module.exports = [
   {
     id: 'web-storage-cookies',
     roles: ['frontend'],
-    anchors: ['cookies', 'localstorage', 'sessionstorage', 'token storage'],
+    anchors: ['css', 'javascript'],
     level: 'mid',
     question: 'Where should you store auth tokens in the browser: cookies or localStorage?',
     variants: [
@@ -155,7 +155,7 @@ module.exports = [
   {
     id: 'web-http-caching',
     roles: ['frontend', 'backend'],
-    anchors: ['http cache', 'cache-control', 'etag', 'cdn'],
+    anchors: ['css', 'javascript'],
     level: 'senior',
     question: 'How does HTTP caching work, and how do you set Cache-Control for a web app?',
     variants: [
@@ -173,7 +173,7 @@ module.exports = [
   {
     id: 'web-lazy-loading-assets',
     roles: ['frontend'],
-    anchors: ['lazy loading', 'preload', 'prefetch', 'defer', 'async script'],
+    anchors: ['css', 'javascript'],
     level: 'mid',
     question: 'How do you load scripts, images and other assets efficiently?',
     variants: [
@@ -191,7 +191,7 @@ module.exports = [
   {
     id: 'web-pwa',
     roles: ['frontend'],
-    anchors: ['pwa', 'progressive web app', 'manifest', 'offline'],
+    anchors: ['pwa'],
     level: 'mid',
     question: 'What is a progressive web app, and when would you build one?',
     variants: [
@@ -210,7 +210,7 @@ module.exports = [
   {
     id: 'web-security-headers',
     roles: ['frontend', 'backend'],
-    anchors: ['security headers', 'hsts', 'clickjacking', 'x-frame-options'],
+    anchors: ['hsts'],
     level: 'senior',
     question: 'Which security headers do you set on a web application?',
     variants: [
@@ -230,7 +230,7 @@ module.exports = [
   {
     id: 'web-tailwind-css-strategy',
     roles: ['frontend'],
-    anchors: ['tailwind', 'css modules', 'css-in-js', 'styled components'],
+    anchors: ['tailwind', 'css modules', 'styled components'],
     level: 'mid',
     question: 'How do you approach styling in a large front end project: Tailwind, CSS Modules or CSS-in-JS?',
     variants: [
@@ -249,7 +249,7 @@ module.exports = [
   {
     id: 'web-micro-frontends',
     roles: ['frontend'],
-    anchors: ['micro frontends', 'micro frontend', 'module federation', 'monorepo'],
+    anchors: ['module federation'],
     level: 'senior',
     question: 'What are micro frontends, and when are they worth it?',
     variants: [
@@ -286,7 +286,7 @@ module.exports = [
   {
     id: 'web-internationalisation',
     roles: ['frontend'],
-    anchors: ['i18n', 'internationalization', 'localization', 'intl', 'rtl'],
+    anchors: ['css', 'javascript'],
     level: 'mid',
     question: 'How do you internationalise a web application?',
     variants: [

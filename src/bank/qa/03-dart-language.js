@@ -3,7 +3,7 @@ module.exports = [
   {
     id: 'dart-null-safety',
     roles: ['mobile'],
-    anchors: ['dart', 'null'],
+    anchors: ['dart'],
     level: 'junior',
     question: 'How does null safety work in Dart?',
     variants: [
@@ -23,7 +23,7 @@ module.exports = [
   {
     id: 'dart-final-const-late',
     roles: ['mobile'],
-    anchors: ['dart', 'const', 'final', 'late'],
+    anchors: ['dart'],
     level: 'junior',
     question: 'What is the difference between final, const and late in Dart?',
     variants: [
@@ -41,7 +41,7 @@ module.exports = [
   {
     id: 'dart-future-vs-stream',
     roles: ['mobile'],
-    anchors: ['dart', 'future', 'stream'],
+    anchors: ['dart'],
     level: 'junior',
     question: 'What is the difference between a Future and a Stream in Dart?',
     variants: [
@@ -59,7 +59,7 @@ module.exports = [
   {
     id: 'dart-event-loop',
     roles: ['mobile'],
-    anchors: ['dart', 'event loop', 'microtask'],
+    anchors: ['dart', 'event loop'],
     level: 'senior',
     question: 'How does the Dart event loop work?',
     variants: [
@@ -77,7 +77,7 @@ module.exports = [
   {
     id: 'dart-isolates',
     roles: ['mobile'],
-    anchors: ['dart', 'isolate', 'isolates', 'compute'],
+    anchors: ['dart', 'isolate', 'isolates'],
     level: 'senior',
     question: 'What are isolates and when do you use them?',
     variants: [
@@ -96,7 +96,7 @@ module.exports = [
   {
     id: 'dart-mixins-extensions',
     roles: ['mobile'],
-    anchors: ['dart', 'mixin', 'mixins', 'extension'],
+    anchors: ['dart'],
     level: 'mid',
     question: 'What are mixins and extension methods in Dart?',
     variants: [
@@ -115,7 +115,7 @@ module.exports = [
   {
     id: 'dart-sealed-records-patterns',
     roles: ['mobile'],
-    anchors: ['dart', 'sealed', 'records', 'patterns'],
+    anchors: ['dart'],
     level: 'senior',
     question: 'How do you use sealed classes, records and pattern matching in Dart 3?',
     variants: [
@@ -133,7 +133,7 @@ module.exports = [
   {
     id: 'dart-equality',
     roles: ['mobile'],
-    anchors: ['dart', 'equality', 'hashcode', 'equatable'],
+    anchors: ['dart', 'equatable'],
     level: 'mid',
     question: 'How does equality work in Dart, and why do state classes override it?',
     variants: [
@@ -151,7 +151,7 @@ module.exports = [
   {
     id: 'dart-generics',
     roles: ['mobile'],
-    anchors: ['dart', 'generic', 'generics'],
+    anchors: ['dart'],
     level: 'mid',
     question: 'How do you use generics in Dart?',
     variants: [
@@ -169,7 +169,7 @@ module.exports = [
   {
     id: 'dart-factory-named-constructors',
     roles: ['mobile'],
-    anchors: ['dart', 'factory', 'constructor', 'constructors'],
+    anchors: ['dart'],
     level: 'junior',
     question: 'What are named and factory constructors in Dart?',
     variants: [
@@ -187,7 +187,7 @@ module.exports = [
   {
     id: 'dart-iterable-lazy',
     roles: ['mobile'],
-    anchors: ['dart', 'iterable', 'map', 'where'],
+    anchors: ['dart'],
     level: 'mid',
     question: 'What does it mean that Iterable operations in Dart are lazy?',
     variants: [
@@ -206,7 +206,7 @@ module.exports = [
   {
     id: 'dart-error-handling',
     roles: ['mobile'],
-    anchors: ['dart', 'exception', 'exceptions', 'error'],
+    anchors: ['dart'],
     level: 'senior',
     question: 'How do you handle errors in a Dart and Flutter codebase?',
     variants: [
@@ -224,7 +224,7 @@ module.exports = [
   {
     id: 'dart-abstract-interface',
     roles: ['mobile'],
-    anchors: ['dart', 'abstract', 'interface', 'implements'],
+    anchors: ['dart'],
     level: 'mid',
     question: 'What is the difference between extends, implements and an abstract class in Dart?',
     variants: [
@@ -261,7 +261,7 @@ module.exports = [
   {
     id: 'dart-async-concurrency-control',
     roles: ['mobile'],
-    anchors: ['dart', 'future.wait', 'timeout', 'cancel'],
+    anchors: ['dart'],
     level: 'senior',
     question: 'How do you run several async calls at once, add timeouts or cancel them in Dart?',
     variants: [
@@ -279,7 +279,7 @@ module.exports = [
   {
     id: 'dart-typedef-callbacks',
     roles: ['mobile'],
-    anchors: ['dart', 'typedef', 'closure', 'closures'],
+    anchors: ['dart'],
     level: 'junior',
     question: 'What are closures and typedefs in Dart?',
     variants: [
@@ -297,7 +297,7 @@ module.exports = [
   {
     id: 'dart-memory-leaks',
     roles: ['mobile'],
-    anchors: ['dart', 'flutter', 'leak', 'leaks', 'dispose'],
+    anchors: ['dart', 'flutter'],
     level: 'senior',
     question: 'How do you find and prevent memory leaks in a Flutter app?',
     variants: [

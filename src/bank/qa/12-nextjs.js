@@ -40,7 +40,7 @@ module.exports = [
   {
     id: 'next-caching',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'cache', 'caching', 'revalidate'],
+    anchors: ['next.js', 'nextjs'],
     level: 'senior',
     question: 'How does caching work in the Next.js App Router?',
     variants: [
@@ -58,7 +58,7 @@ module.exports = [
   {
     id: 'next-server-actions',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'server actions', 'server action'],
+    anchors: ['next.js', 'nextjs', 'server actions'],
     level: 'senior',
     question: 'What are server actions in Next.js and how do you use them safely?',
     variants: [
@@ -76,7 +76,7 @@ module.exports = [
   {
     id: 'next-middleware',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'middleware', 'proxy'],
+    anchors: ['next.js', 'nextjs'],
     level: 'senior',
     question: 'What is middleware in Next.js and what do you use it for?',
     variants: [
@@ -94,7 +94,7 @@ module.exports = [
   {
     id: 'next-seo-metadata',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'seo', 'metadata', 'open graph'],
+    anchors: ['next.js', 'nextjs'],
     level: 'mid',
     question: 'How do you handle SEO in a Next.js application?',
     variants: [
@@ -113,7 +113,7 @@ module.exports = [
   {
     id: 'next-image-font',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'next/image', 'next/font', 'image optimization'],
+    anchors: ['next.js', 'nextjs', 'next/image', 'next/font'],
     level: 'mid',
     question: 'What do next/image and next/font do for performance?',
     variants: [
@@ -131,7 +131,7 @@ module.exports = [
   {
     id: 'next-data-fetching-patterns',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'data fetching', 'waterfall', 'streaming'],
+    anchors: ['next.js', 'nextjs'],
     level: 'senior',
     question: 'How do you fetch data in the Next.js App Router without waterfalls?',
     variants: [
@@ -149,7 +149,7 @@ module.exports = [
   {
     id: 'next-route-handlers',
     roles: ['frontend', 'backend'],
-    anchors: ['next.js', 'nextjs', 'route handler', 'api route', 'api routes'],
+    anchors: ['next.js', 'nextjs', 'route handler'],
     level: 'mid',
     question: 'How do you build API endpoints in Next.js?',
     variants: [
@@ -167,7 +167,7 @@ module.exports = [
   {
     id: 'next-auth',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'auth', 'authentication', 'session', 'auth.js'],
+    anchors: ['next.js', 'nextjs'],
     level: 'senior',
     question: 'How do you implement authentication in a Next.js app?',
     variants: [
@@ -186,7 +186,7 @@ module.exports = [
   {
     id: 'next-deployment-performance',
     roles: ['frontend'],
-    anchors: ['next.js', 'nextjs', 'vercel', 'deploy', 'edge'],
+    anchors: ['next.js', 'nextjs', 'vercel'],
     level: 'mid',
     question: 'How do you deploy a Next.js app, and what do you check for production?',
     variants: [
