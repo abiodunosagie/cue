@@ -176,7 +176,7 @@ module.exports = [
       'How do you check the user in a server component?',
       'Where do you store the session in a Next.js app?'
     ],
-    answer: 'I use a proven library or provider rather than building auth from scratch: Auth.js, Clerk, Supabase Auth or the company\'s identity provider. ' +
+    answer: 'I use a proven library or provider rather than building auth from scratch: Auth.js, Clerk or the company\'s identity provider. ' +
       'The session lives in an httpOnly, secure, same-site cookie, so JavaScript in the page cannot read it, which protects it from cross-site scripting.\n\n' +
       'On the server, I have one helper that reads and verifies the session, and every server component, route handler and server action that touches private data calls it and checks permissions. ' +
       'Middleware does a quick redirect for signed-out users, but it is not the security boundary.\n\n' +

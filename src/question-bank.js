@@ -16,7 +16,9 @@ const path = require('path');
 const { findMatches } = require('./prepared-answers');
 
 const DIR = path.join(__dirname, 'bank');
-const ROLES = ['mobile', 'frontend', 'backend', 'all'];
+// 'named': only when the question names the item's technology (an anchor), in
+// every role, for answers about a product the candidate should not volunteer.
+const ROLES = ['mobile', 'frontend', 'backend', 'all', 'named'];
 // What each resolved role focus may draw on without the question naming the
 // technology. A null focus (nothing set, nothing detected) draws on everything.
 const ROLE_SCOPE = {
@@ -72,9 +74,11 @@ function readQa(it) {
 // An item outside the role's scope still matches when the heard question names
 // its technology ("in Flutter, how do you..." during a web interview).
 function inScope(item, role, heardLower) {
+  const named = () => item.anchors.some((a) => new RegExp('\\b' + a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(heardLower));
+  if (item.roles.includes('named')) return named();
   const scope = ROLE_SCOPE[role];
   if (!scope || item.roles.some((r) => scope.includes(r))) return true;
-  return item.anchors.some((a) => new RegExp('\\b' + a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(heardLower));
+  return named();
 }
 
 // A value as a source literal both Dart and TypeScript accept: [1, 2], "a", null.

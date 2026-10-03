@@ -180,7 +180,7 @@ module.exports = [
       'Polling or websockets, how do you choose?'
     ],
     answer: 'First I check how real time it really needs to be. If updates every thirty seconds are fine, polling or a push notification that triggers a refresh is simpler and kinder to the battery. ' +
-      'For chat, live tracking or collaborative features, I use a persistent connection, like websockets or a service such as Firebase or Supabase realtime.\n\n' +
+      'For chat, live tracking or collaborative features, I use a persistent connection, like websockets or a managed realtime service such as Firebase.\n\n' +
       'I put the connection in a service that exposes streams, so screens just listen. The hard part on mobile is that connections drop all the time: network changes, the app going to the background, the phone sleeping. ' +
       'So the service reconnects with exponential backoff, re-subscribes to its channels, and after reconnecting fetches what was missed through a normal API call, using the last message id or timestamp.\n\n' +
       'Messages carry ids so duplicates are ignored, and I close the connection when the app is in the background for a while to save battery.'

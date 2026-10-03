@@ -163,3 +163,13 @@ test('renderSolution builds the steps, full code and Run it from the item', () =
   assert.match(text, /^\*\*What it asks:\*\*/);
   assert.match(text, /\*\*Run it:\*\*\n```typescript\nconsole\.log\(twoSum\(\[2, 7, 11, 15\], 9\)\); \/\/ \[0,1\]/);
 });
+
+test('an answer about a product the candidate never volunteers matches only when the question names it', () => {
+  const named = createQuestionBank({
+    qa: [{ id: 'n', roles: ['named'], anchors: ['supabase'], level: 'mid', question: 'How do you secure tables with row level security?', variants: [], answer: 'Supabase answer' }],
+    coding: []
+  });
+  assert.equal(named.matches('How do you secure tables with row level security?', 'backend').length, 0);
+  assert.equal(named.matches('How do you secure tables with row level security?', null).length, 0);
+  assert.equal(named.matches('How do you secure tables with row level security in Supabase?', 'mobile').length, 1);
+});

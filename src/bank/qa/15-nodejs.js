@@ -283,7 +283,7 @@ module.exports = [
       'The hard part is scale. Each connection stays open on one server, so when a message is produced on server A for a user connected to server B, the servers need a shared channel, like Redis pub/sub or a message broker, to fan it out. ' +
       'The load balancer must support long-lived connections.\n\n' +
       'I also design for disconnects: clients reconnect with backoff, messages have ids and are stored first, so a client can fetch what it missed after reconnecting, ' +
-      'and authentication happens when the socket opens, with authorisation checked for every channel a user joins. Managed services like Ably or Supabase Realtime are often worth it to avoid running this infrastructure.'
+      'and authentication happens when the socket opens, with authorisation checked for every channel a user joins. Managed services like Ably or Pusher are often worth it to avoid running this infrastructure.'
   },
   {
     id: 'node-file-uploads-backend',
