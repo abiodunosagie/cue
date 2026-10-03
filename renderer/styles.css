@@ -206,6 +206,8 @@ button:focus { outline: none; }
   color: rgba(255,255,255,0.93);
   font-size: 18px; font-weight: 400; line-height: 1.55; letter-spacing: -0.005em;
   text-align: left; margin: 10px 0 2px;
+  /* A long file path has no space to break at: wrap it inside the panel, never widen it. */
+  overflow-wrap: anywhere;
   -webkit-user-select: text; user-select: text;
 }
 .ai-text.small { font-size: 15px; line-height: 1.55; color: rgba(255,255,255,0.7); }

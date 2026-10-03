@@ -593,6 +593,7 @@ const MODES = {
     needsScreen: true,
     userBubble: 'Explaining this screen',
     walkthroughScreen: true, // capture the display under the pointer (main.js)
+    follow: true, // read aloud: the panel follows the voice even with a code block in it
     small: false,
     buildSystem(_contextBlock, aiRules) {
       return applyRules(

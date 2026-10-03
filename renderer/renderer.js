@@ -211,7 +211,8 @@
     aiEl.dataset.raw += t;
     if (aiEl.dataset.md === '1' || aiEl.dataset.raw.includes('```')) {
       aiEl.dataset.md = '1';
-      aiEl.dataset.noFollow = '1'; // an answer with code is worked through, not read aloud
+      // An answer with code is worked through, not read aloud, unless it is one to read aloud.
+      if (aiEl.dataset.follow !== '1') aiEl.dataset.noFollow = '1';
       if (!markdownFrame) markdownFrame = requestAnimationFrame(renderStreamingMarkdown);
       return;
     }
@@ -395,10 +396,25 @@
     // Error bubbles are skipped so a failed follow-up does not steal focus, and
     // code answers are never followed: their steps are worked through, and
     // reading one Say line aloud would jump to a later step.
-    function latestAnswer() {
+    function newestAnswer() {
       const all = messages.querySelectorAll('.ai-text:not([data-error])');
-      const el = all[all.length - 1] || null;
+      return all[all.length - 1] || null;
+    }
+    function latestAnswer() {
+      const el = newestAnswer();
       return el && el.dataset.noFollow === '1' ? null : el;
+    }
+
+    // Ctrl+Option+Cmd+H: follow the newest answer, or stop. An answer followed
+    // by default (plain spoken text) is turned off by the first press.
+    // Returns { on } or null when no answer is on screen.
+    function toggle() {
+      const el = newestAnswer();
+      if (!el) return null;
+      const turningOn = el.dataset.noFollow === '1';
+      if (turningOn) { delete el.dataset.noFollow; el.dataset.follow = '1'; } else { el.dataset.noFollow = '1'; delete el.dataset.follow; }
+      reset();
+      return { on: turningOn };
     }
 
     // Point the tracker at the newest answer. False when there is none.
@@ -486,7 +502,7 @@
       return syncAnswer() && locate(tokens, tokenize(text), -1) !== null;
     }
 
-    return { reset, update, onSpeech, isReading };
+    return { reset, update, onSpeech, isReading, toggle };
   })();
 
   // Reading pace: while the user reads an answer aloud, a small "Slow down"
@@ -1054,6 +1070,12 @@
       button.classList.toggle('on', (button.dataset.scrollReading === 'on') === on);
     });
   }
+  // Ctrl+Option+Cmd+H: follow the voice through the newest answer, or stop.
+  cue.on('follow:toggle', () => {
+    const result = readingFollow.toggle();
+    if (!result) showToast('No answer on screen to follow yet', 2200);
+    else showToast(result.on ? 'Teleprompter on: it scrolls as you read aloud' : 'Teleprompter off: scroll yourself', 2600);
+  });
   cue.on('scrollReading:changed', ({ scrollReading }) => {
     if (settings) settings.scrollReading = scrollReading;
     showScrollReading(scrollReading);
@@ -1506,7 +1528,7 @@
     setLiveDotState(speaking ? 'speaking' : 'idle');
     speakerLabel.update(channel, speaking);
   });
-  cue.on('llm:start', ({ userBubble, small, category, coding, showWait }) => {
+  cue.on('llm:start', ({ userBubble, small, category, coding, follow, showWait }) => {
     readingFollow.reset();
     paceHint.reset();
     responseCount++;
@@ -1536,7 +1558,10 @@
     startAi(small, group);
     // A coding answer is worked through step by step, not read aloud: no
     // highlight and no automatic scrolling; the user scrolls it.
-    if (coding) { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
+    if (coding) aiEl.dataset.coding = '1';
+    // A read-aloud answer is followed even with code in it; other coding answers never are.
+    if (follow) aiEl.dataset.follow = '1';
+    else if (coding) aiEl.dataset.noFollow = '1';
     // The coding model thinks before its first word: show the live wait note at
     // once (elapsed seconds and the newest thinking line); the first word removes it.
     if (showWait) showWaitNote(aiEl);
@@ -1573,7 +1598,10 @@
     pill.textContent = label;
     group.appendChild(pill);
     startAi(false, group);
-    if (quickEl.dataset.coding === '1') { aiEl.dataset.noFollow = '1'; aiEl.dataset.coding = '1'; }
+    if (quickEl.dataset.coding === '1') aiEl.dataset.coding = '1';
+    // The full part keeps the quick part's follow choice (Ctrl+Option+Cmd+H).
+    if (quickEl.dataset.follow === '1') aiEl.dataset.follow = '1';
+    else if (quickEl.dataset.coding === '1') aiEl.dataset.noFollow = '1';
     showWaitNote(aiEl);
     // A coding answer never scrolls on its own, so the full part may start out
     // of view: say where it is, once now and once when its first words land.

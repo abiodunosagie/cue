@@ -69,7 +69,7 @@ let win = null;
 // false when another application already owns the combination, and nothing used
 // to look at that — so the only symptom was a key that did nothing. Iris reads
 // this and can say which key is taken instead of guessing from a screenshot.
-const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, screenQuestions: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, fixCode: false, hide: false, hideAlt: false };
+const shortcutState = { assist: false, say: false, leetcode: false, quit: false, length: false, buyTime: false, explainCode: false, checkProgress: false, screenQuestions: false, moveLeft: false, moveRight: false, moveUp: false, moveDown: false, scrollUp: false, scrollDown: false, copyCode: false, fixCode: false, followAnswer: false, hide: false, hideAlt: false };
 const isMac = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 
@@ -982,7 +982,7 @@ async function runFeature(mode, userText, options = {}) {
         : mode === 'answerThis' || mode === 'walkthroughAnswer' ? quotedQuestion(userText) : null);
     // A page of written questions mixes every kind, so no one category fits it.
     const category = mode !== 'leetcode' && mode !== 'screenQuestions' ? detectCategory(transcript) : null;
-    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, showWait: def.tier === 'coding' });
+    send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, follow: !!def.follow, showWait: def.tier === 'coding' });
 
     if (!llm.ready) {
       const message = llm.configurationError || ('Complete the ' + settings.provider + ' provider settings. Model: ' + (llm.model || 'unset') + '.');
@@ -1512,6 +1512,8 @@ function registerShortcuts() {
   shortcutState.fixCode = globalShortcut.register(moveMods + 'F', () => runFeature('fixCode', ''));
   // L: reading while scrolling on or off (the Settings switch is the taught way).
   shortcutState.scrollReading = globalShortcut.register(moveMods + 'L', toggleScrollReading);
+  // H: the panel follows the voice through the answer on screen, or stops (any answer, code too).
+  shortcutState.followAnswer = globalShortcut.register(moveMods + 'H', () => send('follow:toggle'));
   // G for gather: add this tab of the question without solving. N for next
   // question: forget the last question's screens and code.
   shortcutState.gather = globalShortcut.register(moveMods + 'G', gatherView);

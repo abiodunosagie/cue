@@ -72,12 +72,13 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
   ipcMain.handle('project:clear', () => { projectMemory.clear(); return { ok: true }; });
 
   // Shows the saved walkthrough or review again, as an answer in the panel.
-  // coding: true renders it like the review first streamed: code blocks, no read-aloud follow.
+  // A review renders like it first streamed (code blocks, no read-aloud follow);
+  // a walkthrough is read aloud, so the panel follows the voice through it.
   ipcMain.handle('project:show', () => {
     const current = projectMemory.get();
     if (!current) return { error: 'Nothing is loaded yet.' };
     if (state.busy) return { error: BUSY };
-    send('llm:start', { userBubble: `${current.purpose === 'walkthrough' ? 'Walkthrough of' : 'Review of'} ${current.name}`, small: false, coding: true });
+    send('llm:start', { userBubble: `${current.purpose === 'walkthrough' ? 'Walkthrough of' : 'Review of'} ${current.name}`, small: false, coding: current.purpose !== 'walkthrough', follow: current.purpose === 'walkthrough' });
     // A walkthrough's likely questions follow it, so the owner can read and check them before the interview.
     const qa = current.qa.length
       ? '\n\n**Likely questions, answered at once when asked:**\n\n' + current.qa.map((q, i) => `**${i + 1}. ${q.question}**\n${q.answer}`).join('\n\n')
