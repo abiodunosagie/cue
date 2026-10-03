@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion } = require('../src/prepared-answers');
+const { createPreparedStore, profileHash, canPrepare, parseItems, findMatch, pickSameQuestion } = require('../src/prepared-answers');
 
 const items = [
   { question: 'Tell me about yourself.', variants: ['Walk me through your background.', 'Introduce yourself.', 'Can you give me a quick overview of your experience?'], answer: 'INTRO' },
@@ -35,12 +35,11 @@ test('unrelated questions are not even candidates', () => {
 
 const replying = (text, delay = 0) => ({ stream: async ({ onToken, maxTokens }) => { assert.equal(maxTokens, 5); await new Promise((r) => setTimeout(r, delay)); onToken(text); return text; } });
 
-test('the Fast model confirms a candidate only on YES; NO, errors and slowness fall back', async () => {
-  assert.equal(await confirmSameQuestion({ llm: replying('YES'), heard: 'a', prepared: 'b' }), true);
-  assert.equal(await confirmSameQuestion({ llm: replying(' yes.'), heard: 'a', prepared: 'b' }), true);
-  assert.equal(await confirmSameQuestion({ llm: replying('NO'), heard: 'a', prepared: 'b' }), false);
-  assert.equal(await confirmSameQuestion({ llm: replying('YES', 60), heard: 'a', prepared: 'b', timeoutMs: 20 }), false);
-  assert.equal(await confirmSameQuestion({ llm: { stream: async () => { throw new Error('down'); } }, heard: 'a', prepared: 'b' }), false);
+test('the Fast model picks a candidate only by its number; NONE, errors and slowness fall back', async () => {
+  assert.equal(await pickSameQuestion({ llm: replying('1'), heard: 'a', prepared: ['b'] }), 0);
+  assert.equal(await pickSameQuestion({ llm: replying('NONE'), heard: 'a', prepared: ['b'] }), -1);
+  assert.equal(await pickSameQuestion({ llm: replying('1', 60), heard: 'a', prepared: ['b'], timeoutMs: 20 }), -1);
+  assert.equal(await pickSameQuestion({ llm: { stream: async () => { throw new Error('down'); } }, heard: 'a', prepared: ['b'] }), -1);
 });
 
 test('the model reply is parsed defensively', () => {

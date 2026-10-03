@@ -1,21 +1,26 @@
 // Prepared answers: the job's likely questions answered before the interview,
 // for every profile, and the follow-ups of this interview's answers, so a heard
 // question that matches one shows its answer at once (src/prepared-answers.js,
-// src/follow-ups.js). Main passes in its stores and helpers.
+// src/follow-ups.js), or that matches the shared question bank
+// (src/question-bank.js). Main passes in its stores and helpers.
 const Profiles = require('./profiles');
 const { MODES } = require('./prompts');
 const { buildInterviewContext } = require('./interview-context');
 const { rulesWithFocus } = require('./role-focus');
 const { quickAsk } = require('./quick-ask');
 const { normalizeLength } = require('../renderer/answer-length');
-const { profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./prepared-answers');
+const { profileHash, canPrepare, parseItems, findMatches, pickSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./prepared-answers');
+const { resolveRoleFocus } = require('../renderer/role-focus');
 const { followUpPrompt, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./follow-ups');
 
 const PREPARE_TIMEOUT_MS = 180000;
 const PREPARE_DEBOUNCE_MS = 3000;
 
 // getTranscript(): the live transcript; spokenAnswerTexts(): the answers given, for the "already used" note.
-function createPrepare({ store, createLLM, preparedStore, followUps, projectMemory, interviewMemory, send, recordEvent, getTranscript, spokenAnswerTexts }) {
+// Close candidates the Fast model chooses between.
+const SHORTLIST = 3;
+
+function createPrepare({ store, createLLM, preparedStore, questionBank, followUps, projectMemory, interviewMemory, send, recordEvent, getTranscript, spokenAnswerTexts }) {
   const preparing = { running: false, error: '' };
   let prepareTimer = null;
 
@@ -126,23 +131,27 @@ function createPrepare({ store, createLLM, preparedStore, followUps, projectMemo
   async function findPreparedAnswer(mode, userText, settings) {
     const screen = mode === 'walkthroughAnswer';
     if ((mode !== 'answerThis' && !screen) || normalizeLength(settings.answerLength) !== 'medium') return null;
-    // The job's prepared bank, the walkthrough's likely questions and this
-    // interview's follow-ups: the closest match wins.
+    // The job's prepared bank, the walkthrough's likely questions, this
+    // interview's follow-ups and the shared question bank: the closest wins,
+    // and on equal scores the candidate's own answers come before the bank.
+    const heard = userText || '';
     const project = projectMemory.get();
     const candidates = [
-      preparedStore.match(userText || '', profileHash(settings)),
-      project && project.purpose === 'walkthrough' ? findMatch(project.qa, userText || '') : null,
-      findMatch(followUps.items(), userText || '')
-    ].filter(Boolean);
-    const match = candidates.reduce((best, m) => (!best || m.score > best.score ? m : best), null);
-    if (!match) return null;
-    if (match.direct) return match.item;
+      ...preparedStore.matches(heard, profileHash(settings), SHORTLIST),
+      ...(project && project.purpose === 'walkthrough' ? findMatches(project.qa, heard, SHORTLIST) : []),
+      ...findMatches(followUps.items(), heard, SHORTLIST),
+      ...(questionBank ? questionBank.matches(heard, resolveRoleFocus(settings), SHORTLIST) : [])
+    ];
+    const shortlist = candidates.sort((a, b) => b.score - a.score).slice(0, SHORTLIST);
+    if (!shortlist.length) return null;
+    if (shortlist[0].direct) return shortlist[0].item;
     // A question about the screen that is only close to a saved one is answered
     // from the screen: the saved answer may be about another file.
     if (screen) return null;
     const fast = createLLM({ ...settings, smart: false });
     if (!fast.ready) return null;
-    return (await confirmSameQuestion({ llm: fast, heard: userText, prepared: match.phrase || match.item.question })) ? match.item : null;
+    const picked = await pickSameQuestion({ llm: fast, heard, prepared: shortlist.map((m) => m.phrase || m.item.question) });
+    return picked >= 0 ? shortlist[picked].item : null;
   }
 
   // In the background after a spoken answer: the two likely follow-ups and their

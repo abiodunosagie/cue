@@ -25,6 +25,7 @@ const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
 const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
+const { createQuestionBank } = require('./src/question-bank');
 const { registerCodingLibraryIpc } = require('./src/ipc/coding-library');
 const { registerRecordingIpc } = require('./src/ipc/recording');
 const { registerProjectReviewIpc } = require('./src/ipc/project-review');
@@ -129,6 +130,8 @@ const interviewMemory = createInterviewMemory({ file: path.join(app.getPath('use
 const spokenAnswerTexts = () => interviewMemory.answers().filter((a) => a.mode !== 'leetcode').map((a) => a.text);
 interviewMemory.load();
 // Answers to the likely questions, made before the interview (cue-prepared.json).
+const questionBank = createQuestionBank();
+console.log(`[bank] ${questionBank.counts().qa} questions, ${questionBank.counts().coding} coding solutions`);
 const preparedStore = createPreparedStore({ file: path.join(app.getPath('userData'), 'cue-prepared.json') });
 preparedStore.load();
 // Every coding question solved with Cmd+H, so the same one later shows its
@@ -699,7 +702,7 @@ async function setCapturing(active) {
 // -------- feature runner --------
 // -------- prepared answers (src/prepare.js) --------
 const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer, prepareFollowUps } = createPrepare({
-  store, createLLM, preparedStore, followUps, projectMemory, interviewMemory, send, recordEvent, spokenAnswerTexts,
+  store, createLLM, preparedStore, questionBank, followUps, projectMemory, interviewMemory, send, recordEvent, spokenAnswerTexts,
   getTranscript: () => transcript
 });
 
@@ -758,7 +761,7 @@ async function lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, star
   console.log(`[timing] library: ${task ? 'read the task' : 'no task read'} after ${Date.now() - startedAt}ms (${fast.model})`);
   if (!task) return { task: null };
   if (resolvingId) return { task, replaceId: resolvingId };
-  const found = codingLibrary.candidate(task);
+  const found = codingLibrary.candidate(task, questionBank.codingItems());
   if (!found) return { task };
   const check = await confirmSameTask({ llm: fast, now: task, saved: found.item });
   console.log(`[timing] library: ${check.same ? 'same task' : 'different task'} (overlap ${found.score.toFixed(2)}) after ${Date.now() - startedAt}ms`);
@@ -774,6 +777,7 @@ async function lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, star
 }
 
 function savedSolutionLabel(item) {
+  if (item.bank) return 'Prepared solution';
   const date = new Date(item.updatedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   return `Saved solution, from ${date}`;
 }
@@ -1078,7 +1082,7 @@ async function runFeature(mode, userText, options = {}) {
     const libraryLookup = mode === 'leetcode' && (imageDataUrl || imageDataUrls)
       ? lookUpCodingLibrary({ settings, imageDataUrl, imageDataUrls, startedAt, resolvingId })
       : null;
-    const libraryFirst = !!libraryLookup && !resolvingId && codingLibrary.count() > 0;
+    const libraryFirst = !!libraryLookup && !resolvingId && codingLibrary.count() + questionBank.counts().coding > 0;
 
     const settingsForPrompt = store.getSettings();
     // Modes that read the whole interview themselves skip the digest; coding memory

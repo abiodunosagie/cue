@@ -120,37 +120,52 @@ function similarity(a, b) {
   return { score: shared / (x.size + y.size - shared), shared };
 }
 
-// The closest prepared item to the heard question: { item, score, direct },
-// direct when it is near-identical, or null when nothing is even close.
-function findMatch(items, heard) {
-  let best = null;
+// The closest prepared items to the heard question, best first, one entry per
+// item: [{ item, score, shared, phrase, direct }]. direct when near-identical.
+// minScore: how close a wording must be to count as a candidate at all.
+function findMatches(items, heard, limit = 1, minScore = CANDIDATE_MIN) {
+  const best = new Map();
   const heardWords = words(heard).size;
   for (const item of items || []) {
     for (const q of [item.question, ...(item.variants || [])]) {
       const { score, shared } = similarity(heard, q);
       // A short question ("what does this app do?" is one content word) needs
       // every word it has; longer ones need at least MIN_SHARED_WORDS.
-      if (shared < Math.min(MIN_SHARED_WORDS, heardWords) || score < CANDIDATE_MIN) continue;
+      if (shared < Math.min(MIN_SHARED_WORDS, heardWords) || score < minScore) continue;
       // phrase: the wording that matched, the one to confirm against.
-      if (!best || score > best.score) best = { item, score, shared, phrase: q };
+      const seen = best.get(item);
+      if (!seen || score > seen.score) best.set(item, { item, score, shared, phrase: q });
     }
   }
-  // One shared word is never proof enough ("Tell me about Flutter" and "Why Flutter?"): confirm first.
-  if (best) best.direct = best.score >= DIRECT_MATCH && best.shared >= MIN_SHARED_WORDS;
-  return best;
+  return [...best.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    // One shared word is never proof enough ("Tell me about Flutter" and "Why Flutter?"): confirm first.
+    .map((m) => ({ ...m, direct: m.score >= DIRECT_MATCH && m.shared >= MIN_SHARED_WORDS }));
 }
 
-const CONFIRM_SYSTEM =
-  'You decide whether two interview questions ask for the same answer. Differences in wording do not matter; ' +
-  'a different topic, a different angle (testing versus building, strength versus weakness) or a narrower scope does. ' +
-  'Reply with exactly YES or NO.';
+// The closest prepared item to the heard question: { item, score, direct },
+// or null when nothing is even close.
+function findMatch(items, heard) {
+  return findMatches(items, heard, 1)[0] || null;
+}
 
-// Ask the Fast model whether a close candidate is really the same question.
-// Resolves false on NO, on any error, and after the timeout, so doubt always
-// falls back to a normal answer.
-function confirmSameQuestion({ llm, heard, prepared, timeoutMs = CONFIRM_TIMEOUT_MS }) {
-  return quickAsk({ llm, system: CONFIRM_SYSTEM, text: 'Question heard: ' + heard + '\nPrepared question: ' + prepared, maxTokens: 5, timeoutMs })
-    .then((reply) => /^\s*yes\b/i.test(reply), () => false);
+const PICK_SYSTEM =
+  'You decide which prepared interview question, if any, asks for the same answer as the question heard. Differences in wording do not matter; ' +
+  'a different topic, a different technology, a different angle (testing versus building, strength versus weakness) or a narrower scope does. ' +
+  'Reply with only the number of the one prepared question that asks for the same answer, or NONE.';
+
+// With several close candidates, the Fast model picks the one that is the same
+// question: resolves its index, or -1 on NONE, an unclear reply, an error or the
+// timeout, so doubt always falls back to a normal answer.
+function pickSameQuestion({ llm, heard, prepared, timeoutMs = CONFIRM_TIMEOUT_MS }) {
+  const list = prepared.map((q, i) => (i + 1) + '. ' + q).join('\n');
+  return quickAsk({ llm, system: PICK_SYSTEM, text: 'Question heard: ' + heard + '\nPrepared questions:\n' + list, maxTokens: 5, timeoutMs })
+    .then((reply) => {
+      const m = /^\s*(\d+)\b/.exec(reply);
+      const n = m ? Number(m[1]) : 0;
+      return n >= 1 && n <= prepared.length ? n - 1 : -1;
+    }, () => -1);
 }
 
 // Banks for the last few profiles, keyed by the hash of the profile each was
@@ -201,12 +216,13 @@ function createPreparedStore({ file } = {}) {
     clear,
     isCurrent(hash) { const b = bankFor(hash); return !!(b && b.items.length); },
     match(heard, hash) { const b = bankFor(hash); return b ? findMatch(b.items, heard) : null; },
+    matches(heard, hash, limit) { const b = bankFor(hash); return b ? findMatches(b.items, heard, limit) : []; },
     items(hash) { const b = bankFor(hash); return b ? b.items.slice() : []; },
     summary(hash) { const b = bankFor(hash); return { count: b ? b.items.length : 0, createdAt: b ? b.createdAt : 0 }; }
   };
 }
 
 module.exports = {
-  createPreparedStore, profileHash, canPrepare, parseItems, findMatch, confirmSameQuestion,
+  createPreparedStore, profileHash, canPrepare, parseItems, findMatch, findMatches, pickSameQuestion,
   PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS
 };

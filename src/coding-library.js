@@ -148,22 +148,37 @@ function readItem(it) {
   };
 }
 
+// Bank solutions (src/question-bank.js) a progress check found wrong: id to
+// reason. The bank ships with the app and cannot be edited, so the flag lives
+// here and the item is skipped from then on.
+const BANK_ID = /^bank:[\w:.-]{1,120}$/;
+
+function readBankFlags(value) {
+  const out = {};
+  if (!value || typeof value !== 'object') return out;
+  for (const [id, reason] of Object.entries(value)) if (BANK_ID.test(id)) out[id] = clip(reason, MAX_REASON_CHARS) || 'flagged';
+  return out;
+}
+
 function createCodingLibrary({ file, now = Date.now } = {}) {
   let items = []; // newest first
+  let bankFlags = {};
 
   function load() {
     items = [];
+    bankFlags = {};
     if (!file) return items;
     try {
       const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
       items = (parsed && Array.isArray(parsed.items) ? parsed.items : []).map(readItem).filter(Boolean).slice(0, MAX_ITEMS);
+      bankFlags = readBankFlags(parsed && parsed.bankFlags);
     } catch { /* no library yet, or unreadable: start empty */ }
     return items;
   }
 
   // Returns false when the file could not be written; the library still works in memory.
   function write() {
-    return file ? writeFileAtomic(file, JSON.stringify({ items })) : true;
+    return file ? writeFileAtomic(file, JSON.stringify({ items, bankFlags })) : true;
   }
 
   const byId = (id) => items.find((it) => it.id === id) || null;
@@ -196,6 +211,11 @@ function createCodingLibrary({ file, now = Date.now } = {}) {
 
   // A progress check found this solution wrong: it is solved fresh next time.
   function flag(id, reason) {
+    if (BANK_ID.test(String(id || ''))) {
+      bankFlags[id] = clip(reason, MAX_REASON_CHARS) || 'A progress check found a mistake in it.';
+      write();
+      return true;
+    }
     const it = byId(id);
     if (!it) return false;
     it.flagged = clip(reason, MAX_REASON_CHARS) || 'A progress check found a mistake in it.';
@@ -216,7 +236,9 @@ function createCodingLibrary({ file, now = Date.now } = {}) {
     flag,
     remove,
     get: (id) => { const it = byId(id); return it ? { ...it } : null; },
-    candidate: (task) => findCandidate(items, task),
+    // The closest saved task, own solves first, then the bank's unflagged
+    // items; on an equal score the candidate's own solve wins.
+    candidate: (task, bankItems = []) => findCandidate([...items, ...bankItems.filter((b) => !bankFlags[b.id])], task),
     count: () => items.length,
     list: () => items.map((it) => ({ ...it }))
   };
