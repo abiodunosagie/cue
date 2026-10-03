@@ -14,6 +14,7 @@
 const fs = require('fs');
 const path = require('path');
 const { findMatches } = require('./prepared-answers');
+const { literal } = require('./bank/literal');
 
 const DIR = path.join(__dirname, 'bank');
 // 'named': only when the question names the item's technology (an anchor), in
@@ -79,15 +80,6 @@ function inScope(item, role, heardLower) {
   const scope = ROLE_SCOPE[role];
   if (!scope || item.roles.some((r) => scope.includes(r))) return true;
   return named();
-}
-
-// A value as a source literal both Dart and TypeScript accept: [1, 2], "a", null.
-// Dart reads $ in a string as interpolation, so it is escaped there.
-function literal(value, lang) {
-  if (Array.isArray(value)) return '[' + value.map((v) => literal(v, lang)).join(', ') + ']';
-  if (value && typeof value === 'object') return '{' + Object.entries(value).map(([k, v]) => literal(k, lang) + ': ' + literal(v, lang)).join(', ') + '}';
-  const json = JSON.stringify(value === undefined ? null : value);
-  return lang === 'dart' && typeof value === 'string' ? json.replace(/\$/g, '\\$') : json;
 }
 
 function runBlock(item, lang) {
