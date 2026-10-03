@@ -49,15 +49,17 @@ test('every bank coding problem renders for both languages with no step marks le
 // ---- the shipped bank: matching ---------------------------------------------
 
 test('every bank question and phrasing finds its own item first, and never another item outright', () => {
+  const problems = [];
   for (const it of qa) {
     for (const phrase of [it.question, ...it.variants]) {
       const [top] = findMatches(qa, phrase, 1);
-      assert.ok(top, `"${phrase}" matches nothing`);
-      assert.equal(top.item.id, it.id, `"${phrase}" matched ${top.item.id}`);
-      const others = findMatches(qa.filter((o) => o !== it), phrase, 1);
-      assert.ok(!others.length || !others[0].direct, `"${phrase}" directly matches ${others[0] && others[0].item.id}`);
+      if (!top) problems.push(`${it.id}: "${phrase}" matches nothing`);
+      else if (top.item.id !== it.id) problems.push(`${it.id}: "${phrase}" matched ${top.item.id}`);
+      const [other] = findMatches(qa.filter((o) => o !== it), phrase, 1);
+      if (other && other.direct) problems.push(`${it.id}: "${phrase}" directly matches ${other.item.id}`);
     }
   }
+  assert.deepEqual(problems, []);
 });
 
 // ---- role scope ---------------------------------------------------------------
