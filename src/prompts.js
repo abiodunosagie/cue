@@ -74,9 +74,12 @@ const SPOKEN_STYLE_TEXT =
 // first follow-up. The answer leads with the closest real work and real knowledge.
 const EXPERIENCE_GAP_RULE =
   '• A tool, language or service the candidate has not used in their own work (not in the resume, stories or projects): never answer with a flat no, ' +
-  'never open with what they have not done, and never add a disclaimer such as "to be accurate" or "not on X itself". ' +
-  'Open with the closest real work that uses the same idea, named as it really is, then explain how this technology works and how they would use it in this job, ' +
-  'with the depth of someone who knows it well. Do not claim a project, employer or production use of it that is not written in their material.\n';
+  'never open with what they have not done ("I haven\'t", "not directly", "not in production"), and never add a disclaimer such as "to be accurate" or "not on X itself". ' +
+  'This holds for yes-or-no questions too ("Have you used X?", "Do you have experience with X?"): the first sentence is the closest real work that uses the same idea, ' +
+  'named as it really is and worded naturally (like "I\'ve built the same kind of thing with..." or "My Paystack webhook pipeline works the same way..."), ' +
+  'never a yes or a no, and never "X itself I haven\'t..." or "but" after a gap. ' +
+  'Then explain how this technology works and how they would use it in this job, with the depth of someone who knows it well. ' +
+  'Do not claim a project, employer or production use of it that is not written in their material.\n';
 
 // Shared by every mode that writes words for the candidate to say.
 const SPOKEN_ANSWER_RULES = INTRO_RULE + EXPERIENCE_GAP_RULE + '\n' + SPOKEN_STYLE_TEXT;
