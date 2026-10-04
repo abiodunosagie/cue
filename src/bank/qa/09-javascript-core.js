@@ -7,6 +7,8 @@ module.exports = [
     level: 'mid',
     question: 'What is a closure in JavaScript, and where do you use one?',
     variants: [
+      'What is a closure?',
+      'Can you explain closures?',
       'Explain closures with an example.',
       'Why does a function remember variables after its parent returned?',
       'What is the classic closure bug with var in a loop?',
@@ -27,6 +29,7 @@ module.exports = [
     level: 'senior',
     question: 'How does the JavaScript event loop work?',
     variants: [
+      'What is the event loop?',
       'Explain the call stack, task queue and microtask queue.',
       'Why does a promise callback run before setTimeout with zero delay?',
       'Is JavaScript single threaded?',
@@ -101,6 +104,7 @@ module.exports = [
     level: 'junior',
     question: 'What is the difference between var, let and const, and what is hoisting?',
     variants: [
+      'What is hoisting?',
       'Explain hoisting in JavaScript.',
       'What is the temporal dead zone?',
       'Can you change an object declared with const?',

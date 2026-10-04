@@ -26,6 +26,7 @@ module.exports = [
     level: 'mid',
     question: 'What is an InheritedWidget and how does Provider build on it?',
     variants: [
+      'What is an InheritedWidget?',
       'How does InheritedWidget work?',
       'How does data get passed down the widget tree without constructors?',
       'What does Provider do under the hood?',

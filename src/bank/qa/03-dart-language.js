@@ -63,6 +63,7 @@ module.exports = [
     level: 'senior',
     question: 'How does the Dart event loop work?',
     variants: [
+      'Can you explain the Dart event loop?',
       'Explain the event queue and the microtask queue in Dart.',
       'Is Dart single threaded?',
       'In what order do Future and scheduleMicrotask run?',
@@ -81,6 +82,8 @@ module.exports = [
     level: 'senior',
     question: 'What are isolates and when do you use them?',
     variants: [
+      'What is an isolate?',
+      'Can you explain isolates?',
       'How do you run heavy work off the main thread in Flutter?',
       'What is the difference between async and an isolate?',
       'How does compute or Isolate.run work?',
@@ -100,6 +103,7 @@ module.exports = [
     level: 'mid',
     question: 'What are mixins and extension methods in Dart?',
     variants: [
+      'What is a mixin?',
       'What is a mixin in Dart?',
       'How are mixins different from inheritance?',
       'When do you use extension methods?',

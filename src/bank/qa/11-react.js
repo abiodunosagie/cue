@@ -179,6 +179,7 @@ module.exports = [
     level: 'senior',
     question: 'What are React Server Components, and how are they different from server side rendering?',
     variants: [
+      'What are server components?',
       'What does "use client" mean?',
       'Server components versus client components, how do you decide?',
       'What are the benefits of React Server Components?',

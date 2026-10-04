@@ -7,6 +7,7 @@ module.exports = [
     level: 'mid',
     question: 'How do database indexes work, and when can they hurt?',
     variants: [
+      'What is an index?',
       'What is a database index?',
       'How do you decide which columns to index?',
       'What is a composite index and does column order matter?',
@@ -64,6 +65,7 @@ module.exports = [
     level: 'senior',
     question: 'What are transactions and isolation levels, and how do you prevent race conditions in the database?',
     variants: [
+      'What is a transaction?',
       'What does ACID mean?',
       'Explain the isolation levels in SQL.',
       'How do you stop two users buying the last item at the same time?',

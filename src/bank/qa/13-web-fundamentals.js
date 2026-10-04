@@ -103,6 +103,7 @@ module.exports = [
     level: 'mid',
     question: 'What is CORS and how do you fix a CORS error?',
     variants: [
+      'What is CORS?',
       'Why does the browser block my API request?',
       'What is a preflight request?',
       'Is CORS a security feature for the server?',
@@ -195,6 +196,7 @@ module.exports = [
     level: 'mid',
     question: 'What is a progressive web app, and when would you build one?',
     variants: [
+      'What is a PWA?',
       'What makes a web app a PWA?',
       'Can a PWA replace a native app?',
       'How do you make a web app installable?',

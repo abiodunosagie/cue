@@ -223,6 +223,7 @@ module.exports = [
     level: 'senior',
     question: 'What is the CAP theorem, and how does it affect your design choices?',
     variants: [
+      'What is the CAP theorem?',
       'Explain eventual consistency.',
       'Strong consistency versus availability, how do you choose?',
       'What does CAP mean in practice?',

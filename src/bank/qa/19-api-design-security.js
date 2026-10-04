@@ -66,6 +66,7 @@ module.exports = [
     level: 'senior',
     question: 'What is idempotency and why does it matter for payments?',
     variants: [
+      'What is idempotency?',
       'How do you prevent a double charge if the client retries?',
       'What is an idempotency key?',
       'How do you make a POST request safe to retry?',

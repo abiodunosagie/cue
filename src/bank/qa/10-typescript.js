@@ -25,6 +25,7 @@ module.exports = [
     level: 'mid',
     question: 'How do you use generics in TypeScript?',
     variants: [
+      'How do generics work in TypeScript?',
       'Give an example of a generic function in TypeScript.',
       'What is a generic constraint with extends?',
       'How do you type an API response wrapper with generics?',
