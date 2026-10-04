@@ -125,7 +125,9 @@ module.exports = [
       'What is the difference between cookies, localStorage and sessionStorage?',
       'Is it safe to store a JWT in localStorage?',
       'What are httpOnly, Secure and SameSite cookies?',
-      'How do you store user preferences in the browser?'
+      'How do you store user preferences in the browser?',
+      'Where would you keep the JWT in a React app?',
+      'Should the access token go in localStorage?'
     ],
     answer: 'localStorage persists until cleared and sessionStorage lasts for the tab, both readable by any JavaScript on the page. Cookies are sent automatically with requests to their domain, and can be made inaccessible to JavaScript.\n\n' +
       'For session tokens I prefer an httpOnly, Secure cookie with SameSite set to Lax or Strict. httpOnly means a cross-site scripting bug cannot read the token, Secure keeps it on HTTPS, ' +

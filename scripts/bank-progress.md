@@ -1,6 +1,6 @@
 # Question bank progress
 
-Done: 300 technical Q&A (src/bank/qa) and 201 coding problems (src/bank/coding), 501 in total.
+Done: 366 technical Q&A (src/bank/qa) and 201 coding problems (src/bank/coding), 567 in total.
 Every coding item passes `node scripts/verify-bank.js` (Dart and TypeScript). `npm test` checks shape and matching.
 
 Rules for every item:
@@ -36,6 +36,9 @@ Rules for every item:
 | 20-system-design.js | 16 |
 | 21-engineering-practice.js | 16 |
 | 22-flutter-extra.js | 13 |
+| 23-algorithms.js | 28 |
+| 24-backend-production.js | 21 |
+| 25-fullstack.js | 17 |
 
 ## Coding files
 | File | Items |
