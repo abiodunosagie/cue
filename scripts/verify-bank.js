@@ -90,8 +90,10 @@ async function checkItem(item) {
   if (!readCoding(item).length) return ['incomplete item (missing a required field)'];
   const problems = [];
   if (JSON.stringify(item).includes(LONG_DASH)) problems.push('contains a long dash');
+  // Language-specific problems (a browser utility in TypeScript, a Dart idiom)
+  // carry one language only.
   for (const lang of LANGUAGES) {
-    if (!item.code[lang]) { problems.push(`${lang}: no code`); continue; }
+    if (!item.code[lang]) continue;
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cue-bank-'));
     try { problems.push(...await checkLanguage(item, lang, workDir)); } finally { fs.rmSync(workDir, { recursive: true, force: true }); }
   }

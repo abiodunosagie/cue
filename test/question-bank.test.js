@@ -37,7 +37,8 @@ test('every bank coding problem renders for both languages with no step marks le
   assert.equal(new Set(ids).size, ids.length, 'duplicate ids');
   for (const it of rawCoding) {
     const items = readCoding(it);
-    assert.equal(items.length, 2, `${it.id} must have Dart and TypeScript`);
+    assert.ok(items.length >= 1, `${it.id} must render in at least one language`);
+    assert.equal(items.length, Object.keys(it.code).length, `${it.id} has code in an unsupported language`);
     for (const item of items) {
       assert.ok(!item.solution.includes('//@step'), `${item.id} leaks a step mark`);
       assert.match(item.solution, /\*\*Full code to paste:\*\*/);
