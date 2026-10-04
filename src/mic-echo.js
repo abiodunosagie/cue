@@ -27,6 +27,15 @@ const ALIGN_MS = 500;
 // long before their last heard words. Interim timing jitters by a few hundred
 // ms on each stream, so a quick answer at the very end is never taken for this.
 const INSIDE_MARGIN_MS = 300;
+// The two streams' first interims can be this far apart for the same sound:
+// a mic turn starting up to this long before the interviewer's, and opening
+// with their first words, is a copy that started with them.
+const LEAD_MS = 1500;
+const OPENING_WORDS = 2;
+// Started together with the interviewer: half its content words being theirs
+// (3 or more) is enough, the rest is the mic mishearing ("RITO healing system").
+const ALIGNED_SHARE = 0.5;
+const ALIGNED_MIN_SHARED = 3;
 // A turn (either channel) whose interims stopped this long ago without a final
 // (a cough, a dropped hallucination) is over: the next words start a new one.
 const QUIET_GAP_MS = 2500;
@@ -144,6 +153,8 @@ function createMicEcho({ now = Date.now } = {}) {
   // started, or while they were talking.
   function references(youTs, text, start) {
     const measuredStart = Number.isFinite(start);
+    const opening = tokenize(text).slice(0, OPENING_WORDS);
+    const opensLike = (r) => opening.length === OPENING_WORDS && opening.every((t, k) => r.tokens[k] === t);
     const began = measuredStart ? start : youTs - wordCount(text) * MS_PER_WORD_FAST;
     const spans = finals.slice();
     if (themSpan) spans.push({ tokens: tokenize(themSpan.text), text: themSpan.text, ts: themSpan.last, start: themSpan.start, last: themSpan.last, measured: true });
@@ -158,6 +169,7 @@ function createMicEcho({ now = Date.now } = {}) {
       if (measuredStart && r.measured) {
         if (Math.abs(began - r.start) <= ALIGN_MS) matched.push({ ...r, how: 'aligned' });
         else if (began >= r.start && began <= r.last - INSIDE_MARGIN_MS) matched.push({ ...r, how: 'inside' });
+        else if (began < r.start && r.start - began <= LEAD_MS && opensLike(r)) matched.push({ ...r, how: 'aligned' });
         else if (began < r.start && r.start <= youTs) matched.push({ ...r, how: 'during' });
       } else if (began >= r.start - ALIGN_MS && began <= r.last + ESTIMATED_SLACK_MS) matched.push({ ...r, how: 'estimated' });
     }
@@ -183,7 +195,11 @@ function createMicEcho({ now = Date.now } = {}) {
     if (!own.length || r.how === 'during') return false;
     if (r.how === 'inside') return contiguous(own, r.tokens);
     if (r.how === 'estimated' && own.length < MIN_ESTIMATED_TOKENS) return false;
-    return inOrder(own, r.tokens) || isEcho(own.join(' '), r.tokens.join(' '));
+    if (inOrder(own, r.tokens) || isEcho(own.join(' '), r.tokens.join(' '))) return true;
+    if (r.how !== 'aligned') return false;
+    const theirs = new Set(r.tokens);
+    const shared = own.filter((t) => theirs.has(t)).length;
+    return shared >= ALIGNED_MIN_SHARED && shared / own.length >= ALIGNED_SHARE;
   }
 
   // A mic interim (partial words) that is only the interviewer: true to hide it.
@@ -201,7 +217,11 @@ function createMicEcho({ now = Date.now } = {}) {
     const drop = { text: '', dropped: true, trimmed: false };
     if (!original) return keep;
     const raw = spokenWords(original).join(' ');
-    if (raw && finals.some((f) => f.ts >= youTs - EXACT_COPY_MS && f.ts <= youTs + NEWER_SLACK_MS && nearCopy(raw, f.raw))) return drop;
+    // Exact: a copy whatever the timing. Nearly the same: only when the mic turn
+    // started with theirs ("Ten years." after "Two years?" is an answer).
+    const recent = (f) => f.ts >= youTs - EXACT_COPY_MS && f.ts <= youTs + NEWER_SLACK_MS;
+    const startedTogether = (f) => Number.isFinite(start) && f.measured && Math.abs(start - f.start) <= ALIGN_MS;
+    if (raw && finals.some((f) => recent(f) && (f.raw === raw || (startedTogether(f) && nearCopy(raw, f.raw))))) return drop;
     const refs = references(youTs, original, start);
     if (!refs.length) return keep;
     const own = tokenize(original);
@@ -221,23 +241,27 @@ function createMicEcho({ now = Date.now } = {}) {
     for (const r of refs) {
       // A whole short turn at the start: "10 scale? I'd say ..."
       const n = r.tokens.length;
+      const tailOnly = r.how === 'during';
       // Only with the candidate's own words after it: alone, it is their answer.
-      if (r.how !== 'during' && n && n <= SHORT_TURN_WORDS && tokens.length > n && r.tokens.every((t, k) => tokens[k].t === t)) cutTokens(0, n - 1);
+      if (!tailOnly && n && n <= SHORT_TURN_WORDS && tokens.length > n && r.tokens.every((t, k) => tokens[k].t === t)) cutTokens(0, n - 1);
       // Runs of MIN_RUN or more content words in the same order as the interviewer said them.
       for (let i = 0; i < tokens.length; i++) {
         for (let j = 0; j < n; j++) {
           let len = 0;
           while (i + len < tokens.length && j + len < n && tokens[i + len].t === r.tokens[j + len]) len++;
-          if (len >= MIN_RUN) cutTokens(i, i + len - 1);
+          // The candidate was talking first: an echo of the interviewer can only
+          // be what the mic heard last, so only a run that ends the turn is cut.
+          if (len >= MIN_RUN && (!tailOnly || i + len === tokens.length)) cutTokens(i, i + len - 1);
         }
       }
     }
     if (!cut.some(Boolean)) return keep;
     const left = words.filter((_w, i) => !cut[i]).join(' ').replace(/^[\s?!.,;:]+/, '').trim();
     const cutShare = tokens.filter((tk) => cut[tk.word]).length / tokens.length;
-    // When the candidate was talking first, what is left is theirs, however much was cut.
-    const mostlyEchoCounts = refs.some((r) => r.how !== 'during');
-    if (tokenize(left).length < MIN_LEFT || (mostlyEchoCounts && cutShare >= MOSTLY_ECHO)) return drop;
+    // When the candidate was talking first, what is left is theirs, however little.
+    const talkingFirst = refs.every((r) => r.how === 'during');
+    if (talkingFirst) return left ? { text: left, dropped: false, trimmed: true } : drop;
+    if (tokenize(left).length < MIN_LEFT || cutShare >= MOSTLY_ECHO) return drop;
     return { text: left, dropped: false, trimmed: true };
   }
 

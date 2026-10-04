@@ -277,11 +277,40 @@ test('the candidate talking when the interviewer asks: the question is cut from 
 
 test('a short reply the mic mishears is still the interviewer\'s ("Grade." for "Great."), a different short answer is not', () => {
   const { echo, at } = setup();
-  at(1000000); echo.noteThem('Great.');
-  at(1001200);
-  assert.equal(echo.cleanFinal('Grade.', 1000400, null).dropped, true);
+  // The mic starts hearing it as the interviewer says it.
+  at(1000450); echo.noteYou('grade');
+  talkThem(echo, at, 'Great.', 1000000, 1000400);
+  at(1001400);
+  assert.equal(echo.cleanFinal('Grade.', 1001400, echo.takeYouStart()).dropped, true);
+  // A different short answer after a short question, close in letters, is the candidate's.
+  talkThem(echo, at, 'Two years?', 1005000, 1005600);
+  at(1006900); echo.noteYou('ten');
+  at(1007500);
+  assert.equal(echo.cleanFinal('Ten years.', 1007500, echo.takeYouStart()).dropped, false);
   at(1010000); echo.noteThem('Redux?');
   at(1011000);
   assert.equal(echo.cleanFinal('Yes.', 1010800, null).dropped, false);
   assert.equal(echo.cleanFinal('Redux, yes.', 1010800, null).dropped, false);
+});
+
+test('candidate already talking: only a run at the end of the turn is cut, their own technical words stay, and the turn is never dropped for it', () => {
+  const { echo, at } = setup();
+  at(1000000); echo.noteYou('so');
+  talkThem(echo, at, 'Do you use React and TypeScript in production', 1002000, 1004400);
+  at(1006000);
+  const own = echo.cleanFinal('Yes we use React and TypeScript in production for our dashboard at work', 1006000, echo.takeYouStart());
+  assert.deepEqual(own, { text: 'Yes we use React and TypeScript in production for our dashboard at work', dropped: false, trimmed: false });
+  at(1010000); echo.noteYou('useMemo caches');
+  talkThem(echo, at, 'What is the difference between useMemo and useCallback?', 1013000, 1015000);
+  at(1016500);
+  const reading = 'useMemo caches a computed value and useCallback caches a function so the difference between useMemo and useCallback is what they return';
+  assert.equal(echo.cleanFinal(reading, 1016500, echo.takeYouStart()).text, reading);
+});
+
+test('a mic copy that starts up to 1.5 s before the interviewer\'s own stream is still dropped when its words are theirs', () => {
+  const { echo, at } = setup();
+  at(999700); echo.noteYou('tell me about');
+  talkThem(echo, at, 'Tell me about your experience with BGlory Rides and the payment flow', 1000000, 1003600);
+  at(1005000);
+  assert.equal(echo.cleanFinal('tell me about your experience with RITO healing system and the payment flow', 1005000, echo.takeYouStart()).dropped, true);
 });
