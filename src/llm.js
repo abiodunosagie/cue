@@ -3,6 +3,7 @@
 
 const { createCompatibleClientOptions } = require('./openai-compatible');
 const publik = require('./publik');
+const { anthropicSystemBlocks, stripCacheBreak } = require('./prompt-cache');
 
 const CUSTOM_PROVIDER = 'custom';
 const PUBLIK_PROVIDER = publik.PUBLIK_PROVIDER;
@@ -370,6 +371,19 @@ function answerSpeedOptions(model) {
   return EFFORT_MODEL.test(String(model || '')) ? { effort: 'low' } : null;
 }
 
+// message_delta repeats some counts as null: keep only real numbers.
+function addUsage(usage, counts) {
+  for (const [key, value] of Object.entries(counts || {})) if (Number.isFinite(value)) usage[key] = value;
+}
+
+// What one request was billed for, for the log: token counts only, never text
+// or keys. Cache reads cost a tenth of input, cache writes 1.25 times.
+function usageLine(model, usage) {
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  return `[usage] ${model}: input ${n(usage.input_tokens)}, cache read ${n(usage.cache_read_input_tokens)}, ` +
+    `cache write ${n(usage.cache_creation_input_tokens)}, output ${n(usage.output_tokens)}`;
+}
+
 async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, imageDataUrls, maxTokens, onToken, onActivity, onThinking, speedOptions, stageLabel = 'coding' }) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
@@ -402,13 +416,17 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
     if (extra && extra.summarize) request.thinking = { type: 'adaptive', display: 'summarized' };
     const stream = await client.messages.create(request, hasFallback ? { headers, maxRetries: 0 } : { headers });
     let full = '';
+    const usage = {};
     for await (const ev of stream) {
       // Any event proves the stream is alive, thinking included.
       if (onActivity) onActivity();
+      if (ev.type === 'message_start' && ev.message) addUsage(usage, ev.message.usage);
+      if (ev.type === 'message_delta') addUsage(usage, ev.usage);
       const d = ev.type === 'content_block_delta' && ev.delta;
       if (d && d.type === 'text_delta') { emitted = true; full += d.text; onToken(d.text); }
       else if (d && d.type === 'thinking_delta' && d.thinking && onThinking) onThinking(d.thinking);
     }
+    console.log(usageLine(model, usage));
     return full;
   };
   // Try the fastest options first, then effort alone (fast mode can be off for
@@ -613,6 +631,9 @@ function createLLM(settings, { tier: requestedTier } = {}) {
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
       const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, stageLabel, ...params, imageDataUrls: capImages(provider, params.imageDataUrls), turns: sanitizeTurns(params.turns) };
+      // The cache mark (src/prompt-cache.js) ends here: Anthropic gets cached
+      // blocks, every other provider the plain text.
+      if (params.system != null) args.system = (provider === 'anthropic' && anthropicSystemBlocks(params.system)) || stripCacheBreak(params.system);
       try {
         if (provider === 'openai') return await streamOpenAI(args);
         if (provider === CUSTOM_PROVIDER) return await streamOpenAI(args);

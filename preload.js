@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('cue', {
   preparedState: () => ipcRenderer.invoke('prepared:state'),
   preparedRun: () => ipcRenderer.invoke('prepared:run'),
   turnCheck: (text) => ipcRenderer.invoke('turn:check', text),
+  continuationCheck: (asked, added, answer) => ipcRenderer.invoke('turn:continuation', { asked, added, answer }),
   roundSave: () => ipcRenderer.invoke('rounds:save'),
   practiceStart: () => ipcRenderer.invoke('practice:start'),
   setupTest: () => ipcRenderer.invoke('setup:test'),

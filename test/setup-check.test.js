@@ -7,7 +7,6 @@ function deps(over = {}) {
   return {
     llmFor: (tier) => ready(tier + '-model'),
     quickAsk: async ({ system }) => (/single word OK/.test(system) ? 'OK' : 'NONE'),
-    runOpener: async () => 'I start by measuring what the network really does.',
     preparedState: () => ({ canPrepare: true, count: 20, current: true, running: false, error: '' }),
     mediaStatus: () => 'granted',
     captureScreen: async () => ({ dataUrl: 'data:x' }),
@@ -23,10 +22,9 @@ function deps(over = {}) {
 test('a working setup passes every check, reporting each as it lands', async () => {
   const seen = [];
   const results = await runSetupChecks(deps(), (r) => seen.push(r.name));
-  assert.equal(results.length, 9);
+  assert.equal(results.length, 8);
   assert.deepEqual(results.filter((r) => r.status !== 'pass').map((r) => r.name), []);
   assert.deepEqual(seen, results.map((r) => r.name));
-  assert.match(results.find((r) => r.name === 'Instant first line').detail, /measuring/);
 });
 
 test('failures carry a plain reason, a thrown error does not stop the rest, and missing parts are skipped', async () => {

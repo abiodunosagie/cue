@@ -22,7 +22,7 @@ const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM, imageLimit } = require('./src/llm');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
-const { OPENER_MODES, openerQuestion, continuationNote, runOpener } = require('./src/opener');
+const { answeredQuestion } = require('./src/heard-question');
 const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
 const { createQuestionBank } = require('./src/question-bank');
@@ -36,6 +36,7 @@ const { createPrepare } = require('./src/prepare');
 const { createFollowUpBank } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
 const { checkTurn, noAnswer } = require('./src/turn-check');
+const { checkContinuation, wholeQuestion } = require('./src/continuation-check');
 const { registerRoundsIpc } = require('./src/ipc/rounds');
 const { registerPublikIpc } = require('./src/ipc/publik');
 const { isRenderContents } = require('./src/page-render');
@@ -936,7 +937,7 @@ async function runFeature(mode, userText, options = {}) {
   // A question about the code just written ("walk me through your code", "why
   // a map here?") is answered from that code, not from the resume.
   // The text that was sent; the interviewer's newest turn only when none was (a bare Assist key press).
-  const heard = mode === 'answerThis' || mode === 'assist' ? userText || openerQuestion(mode, '', transcript) : '';
+  const heard = mode === 'answerThis' || mode === 'assist' ? userText || answeredQuestion(mode, '', transcript) : '';
   if ((mode === 'answerThis' || mode === 'assist') && interviewMemory.recentCodingSolve()) {
     if (isExplainRequest(heard)) { mode = 'explainCode'; userText = heard; }
   }
@@ -972,7 +973,6 @@ async function runFeature(mode, userText, options = {}) {
     firstShown = true;
     console.log(`[timing] ${mode}: first word after ${Date.now() - startedAt}ms (${source})`);
   };
-  let opener = ''; // already shown and possibly said aloud, so kept even if the answer fails
   let streamSettled = false; // drop stray tokens from a stream we've already abandoned
   try {
     const settings = store.getSettings();
@@ -1013,7 +1013,7 @@ async function runFeature(mode, userText, options = {}) {
       return;
     }
 
-    // A prepared answer is shown at once, with no model wait and no opener.
+    // A prepared answer is shown at once, with no model wait.
     const prepared = await findPreparedAnswer(mode, userText, settings);
     if (prepared) {
       firstWord('prepared answer');
@@ -1023,18 +1023,6 @@ async function runFeature(mode, userText, options = {}) {
       interviewMemory.addAnswer({ mode, text: prepared.answer, generation: memoryGeneration, ts: startedAt });
       prepareFollowUps(userText, prepared.answer, memoryGeneration);
       return;
-    }
-
-    // Instant first line: with Smart on, the Fast model starts a one-sentence
-    // opener now (in parallel with any screenshot), and the Smart answer then
-    // continues from it. Skipped when there is no separate, ready Fast model.
-    let openerPromise = null;
-    const question = settings.smart && OPENER_MODES.has(mode) ? openerQuestion(mode, userText, transcript) : '';
-    if (question) {
-      const fast = createLLM({ ...settings, smart: false });
-      if (fast.ready && fast.model !== llm.model) {
-        openerPromise = runOpener({ llm: fast, question, onToken: (t) => { firstWord('instant first line'); send('llm:token', { text: t }); } });
-      }
     }
 
     let imageDataUrl = null;
@@ -1095,9 +1083,8 @@ async function runFeature(mode, userText, options = {}) {
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
     const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: spokenAnswerTexts() });
     const system = def.buildSystem ? def.buildSystem(contextBlock, rulesWithFocus(settingsForPrompt)) : (def.system || '');
-    opener = openerPromise ? await openerPromise : '';
     // One user turn builder for the answer, the quick start and the full
-    // solution, so none of them can miss the memory, length or opener parts.
+    // solution, so none of them can miss the memory or length parts.
     const buildArgs = {
       transcript,
       userText: userText || '',
@@ -1112,10 +1099,8 @@ async function runFeature(mode, userText, options = {}) {
     };
     const buildTurn = (extra) => (memoryBlock ? '<interview_memory>\n' + memoryBlock + '\n</interview_memory>\n\n' : '') +
       def.build({ ...buildArgs, ...extra }) +
-      (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '') + continuationNote(opener);
+      (LENGTH_MODES.has(mode) ? lengthRule(settingsForPrompt.answerLength) : '');
     const built = buildTurn();
-    // The continuation starts after a space so the two read as one paragraph.
-    if (opener) send('llm:token', { text: ' ' });
 
     // One model stream under its own watchdog: a provider that stalls would
     // otherwise hang the await forever, leaving state.busy = true and wedging
@@ -1235,14 +1220,13 @@ async function runFeature(mode, userText, options = {}) {
         if (item && questionEpoch === epochAtStart) currentLibraryId = item.id;
       }).catch((e) => console.log(`[library] could not save the solve: ${e && e.message ? e.message : String(e)}`));
     }
-    if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: opener ? opener + ' ' + answer : answer, generation: memoryGeneration, ts: startedAt });
+    if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: answer, generation: memoryGeneration, ts: startedAt });
     // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
-    if (LENGTH_MODES.has(mode)) prepareFollowUps(openerQuestion(mode, userText, transcript), (opener ? opener + ' ' : '') + answer, memoryGeneration);
+    if (LENGTH_MODES.has(mode)) prepareFollowUps(answeredQuestion(mode, userText, transcript), answer, memoryGeneration);
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
   } catch (e) {
-    if (opener) interviewMemory.addAnswer({ mode, text: opener, generation: memoryGeneration, ts: startedAt });
     // Timing, for the log: which model failed and after how long (never keys or text).
     console.log(`[timing] ${mode}: failed after ${Date.now() - startedAt}ms (${modelInUse || 'no model'}${firstShown ? ', after the first word' : ', before any word'}): ${e && e.message ? e.message : String(e)}`);
     recordEvent({ level: 'error', event: 'llm_failed', msg: e && e.message ? e.message : String(e), frame: 'runFeature', context: { mode, provider: store.getSettings().provider } });
@@ -1277,6 +1261,22 @@ ipcMain.handle('turn:check', async (_e, text) => {
   console.log(`[timing] turn check: ${verdict.answer ? 'answer' : 'wait'} after ${Date.now() - startedAt}ms`);
   return verdict;
 });
+// The interviewer went on right after cue answered: do the added words ask for
+// anything that answer did not cover? (renderer.js answerContinuation, src/continuation-check.js)
+// The renderer sends the answer it showed for `asked` ('' when it failed), so
+// the check never compares against another question's answer.
+ipcMain.handle('turn:continuation', async (_e, payload) => {
+  const field = (key) => (payload && typeof payload[key] === 'string' ? payload[key] : '');
+  const asked = field('asked');
+  const added = field('added');
+  if (!added.trim()) return { answer: false, question: '' };
+  const llm = createLLM({ ...store.getSettings(), smart: false });
+  if (!llm.ready) return { answer: true, question: wholeQuestion(asked, added) };
+  const startedAt = Date.now();
+  const verdict = await checkContinuation({ llm, asked, added, answer: field('answer') });
+  console.log(`[timing] continuation check: ${verdict.answer ? 'answer again' : 'already covered'} after ${Date.now() - startedAt}ms`);
+  return verdict;
+});
 registerSetupIpc({
   ipcMain,
   send,
@@ -1285,7 +1285,6 @@ registerSetupIpc({
     return {
       llmFor: (tier) => (tier === 'coding' ? createLLM(settings(), { tier: 'coding' }) : createLLM({ ...settings(), smart: tier === 'smart' })),
       quickAsk,
-      runOpener,
       preparedState,
       mediaStatus: (type) => (isMac ? systemPreferences.getMediaAccessStatus(type) : 'granted'),
       captureScreen: () => captureMaskedScreen(cueWindowBounds()),

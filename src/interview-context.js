@@ -4,6 +4,7 @@
 // category is in play and injects only the fields that are relevant.
 
 const { buildProjectsBlock } = require('./projects');
+const { CACHE_BREAK } = require('./prompt-cache');
 
 // ── Question category detection ───────────────────────────────────────────────
 const CATEGORY_PATTERNS = {
@@ -230,6 +231,11 @@ function buildInterviewContext(settings, mode, transcript, { answerTexts = [] } 
       'Build on them: stay consistent with what the candidate already said, answer a question asked before better than last time, and use what they told you about the company and the role:\n' +
       '<earlier_rounds>\n' + clip(unfence(settings.roundNotes, 'earlier_rounds'), ROUND_NOTES_CHARS) + '\n</earlier_rounds>');
   }
+
+  // Everything above is the same for every question of this profile; the
+  // blocks below change with the question. Anthropic caches the part above
+  // (src/prompt-cache.js); the mark never reaches any provider.
+  if (blocks.length) blocks.push(CACHE_BREAK);
 
   // The candidate's approved projects (Settings > Projects), so an
   // example comes from real work that fits the question instead of the same

@@ -577,6 +577,8 @@
   function runMode(mode, text, heard = '') {
     if (busy) return;
     setBusy(true);
+    // Any new request ends the continuation window; sendAutoAnswer opens a new one after it.
+    lastAutoSend = NO_AUTO_SEND;
     cue.ask({ mode, text: text || '', heard: heard || '' });
   }
 
@@ -614,6 +616,14 @@
   let lastGatedTurn = '';
   let lastAnswered = { text: '', at: 0 };
   let pendingAnswered = '';
+  // The interviewer often pauses 2 to 4 s inside one question and then goes on
+  // ("...on a one?" then "10 scale?"). cue answers at once anyway; words heard
+  // this soon after the last auto-answer was sent go to answerContinuation,
+  // which answers them only when they ask for more than that answer gave.
+  // answer: the text of that answer once it finished ('' until then, or when it failed).
+  const CONTINUATION_WINDOW_MS = 8000;
+  const NO_AUTO_SEND = { question: '', at: 0, answer: '' };
+  let lastAutoSend = NO_AUTO_SEND;
   // The last turn the turn check said holds no question: the candidate talking
   // after it may clear it like any explanation.
   let gateSaidNo = '';
@@ -804,9 +814,48 @@
       hardClearSTTFill();
       return;
     }
+    if (lastAutoSend.question && heardAt - lastAutoSend.at < CONTINUATION_WINDOW_MS) {
+      answerContinuation(question, label);
+      return;
+    }
+    sendAutoAnswer(question, label);
+  }
+
+  function sendAutoAnswer(question, label) {
     cue.log(`[timing] auto-answer sent ${Date.now() - heardAt}ms after the last words${label ? ' (' + label + ')' : ''}`);
     pendingAnswered = question;
     send(question);
+    lastAutoSend = { question, at: Date.now(), answer: '' };
+  }
+
+  // More words right after an auto-answer: answered only when they ask for
+  // something that answer did not cover, then as one question with the first part.
+  async function answerContinuation(added, label) {
+    const { question: asked, answer } = lastAutoSend;
+    const heardText = input.value;
+    const verdict = await cue.continuationCheck(asked, added, answer).catch((e) => { cue.log(`[continuation] failed: ${e && e.message ? e.message : e}`); return null; });
+    // The interviewer went on meanwhile, or the box was edited: those words get their own pass.
+    if (input.value !== heardText || !isUntouchedSTT()) return;
+    const whole = (asked + ' ' + added).trim();
+    // Only a clear "covered" drops the words; no verdict answers them.
+    if (verdict && verdict.answer === false) {
+      // Later words in the same window are judged against the whole question.
+      lastAutoSend = { ...lastAutoSend, question: whole };
+      showToast('Covered in the answer above.', 2500);
+      hardClearSTTFill();
+      return;
+    }
+    const question = (verdict && verdict.question) || whole;
+    sendWhenFree(heardText, () => sendAutoAnswer(question, label ? label + ', continued' : 'continued'));
+  }
+
+  // Runs run once cue is free, unless the interviewer went on meanwhile (the
+  // box no longer holds heardText). Uses questionFinalizeTimer, so new words
+  // cancel the wait like they cancel finalizeQuestion.
+  function sendWhenFree(heardText, run) {
+    if (input.value !== heardText) return;
+    if (busy) { questionFinalizeTimer = setTimeout(() => sendWhenFree(heardText, run), 700); return; }
+    run();
   }
 
   const isUntouchedSTT = () => inputFromSTT && input.value.trim() === (lastSTTValue || '').trim();
@@ -823,13 +872,7 @@
     const verdict = await cue.turnCheck(text).catch((e) => { cue.log(`[turn check] failed: ${e && e.message ? e.message : e}`); return null; });
     if (!verdict || !verdict.answer) { gateSaidNo = text; return; }
     if (input.value !== text || !isUntouchedSTT()) return;
-    const sendWhenFree = () => {
-      if (input.value !== text) return; // the interviewer went on meanwhile
-      // Shares questionFinalizeTimer with finalizeQuestion, so new words cancel this wait too.
-      if (busy) { questionFinalizeTimer = setTimeout(sendWhenFree, 700); return; }
-      autoSend(verdict.question, 'turn check');
-    };
-    sendWhenFree();
+    sendWhenFree(text, () => autoSend(verdict.question, 'turn check'));
   }
 
   // ---- Soft clear: don't immediately wipe question when user speaks ----
@@ -1097,7 +1140,7 @@
   }
   showQuestion(0, 0);
   cue.on('question:changed', ({ views, screens }) => showQuestion(views, screens));
-  document.getElementById('question-next-btn').addEventListener('click', () => cue.nextQuestion());
+  document.getElementById('question-next-btn').addEventListener('click', () => { lastAutoSend = NO_AUTO_SEND; cue.nextQuestion(); });
 
   // Hide / collapse
   function toggleHide() {
@@ -1144,6 +1187,7 @@
       const res = await cue.clearTranscript();
       // A new interview: nothing asked in the last one counts as a repeat.
       lastAnswered = { text: '', at: 0 }; pendingAnswered = ''; lastGatedTurn = ''; gateSaidNo = '';
+      lastAutoSend = NO_AUTO_SEND;
       clearMessages();
       // Also clear the floating interim bar
       if (interimEl) { interimEl.textContent = ''; interimEl.classList.remove('show'); }
@@ -1618,11 +1662,15 @@
   });
   cue.on('llm:done', () => {
     const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update();
-    if (pendingAnswered) { lastAnswered = { text: pendingAnswered, at: Date.now() }; pendingAnswered = ''; }
+    if (pendingAnswered) {
+      lastAnswered = { text: pendingAnswered, at: Date.now() };
+      if (lastAutoSend.question === pendingAnswered && done) lastAutoSend = { ...lastAutoSend, answer: done.dataset.raw || '' };
+      pendingAnswered = '';
+    }
   });
   cue.on('llm:error', ({ message, action }) => {
     pendingAnswered = ''; // not answered: asking again gets a fresh answer
-    // Keep what already streamed (an opener the user may be saying aloud) and
+    // Keep what already streamed (the user may be saying it aloud) and
     // show the error as its own line under it.
     if (aiEl && aiEl.dataset.raw.trim()) {
       const parent = aiEl.parentNode;

@@ -4,7 +4,6 @@
 // during it. Everything outside comes in as functions, so this is testable.
 
 const CHECK_TIMEOUT_MS = 20000;
-const SAMPLE_QUESTION = 'How do you keep a mobile app fast on a slow network?';
 
 // Each check resolves { status: 'pass' | 'fail' | 'skip', detail }.
 function buildChecks(d) {
@@ -18,15 +17,6 @@ function buildChecks(d) {
     { name: 'Fast model', run: () => reply('fast') },
     { name: 'Smart model', run: () => reply('smart') },
     { name: 'Coding model (' + d.codingShortcut + ')', run: () => reply('coding') },
-    {
-      name: 'Instant first line',
-      run: async () => {
-        const llm = d.llmFor('fast');
-        if (!llm.ready) return { status: 'skip', detail: 'Needs the Fast model.' };
-        const line = await d.runOpener({ llm, question: SAMPLE_QUESTION, onToken: () => {} });
-        return line ? { status: 'pass', detail: '"' + line + '"' } : { status: 'fail', detail: 'No first line within 1 second. Answers still work, just without the instant start.' };
-      }
-    },
     {
       name: 'Prepared answers',
       run: async () => {

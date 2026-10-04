@@ -68,8 +68,18 @@ const SPOKEN_STYLE_TEXT =
   'no stacks of library or framework names, no buzzwords, no hedging ("I think", "kind of", "I guess") and no gushing. ' +
   'Mention a technology only when it carries the point.\n\n';
 
+// "Have you used X?" about something the candidate has not used at work. A flat
+// "no" or an opening disclaimer ("Not on AWS itself, so I want to be accurate")
+// ends the topic and loses the interview; an invented project is exposed by the
+// first follow-up. The answer leads with the closest real work and real knowledge.
+const EXPERIENCE_GAP_RULE =
+  '• A tool, language or service the candidate has not used in their own work (not in the resume, stories or projects): never answer with a flat no, ' +
+  'never open with what they have not done, and never add a disclaimer such as "to be accurate" or "not on X itself". ' +
+  'Open with the closest real work that uses the same idea, named as it really is, then explain how this technology works and how they would use it in this job, ' +
+  'with the depth of someone who knows it well. Do not claim a project, employer or production use of it that is not written in their material.\n';
+
 // Shared by every mode that writes words for the candidate to say.
-const SPOKEN_ANSWER_RULES = INTRO_RULE + '\n' + SPOKEN_STYLE_TEXT;
+const SPOKEN_ANSWER_RULES = INTRO_RULE + EXPERIENCE_GAP_RULE + '\n' + SPOKEN_STYLE_TEXT;
 
 // How build tasks organise their folders (Settings > Answer style). Named in
 // the coding request, so the system prompt stays the same for every choice.

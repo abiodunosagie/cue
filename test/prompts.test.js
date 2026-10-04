@@ -368,3 +368,11 @@ test('screenQuestions has room for every answer and never reads out meta talk', 
   assert.match(def.buildSystem(null, ''), /never mention notes, stories, a profile or what is or is not saved/);
   assert.match(def.buildSystem(null, ''), /never say that no story exists/);
 });
+
+test('spoken answers never open with a flat no on a technology the candidate has not used', () => {
+  for (const mode of ['answerThis', 'say', 'assist']) {
+    const system = MODES[mode].buildSystem(null, '');
+    assert.match(system, /never answer with a flat no/, mode);
+    assert.match(system, /Do not claim a project, employer or production use/, mode);
+  }
+});
