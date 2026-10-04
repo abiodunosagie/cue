@@ -222,8 +222,11 @@ function createMicEcho({ now = Date.now } = {}) {
     // Exact: a copy whatever the timing. Nearly the same: only when the mic turn
     // started with theirs ("Ten years." after "Two years?" is an answer).
     const recent = (f) => f.ts >= youTs - EXACT_COPY_MS && f.ts <= youTs + NEWER_SLACK_MS;
-    // A one-word turn often comes with no interim, so its start is estimated: allow for that.
-    const startedTogether = (f) => Number.isFinite(start) && Math.abs(start - f.start) <= (f.measured ? ALIGN_MS : ALIGN_MS + ESTIMATE_ERROR_MS);
+    // A one-word turn often comes with no interim on either stream, so a start
+    // may be estimated: allow for that.
+    const micMeasured = Number.isFinite(start);
+    const micStart = micMeasured ? start : youTs - wordCount(original) * MS_PER_WORD_FAST;
+    const startedTogether = (f) => Math.abs(micStart - f.start) <= (micMeasured && f.measured ? ALIGN_MS : ALIGN_MS + ESTIMATE_ERROR_MS);
     if (raw && finals.some((f) => recent(f) && (f.raw === raw || (startedTogether(f) && nearCopy(raw, f.raw))))) return drop;
     const refs = references(youTs, original, start);
     if (!refs.length) return keep;

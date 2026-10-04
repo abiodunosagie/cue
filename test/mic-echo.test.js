@@ -328,3 +328,13 @@ test('live 2026-10-04: "Great." with no interim from the interviewer, heard by t
   at(1011900);
   assert.equal(echo.cleanFinal('Ten years.', 1011900, echo.takeYouStart()).dropped, false);
 });
+
+test('live 2026-10-04 again: "Great." and the mic\'s "Grade." both without interims, 0.1 s apart, is dropped; "Ten years." 1.9 s after "Two years?" is kept', () => {
+  const { echo, at } = setup();
+  at(1000000); echo.noteThem('Great.');
+  at(1000900);
+  assert.equal(echo.cleanFinal('Grade.', 1000108, echo.takeYouStart()).dropped, true);
+  at(1010000); echo.noteThem('Two years?');
+  at(1012700);
+  assert.equal(echo.cleanFinal('Ten years.', 1011900, echo.takeYouStart()).dropped, false);
+});
