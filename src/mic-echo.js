@@ -46,6 +46,12 @@ const NEWER_SLACK_MS = 1000;
 // recent is a copy whatever the timing: one-word echoes ("Great.") landed 1.4
 // to 1.7 s late. Exact, so "Redux, yes." never matches "And Redux?".
 const EXACT_COPY_MS = 3000;
+// A short reply the mic mishears ("Grade." for "Great.", 3 letters apart, live
+// test 2026-10-04) is still a copy: one word of 5 letters or more up to 3 letters
+// apart, two words up to 2.
+const NEAR_COPY_WORDS = 2;
+const NEAR_COPY_EDITS = { 1: 3, 2: 2 };
+const NEAR_COPY_MIN_LETTERS = 5;
 const MAX_REACH_MS = 30000;
 const KEEP_MS = MAX_REACH_MS + 5000;
 // Runs shorter than this are normal speech overlap ("the primary key and").
@@ -61,6 +67,23 @@ const MOSTLY_ECHO = 0.5;
 
 const spokenWords = (text) => String(text || '').toLowerCase().replace(/[’']/g, '').split(/[^a-z0-9]+/).filter(Boolean);
 const wordCount = (text) => String(text || '').trim().split(/\s+/).filter(Boolean).length;
+// Letters to change to turn a into b.
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_v, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) row[j] = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = row;
+  }
+  return prev[b.length];
+}
+// The same short reply, allowing for the mic mishearing a letter or two.
+function nearCopy(a, b) {
+  if (a === b) return true;
+  const wa = a.split(' ');
+  return wa.length <= NEAR_COPY_WORDS && b.split(' ').length === wa.length && Math.min(a.length, b.length) >= NEAR_COPY_MIN_LETTERS &&
+    editDistance(a, b) <= NEAR_COPY_EDITS[wa.length];
+}
 // a appears in b side by side.
 function contiguous(a, b) {
   for (let i = 0; i + a.length <= b.length; i++) if (a.every((t, k) => b[i + k] === t)) return true;
@@ -178,7 +201,7 @@ function createMicEcho({ now = Date.now } = {}) {
     const drop = { text: '', dropped: true, trimmed: false };
     if (!original) return keep;
     const raw = spokenWords(original).join(' ');
-    if (raw && finals.some((f) => f.ts >= youTs - EXACT_COPY_MS && f.ts <= youTs + NEWER_SLACK_MS && f.raw === raw)) return drop;
+    if (raw && finals.some((f) => f.ts >= youTs - EXACT_COPY_MS && f.ts <= youTs + NEWER_SLACK_MS && nearCopy(raw, f.raw))) return drop;
     const refs = references(youTs, original, start);
     if (!refs.length) return keep;
     const own = tokenize(original);

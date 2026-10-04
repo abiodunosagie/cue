@@ -274,3 +274,14 @@ test('the candidate talking when the interviewer asks: the question is cut from 
   assert.match(out.text, /^In this job I would use it to keep environments for tests reproducible\./);
   assert.doesNotMatch(out.text, /rate limiter/);
 });
+
+test('a short reply the mic mishears is still the interviewer\'s ("Grade." for "Great."), a different short answer is not', () => {
+  const { echo, at } = setup();
+  at(1000000); echo.noteThem('Great.');
+  at(1001200);
+  assert.equal(echo.cleanFinal('Grade.', 1000400, null).dropped, true);
+  at(1010000); echo.noteThem('Redux?');
+  at(1011000);
+  assert.equal(echo.cleanFinal('Yes.', 1010800, null).dropped, false);
+  assert.equal(echo.cleanFinal('Redux, yes.', 1010800, null).dropped, false);
+});
