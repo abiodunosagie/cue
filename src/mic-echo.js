@@ -126,13 +126,16 @@ function createMicEcho({ now = Date.now } = {}) {
     if (themSpan) spans.push({ tokens: tokenize(themSpan.text), text: themSpan.text, ts: themSpan.last, start: themSpan.start, last: themSpan.last, measured: true });
     const inWindow = (r) => r.ts <= youTs + NEWER_SLACK_MS && r.ts >= youTs - MAX_REACH_MS;
     // aligned: started with the interviewer (a copy of the whole turn may follow);
-    // inside: started part way through it (only a contiguous piece of it can be a copy).
+    // inside: started part way through it (only a contiguous piece of it can be a copy);
+    // during: the candidate was already talking when the interviewer spoke, so the
+    // mic turn holds both (only their word-for-word runs are cut, never the turn).
     const matched = [];
     for (const r of spans) {
       if (!inWindow(r)) continue;
       if (measuredStart && r.measured) {
         if (Math.abs(began - r.start) <= ALIGN_MS) matched.push({ ...r, how: 'aligned' });
         else if (began >= r.start && began <= r.last - INSIDE_MARGIN_MS) matched.push({ ...r, how: 'inside' });
+        else if (began < r.start && r.start <= youTs) matched.push({ ...r, how: 'during' });
       } else if (began >= r.start - ALIGN_MS && began <= r.last + ESTIMATED_SLACK_MS) matched.push({ ...r, how: 'estimated' });
     }
     if (!matched.length) return matched;
@@ -141,7 +144,7 @@ function createMicEcho({ now = Date.now } = {}) {
     // you for asking."): those turns, joined from the first it matched, are one
     // more reference.
     const first = matched.reduce((a, r) => (r.start < a.start ? r : a));
-    if (first.how === 'inside') return matched;
+    if (first.how === 'inside' || first.how === 'during') return matched;
     const chain = spans.filter((r) => inWindow(r) && r.start >= first.start && r.start <= youTs).sort((a, b) => a.start - b.start);
     if (chain.length > 1) {
       matched.push({ tokens: chain.flatMap((r) => r.tokens), text: chain.map((r) => r.text).join(' '), ts: chain[chain.length - 1].ts, start: first.start, last: chain[chain.length - 1].last, how: first.how });
@@ -154,7 +157,7 @@ function createMicEcho({ now = Date.now } = {}) {
   // Started part way through: a side-by-side piece of what they said, exactly,
   // since a candidate talking over them uses their own words in between.
   function allEcho(own, r) {
-    if (!own.length) return false;
+    if (!own.length || r.how === 'during') return false;
     if (r.how === 'inside') return contiguous(own, r.tokens);
     if (r.how === 'estimated' && own.length < MIN_ESTIMATED_TOKENS) return false;
     return inOrder(own, r.tokens) || isEcho(own.join(' '), r.tokens.join(' '));
@@ -196,7 +199,7 @@ function createMicEcho({ now = Date.now } = {}) {
       // A whole short turn at the start: "10 scale? I'd say ..."
       const n = r.tokens.length;
       // Only with the candidate's own words after it: alone, it is their answer.
-      if (n && n <= SHORT_TURN_WORDS && tokens.length > n && r.tokens.every((t, k) => tokens[k].t === t)) cutTokens(0, n - 1);
+      if (r.how !== 'during' && n && n <= SHORT_TURN_WORDS && tokens.length > n && r.tokens.every((t, k) => tokens[k].t === t)) cutTokens(0, n - 1);
       // Runs of MIN_RUN or more content words in the same order as the interviewer said them.
       for (let i = 0; i < tokens.length; i++) {
         for (let j = 0; j < n; j++) {
@@ -209,7 +212,9 @@ function createMicEcho({ now = Date.now } = {}) {
     if (!cut.some(Boolean)) return keep;
     const left = words.filter((_w, i) => !cut[i]).join(' ').replace(/^[\s?!.,;:]+/, '').trim();
     const cutShare = tokens.filter((tk) => cut[tk.word]).length / tokens.length;
-    if (tokenize(left).length < MIN_LEFT || cutShare >= MOSTLY_ECHO) return drop;
+    // When the candidate was talking first, what is left is theirs, however much was cut.
+    const mostlyEchoCounts = refs.some((r) => r.how !== 'during');
+    if (tokenize(left).length < MIN_LEFT || (mostlyEchoCounts && cutShare >= MOSTLY_ECHO)) return drop;
     return { text: left, dropped: false, trimmed: true };
   }
 

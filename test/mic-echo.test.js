@@ -262,3 +262,15 @@ test('without interims (batch or local), a short answer restating the question i
   at(1020900);
   assert.equal(echo.cleanFinal('What front end languages slash frameworks slash libraries have you used and rough how many years with each?', 1020100, null).dropped, true);
 });
+
+test('the candidate talking when the interviewer asks: the question is cut from the end of their turn, their words stay (live test 2026-10-04)', () => {
+  const { echo, at } = setup();
+  at(1000000); echo.noteYou('In this job');
+  talkThem(echo, at, 'Could you walk me through how you would design a rate limiter for a public API?', 1002500, 1006800);
+  at(1007400);
+  const out = echo.cleanFinal('In this job I would use it to keep environments for tests reproducible. Could you walk me through how you would design a rate limiter for a public API?', 1007400, echo.takeYouStart());
+  assert.equal(out.dropped, false);
+  assert.equal(out.trimmed, true);
+  assert.match(out.text, /^In this job I would use it to keep environments for tests reproducible\./);
+  assert.doesNotMatch(out.text, /rate limiter/);
+});
