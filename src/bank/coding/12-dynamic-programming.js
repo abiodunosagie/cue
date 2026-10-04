@@ -1,11 +1,5 @@
 // Dynamic programming: one-dimensional and grid problems.
-function dp(id, title, level, statement, sig, fn, asks, idea, steps, code, check, complexity, tests, extra = {}) {
-  return {
-    id, title, level, statement, signature: sig, fn, asks, idea,
-    where: { dart: 'the Solution class, replacing the ' + fn + ' method.', typescript: 'the ' + fn + ' function, replacing its body.' },
-    steps, code, check, complexity, tests, ...extra
-  };
-}
+const { problem: dp } = require('../helpers');
 
 module.exports = [
   dp('climbing-stairs', 'Climbing Stairs', 'easy',

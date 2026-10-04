@@ -237,8 +237,10 @@ function createCodingLibrary({ file, now = Date.now } = {}) {
     remove,
     get: (id) => { const it = byId(id); return it ? { ...it } : null; },
     // The closest saved task, own solves first, then the bank's unflagged
-    // items; on an equal score the candidate's own solve wins.
-    candidate: (task, bankItems = []) => findCandidate([...items, ...bankItems.filter((b) => !bankFlags[b.id])], task),
+    // items; on an equal score the candidate's own solve wins. A screen with
+    // no language shown gets no bank solution: the bank holds each problem in
+    // several languages, and which one fits would be a guess.
+    candidate: (task, bankItems = []) => findCandidate([...items, ...(task.language ? bankItems.filter((b) => !bankFlags[b.id]) : [])], task),
     count: () => items.length,
     list: () => items.map((it) => ({ ...it }))
   };

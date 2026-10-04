@@ -202,8 +202,6 @@ function design({ cls, ops, args, expected }) {
   };
 }
 
-// Verify and Run it code for a function that changes its argument in place and
-// returns nothing (the platform checks the argument): prints that argument.
 // A Dart variable holding a list needs its element type: an empty literal
 // would be List<dynamic>. Taken from the values, else from elementType.
 function dartList(value, elementType) {
@@ -212,6 +210,8 @@ function dartList(value, elementType) {
   return '<' + type + '>' + literal(value, 'dart');
 }
 
+// Verify and Run it code for a function that changes its argument in place and
+// returns nothing (the platform checks the argument): prints that argument.
 function inPlace({ fn, tests, arg = 0, elementTypes = [] }) {
   const body = (lang, print) => tests.map((t, i) => {
     const vars = t.args.map((a, j) => (lang === 'dart' ? '  final a' + i + '_' + j + ' = ' + dartList(a, elementTypes[j]) : 'const a' + i + '_' + j + ' = ' + literal(a, lang)) + ';').join('\n');
@@ -231,4 +231,14 @@ function inPlace({ fn, tests, arg = 0, elementTypes = [] }) {
   };
 }
 
-module.exports = { structured, design, inPlace, NODES };
+// The usual problem: a Solution method in Dart and a function in TypeScript,
+// both named fn, so where the code goes follows from the name.
+function problem(id, title, level, statement, signature, fn, asks, idea, steps, code, check, complexity, tests, extra = {}) {
+  return {
+    id, title, level, statement, signature, fn, asks, idea,
+    where: { dart: 'the Solution class, replacing the ' + fn + ' method.', typescript: 'the ' + fn + ' function, replacing its body.' },
+    steps, code, check, complexity, tests, ...extra
+  };
+}
+
+module.exports = { structured, design, inPlace, problem, NODES };

@@ -31,14 +31,16 @@ const ROLE_SCOPE = {
 // Looser than a prepared answer's 0.4: an interviewer words a general question
 // many ways, and every candidate under the near-identical line still goes to
 // the Fast model, which says NONE when it is not the same question.
-const CANDIDATE_MIN = 0.3;
+const BANK_CANDIDATE_MIN = 0.3;
 const LANGUAGES = ['dart', 'typescript'];
 const STEP_MARK = /^[ \t]*\/\/@step[^\n]*\n?/gm;
 const FENCE = '```';
 
 // Each topic is a module exporting an array of items (template literals keep
 // code and answers readable in the source).
-function readDir(sub) {
+// strict: throw on a file that fails to load (the tests and the verify script),
+// instead of skipping it with a log line (the app keeps working without it).
+function readDir(sub, { strict = false } = {}) {
   const dir = path.join(DIR, sub);
   let names = [];
   try { names = fs.readdirSync(dir).filter((n) => n.endsWith('.js')).sort(); } catch { return []; }
@@ -48,6 +50,7 @@ function readDir(sub) {
       const list = require(path.join(dir, name));
       if (Array.isArray(list)) out.push(...list);
     } catch (e) {
+      if (strict) throw e;
       console.log(`[bank] skipped ${sub}/${name}: ${e && e.message ? e.message : String(e)}`);
     }
   }
@@ -68,14 +71,16 @@ function readQa(it) {
     variants: Array.isArray(it.variants) ? it.variants.map(str).filter(Boolean) : [],
     answer,
     roles: roles.length ? roles : ['all'],
-    anchors: Array.isArray(it.anchors) ? it.anchors.map((a) => str(a).toLowerCase()).filter(Boolean) : []
+    // Compiled once here: matching runs before every heard answer.
+    anchors: (Array.isArray(it.anchors) ? it.anchors.map((a) => str(a).toLowerCase()).filter(Boolean) : [])
+      .map((a) => new RegExp('\\b' + a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b'))
   };
 }
 
 // An item outside the role's scope still matches when the heard question names
 // its technology ("in Flutter, how do you..." during a web interview).
 function inScope(item, role, heardLower) {
-  const named = () => item.anchors.some((a) => new RegExp('\\b' + a.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(heardLower));
+  const named = () => item.anchors.some((re) => re.test(heardLower));
   if (item.roles.includes('named')) return named();
   const scope = ROLE_SCOPE[role];
   if (!scope || item.roles.some((r) => scope.includes(r))) return true;
@@ -149,11 +154,11 @@ function createQuestionBank({ qa, coding } = {}) {
     // The closest bank questions to the heard one for this role focus, best first.
     matches(heard, role, limit = 3) {
       const lower = String(heard || '').toLowerCase();
-      return findMatches(qaItems.filter((it) => inScope(it, role, lower)), heard, limit, CANDIDATE_MIN);
+      return findMatches(qaItems.filter((it) => inScope(it, role, lower)), heard, limit, BANK_CANDIDATE_MIN);
     },
     codingItems: () => codingItems,
     counts: () => ({ qa: qaItems.length, coding: codingItems.length })
   };
 }
 
-module.exports = { createQuestionBank, readDir, renderSolution, readCoding, readQa, literal, runBlock, LANGUAGES, STEP_MARK };
+module.exports = { createQuestionBank, readDir, renderSolution, readCoding, readQa, runBlock, LANGUAGES, STEP_MARK };

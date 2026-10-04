@@ -11,8 +11,8 @@ const { createPreparedStore, profileHash } = require('../src/prepared-answers');
 const { createCodingLibrary } = require('../src/coding-library');
 
 const LONG_DASH = String.fromCharCode(0x2014);
-const rawQa = readDir('qa');
-const rawCoding = readDir('coding');
+const rawQa = readDir('qa', { strict: true });
+const rawCoding = readDir('coding', { strict: true });
 const qa = rawQa.map(readQa);
 
 // ---- the shipped bank: shape ------------------------------------------------
@@ -140,6 +140,13 @@ test('a coding task on screen finds the bank solution in its own language', () =
   assert.match(found.item.solution, /```dart\n/);
   assert.equal(lib.candidate({ ...task, language: 'typescript' }, bankItems).item.id, 'bank:two-sum:typescript');
   assert.equal(lib.candidate({ ...task, language: 'python' }, bankItems), null);
+});
+
+test('a coding screen with no language shown never gets a bank solution', () => {
+  const lib = createCodingLibrary({});
+  assert.equal(lib.candidate({ ...task, language: '' }, bankItems), null);
+  const own = lib.save({ title: 'Two Sum', statement: bankItems[0].statement, language: '', solution: 'mine' });
+  assert.equal(lib.candidate({ ...task, language: '' }, bankItems).item.id, own.id);
 });
 
 test('the candidate\'s own solve of the same task comes before the bank', () => {

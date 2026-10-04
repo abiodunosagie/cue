@@ -16,9 +16,10 @@ const { followUpPrompt, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('
 const PREPARE_TIMEOUT_MS = 180000;
 const PREPARE_DEBOUNCE_MS = 3000;
 
-// getTranscript(): the live transcript; spokenAnswerTexts(): the answers given, for the "already used" note.
 // Close candidates the Fast model chooses between.
 const SHORTLIST = 3;
+
+// getTranscript(): the live transcript; spokenAnswerTexts(): the answers given, for the "already used" note.
 
 function createPrepare({ store, createLLM, preparedStore, questionBank, followUps, projectMemory, interviewMemory, send, recordEvent, getTranscript, spokenAnswerTexts }) {
   const preparing = { running: false, error: '' };

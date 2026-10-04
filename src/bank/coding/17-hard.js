@@ -1,11 +1,5 @@
 // Hard problems that senior rounds use to separate candidates.
-function problem(id, title, level, statement, sig, fn, asks, idea, steps, code, check, complexity, tests, extra = {}) {
-  return {
-    id, title, level, statement, signature: sig, fn, asks, idea,
-    where: { dart: 'the Solution class, replacing the ' + fn + ' method.', typescript: 'the ' + fn + ' function, replacing its body.' },
-    steps, code, check, complexity, tests, ...extra
-  };
-}
+const { problem } = require('../helpers');
 
 module.exports = [
   problem('regular-expression-matching', 'Regular Expression Matching', 'hard',

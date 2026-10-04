@@ -11,9 +11,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFile } = require('child_process');
-const { readCoding, runBlock, literal, LANGUAGES, STEP_MARK } = require('../src/question-bank');
+const { readCoding, readDir, runBlock, LANGUAGES, STEP_MARK } = require('../src/question-bank');
+const { literal } = require('../src/bank/literal');
 
-const DIR = path.join(__dirname, '..', 'src', 'bank', 'coding');
 const PARALLEL = 4;
 const TIMEOUT_MS = 60000;
 // The owner bans this dash from all copy; built from its code point so this file holds none.
@@ -102,10 +102,7 @@ async function checkItem(item) {
 
 async function main() {
   const only = new Set(process.argv.slice(2));
-  const items = [];
-  for (const name of fs.readdirSync(DIR).filter((n) => n.endsWith('.js')).sort()) {
-    for (const it of require(path.join(DIR, name))) items.push({ ...it, _file: name });
-  }
+  const items = readDir('coding', { strict: true });
   const ids = new Set();
   const dupes = items.filter((it) => (ids.has(it.id) ? true : (ids.add(it.id), false))).map((it) => it.id);
   if (dupes.length) console.log('Duplicate ids: ' + dupes.join(', '));
@@ -116,8 +113,8 @@ async function main() {
     while (next < todo.length) {
       const item = todo[next++];
       const problems = await checkItem(item);
-      if (problems.length) { failed++; console.log(`FAIL ${item._file} ${item.id}\n  ` + problems.join('\n  ')); }
-      else console.log(`ok   ${item._file} ${item.id}`);
+      if (problems.length) { failed++; console.log(`FAIL ${item.id}\n  ` + problems.join('\n  ')); }
+      else console.log(`ok   ${item.id}`);
     }
   }
   await Promise.all(Array.from({ length: PARALLEL }, worker));
@@ -125,4 +122,7 @@ async function main() {
   process.exit(failed || dupes.length ? 1 : 0);
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
