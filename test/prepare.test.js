@@ -12,8 +12,8 @@ async function run(failActive) {
     if (failActive && st.jobDescription === 'jd A') throw new Error('down');
     return '[{"question":"q?","variants":[],"answer":"a"}]';
   } });
-  const p = createPrepare({ store: { getSettings: () => settings }, createLLM, preparedStore, followUps: { items: () => [] }, projectMemory: { get: () => null },
-    interviewMemory: { generation: () => 0 }, send: () => {}, recordEvent: () => {}, getTranscript: () => [], spokenAnswerTexts: () => [] });
+  const p = createPrepare({ store: { getSettings: () => settings }, createLLM, preparedStore, projectMemory: { get: () => null },
+    send: () => {}, recordEvent: () => {}, spokenAnswerTexts: () => [] });
   await p.prepareOtherProfiles();
   await new Promise((r) => setTimeout(r, 100));
   return { calls, activeCurrent: preparedStore.isCurrent(profileHash(settings)) };

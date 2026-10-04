@@ -91,8 +91,8 @@ function prepareWith({ personal = [], reply = 'NONE' } = {}) {
   if (personal.length) preparedStore.replace(profileHash(settings), personal);
   const asked = [];
   const createLLM = () => ({ ready: true, stream: async ({ turns }) => { asked.push(turns[0].text); return reply; } });
-  const p = createPrepare({ store: { getSettings: () => settings }, createLLM, preparedStore, questionBank: bank, followUps: { items: () => [] },
-    projectMemory: { get: () => null }, interviewMemory: { generation: () => 0 }, send: () => {}, recordEvent: () => {}, getTranscript: () => [], spokenAnswerTexts: () => [] });
+  const p = createPrepare({ store: { getSettings: () => settings }, createLLM, preparedStore, questionBank: bank,
+    projectMemory: { get: () => null }, send: () => {}, recordEvent: () => {}, spokenAnswerTexts: () => [] });
   return { find: (q) => p.findPreparedAnswer('answerThis', q, settings), asked };
 }
 

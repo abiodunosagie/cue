@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const store = require('./src/store');
-const readingTracker = require('./renderer/reading-tracker');
+const { createMicEcho, createMicHold } = require('./src/mic-echo');
 const { isExplainRequest, isFixRequest, refersToScreen } = require('./renderer/spoken-question');
 const { captureScreenshot, captureMaskedScreen, captureMaskedPage, encodeScreenshot, MAX_DATA_URL_BYTES } = require('./src/screen');
 const { readScrollPages, fitPages } = require('./src/scroll-reader');
@@ -20,7 +20,8 @@ const { registerProjectsIpc } = require('./src/ipc/projects');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
-const { createLLM, imageLimit } = require('./src/llm');
+const { createLLM, imageLimit, setUsageRecorder } = require('./src/llm');
+const { createUsageLedger } = require('./src/usage-ledger');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { answeredQuestion } = require('./src/heard-question');
 const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
@@ -33,7 +34,6 @@ const { createProjectMemory } = require('./src/project-review/memory');
 const { projectMode, askTurn } = require('./src/project-review/review');
 const { createPreparedStore, profileHash } = require('./src/prepared-answers');
 const { createPrepare } = require('./src/prepare');
-const { createFollowUpBank } = require('./src/follow-ups');
 const { quickAsk } = require('./src/quick-ask');
 const { checkTurn, noAnswer } = require('./src/turn-check');
 const { checkContinuation, wholeQuestion } = require('./src/continuation-check');
@@ -156,8 +156,6 @@ projectMemory.load();
 // Up here too: a practice that crashed is cleared (clearInterview) while this
 // file is still loading, and a const declared below that call is not usable yet.
 const questionBundle = createQuestionBundle();
-// Answers to the likely follow-ups of this interview's last few answers (src/follow-ups.js).
-const followUps = createFollowUpBank();
 const MAX_TRANSCRIPT_TURNS = MEMORY_MAX_TURNS; // ~90 minutes of conversation
 const transcript = interviewMemory.turns().slice(-MAX_TRANSCRIPT_TURNS); // { channel, text, ts }
 const FLUSH_MS = 900;
@@ -207,18 +205,30 @@ const ringBuffers = {
   them: new AudioRingBuffer(300, 16000)
 };
 
-// Without headphones the mic transcribes the interviewer too. Keeping that as a
-// "You:" turn would tell the model the candidate said the interviewer's words.
-const ECHO_WINDOW_MS = 15000;
-function isMicEcho(turn) {
-  if (turn.channel !== 'you') return false;
-  for (let i = transcript.length - 1; i >= 0; i--) {
-    const prev = transcript[i];
-    if (turn.ts - prev.ts > ECHO_WINDOW_MS) return false;
-    if (prev.channel === 'them') return readingTracker.isEcho(turn.text, prev.text);
+// Without headphones the mic transcribes the interviewer too (src/mic-echo.js).
+// Kept as a "You:" turn it would tell the model the candidate said the
+// interviewer's words, clear the heard question and move the reading follow.
+// Every mic turn waits briefly, then is published cleaned (createMicHold).
+const micEcho = createMicEcho();
+const countWords = (t) => String(t || '').split(/\s+/).filter(Boolean).length;
+const micHold = createMicHold({
+  echo: micEcho,
+  publish: (turn, clean) => {
+    // A script or practice that started during the hold takes the turn, as it
+    // would have taken it on arrival.
+    if (practice.hidesTurn(turn) || scriptTakesTurn(turn)) return;
+    // Counts only, never the words: heard speech stays out of the log.
+    if (clean.dropped) {
+      console.log(`[echo] dropped a mic turn of ${countWords(turn.text)} words (the interviewer's)`);
+      // Its interim words may be on screen as "You: ..."; this clears only those.
+      send('stt:final', { channel: turn.channel, text: '', dropped: true });
+      return;
+    }
+    if (clean.trimmed) console.log(`[echo] cut the interviewer's words from a mic turn, ${countWords(clean.text)} of ${countWords(turn.text)} words kept`);
+    const { start: _start, ...published } = turn;
+    publishTurn({ ...published, text: clean.text });
   }
-  return false;
-}
+});
 
 // Teleprompter (the Script button): while a script is read aloud, speech only
 // moves the highlight. Nothing reaches the interview transcript, memory,
@@ -232,7 +242,6 @@ function scriptTakesTurn(turn) {
 }
 
 function pushTranscript(turn) {
-  if (isMicEcho(turn)) return;
   transcript.push(turn);
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
   interviewMemory.addTurn(turn, { profile: store.getSettings().activeProfile });
@@ -265,10 +274,11 @@ if (fs.existsSync(PRACTICE_MARKER)) {
   try { fs.unlinkSync(PRACTICE_MARKER); } catch { /* best effort */ }
 }
 
-// Forget the current interview: the live transcript, its follow-ups and the file on disk.
+// Forget the current interview: the live transcript and the file on disk.
 function clearInterview() {
   transcript.splice(0, transcript.length);
-  followUps.clear();
+  micEcho.clear();
+  micHold.clear();
   questionBundle.clear();
   currentLibraryId = null;
   // A walkthrough of the candidate's own project is prepared before the
@@ -293,14 +303,40 @@ function getWhisperRuntime() {
 }
 
 // fromPractice: the practice question itself, which the practice echo gate must let through.
+// Every final transcript, from any STT path, comes through here.
 function publishTranscript(channel, text, { fromPractice = false } = {}) {
   if (!text || !text.trim()) return;
   const turn = { channel, text: text.trim(), ts: Date.now() };
-  if (!fromPractice && practice.hidesTurn(turn)) return;
-  if (!fromPractice && scriptTakesTurn(turn)) return;
+  // When this mic turn was first heard: the echo check's strongest clue.
+  if (channel === 'you') turn.start = micEcho.takeYouStart();
+  if (!fromPractice && (practice.hidesTurn(turn) || scriptTakesTurn(turn))) {
+    // Its interim words opened an interviewer turn the echo check is tracking: it ends here.
+    if (channel === 'them') micEcho.closeThem();
+    return;
+  }
+  if (channel === 'them') {
+    micEcho.noteThem(turn.text);
+    // Held mic turns came first: judged now (this turn is their reference) and published before it.
+    micHold.releaseAll();
+    publishTurn(turn);
+    return;
+  }
+  micHold.push(turn);
+}
+function publishTurn(turn) {
   pushTranscript(turn);
   send('transcript', turn);
-  send('stt:final', { channel, text: turn.text });
+  send('stt:final', { channel: turn.channel, text: turn.text });
+}
+// Interim words: the interviewer's are noted for the echo check; the mic's
+// that only repeat the interviewer are not shown or followed.
+function publishInterim(channel, text) {
+  if (channel === 'them') micEcho.noteThem(text, { final: false });
+  else {
+    micEcho.noteYou(text);
+    if (micEcho.isEchoInterim(text)) return;
+  }
+  send('stt:interim', { channel, text });
 }
 
 async function startLocalWhisper(settings) {
@@ -507,11 +543,7 @@ async function flushChannel(channel) {
       return;
     }
     if (res.text && res.text.trim() && res.text.trim().length > 1 && !/^[?!.,;:\-…]+$/.test(res.text.trim())) {
-      const turn = { channel, text: res.text.trim(), ts: Date.now() };
-      if (practice.hidesTurn(turn)) return;
-      if (scriptTakesTurn(turn)) return;
-      pushTranscript(turn);
-      send('transcript', turn);
+      publishTranscript(channel, res.text);
     }
   } catch (e) {
     console.log('[stt] error', e && e.message);
@@ -557,17 +589,8 @@ function initStreamingSTT() {
 
   ['you', 'them'].forEach((channel) => {
     const sttInstance = createStreamingSTT(settings, channel, {
-      onTranscript: (ch, text) => {
-        const turn = { channel: ch, text, ts: Date.now() };
-        if (practice.hidesTurn(turn)) return;
-        if (scriptTakesTurn(turn)) return;
-        pushTranscript(turn);
-        send('transcript', turn);
-        send('stt:final', { channel: ch, text });
-      },
-      onInterim: (ch, text) => {
-        send('stt:interim', { channel: ch, text });
-      },
+      onTranscript: (ch, text) => publishTranscript(ch, text),
+      onInterim: (ch, text) => publishInterim(ch, text),
       onError: (err) => {
         console.log('[streaming-stt] error', err.provider, err.message);
         const batchFallbackAvailable = createSTT(settings).available;
@@ -681,6 +704,10 @@ async function setCapturing(active) {
   state.capturing = false;
   stopFlushLoop();
   stopStreamingSTT();
+  // What was heard is published now; a turn started before the stop must not
+  // lend its start time to the first one after the next start.
+  micHold.releaseAll();
+  micEcho.takeYouStart();
   buffers.you = []; buffers.them = [];
   vad.you.reset(); vad.them.reset();
   ringBuffers.you.clear(); ringBuffers.them.clear();
@@ -702,9 +729,8 @@ async function setCapturing(active) {
 
 // -------- feature runner --------
 // -------- prepared answers (src/prepare.js) --------
-const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer, prepareFollowUps } = createPrepare({
-  store, createLLM, preparedStore, questionBank, followUps, projectMemory, interviewMemory, send, recordEvent, spokenAnswerTexts,
-  getTranscript: () => transcript
+const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer } = createPrepare({
+  store, createLLM, preparedStore, questionBank, projectMemory, send, recordEvent, spokenAnswerTexts
 });
 
 // The earlier coding solves a mode builds on: the last two for a new solve,
@@ -1021,7 +1047,6 @@ async function runFeature(mode, userText, options = {}) {
       for (const chunk of prepared.answer.match(/\S+\s*/g) || []) send('llm:token', { text: chunk });
       send('llm:done', {});
       interviewMemory.addAnswer({ mode, text: prepared.answer, generation: memoryGeneration, ts: startedAt });
-      prepareFollowUps(userText, prepared.answer, memoryGeneration);
       return;
     }
 
@@ -1221,8 +1246,6 @@ async function runFeature(mode, userText, options = {}) {
       }).catch((e) => console.log(`[library] could not save the solve: ${e && e.message ? e.message : String(e)}`));
     }
     if (!def.notAnswer) interviewMemory.addAnswer({ mode, text: answer, generation: memoryGeneration, ts: startedAt });
-    // The question a spoken answer replied to: the heard one, else the interviewer's newest turn.
-    if (LENGTH_MODES.has(mode)) prepareFollowUps(answeredQuestion(mode, userText, transcript), answer, memoryGeneration);
     // Streams settle after their headers, so the charge is reconciled from
     // GET /wallet shortly after the answer — one request per answer, debounced.
     if (settings.provider === publik.PUBLIK_PROVIDER) publikScheduleWalletRefresh();
@@ -1250,6 +1273,10 @@ ipcMain.handle('settings:set', (_e, patch) => {
   return store.redactForRenderer(saved);
 });
 ipcMain.handle('prepared:state', () => preparedState());
+// Settings > Cost: today's spend by tier and model, and the last 7 days (src/usage-ledger.js).
+const usageLedger = createUsageLedger({ file: path.join(app.getPath('userData'), 'cue-usage.json') });
+setUsageRecorder((entry) => usageLedger.record(entry));
+ipcMain.handle('usage:summary', () => usageLedger.summary());
 // A long interviewer turn that ends on a statement: is a question in it waiting
 // for an answer? (renderer.js finalizeQuestion, src/turn-check.js)
 ipcMain.handle('turn:check', async (_e, text) => {
@@ -1320,8 +1347,9 @@ registerProjectReviewIpc({
   cloneDir: path.join(app.getPath('userData'), 'cue-projects')
 });
 ipcMain.handle('practice:start', () => practice.start());
-ipcMain.handle('practice:next', () => practice.next());
-ipcMain.handle('practice:end', () => practice.end());
+// Next and End score the answer: the candidate's last words may still be in the echo hold.
+ipcMain.handle('practice:next', () => { micHold.releaseAll(); return practice.next(); });
+ipcMain.handle('practice:end', () => { micHold.releaseAll(); return practice.end(); });
 ipcMain.on('practice:played', (_e, token) => practice.played(token));
 ipcMain.handle('prepared:run', () => prepareAnswers({ force: true }));
 
@@ -1755,7 +1783,7 @@ app.on('will-quit', () => {
 });
 app.on('window-all-closed', () => app.quit());
 
-app.on('will-quit', () => { globalShortcut.unregisterAll(); recording.reset(); });
+app.on('will-quit', () => { globalShortcut.unregisterAll(); recording.reset(); usageLedger.flush(); });
 app.on('window-all-closed', (e) => {
   // Don't quit while the permissions window is open — the user may be in System Settings
   if (permWin) { e.preventDefault(); return; }

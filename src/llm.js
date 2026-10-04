@@ -371,9 +371,22 @@ function answerSpeedOptions(model) {
   return EFFORT_MODEL.test(String(model || '')) ? { effort: 'low' } : null;
 }
 
+// Settings > Cost (src/usage-ledger.js): main sets where each request's token
+// counts go. Counts only, never text.
+let usageRecorder = null;
+function setUsageRecorder(fn) { usageRecorder = typeof fn === 'function' ? fn : null; }
+
 // message_delta repeats some counts as null: keep only real numbers.
 function addUsage(usage, counts) {
   for (const [key, value] of Object.entries(counts || {})) if (Number.isFinite(value)) usage[key] = value;
+}
+
+function recordUsage(model, tier, usage, fast) {
+  console.log(usageLine(model, usage));
+  if (!usageRecorder) return;
+  try {
+    usageRecorder({ model, tier, input: usage.input_tokens, cacheRead: usage.cache_read_input_tokens, cacheWrite: usage.cache_creation_input_tokens, output: usage.output_tokens, fast });
+  } catch { /* the cost tally must never break an answer */ }
 }
 
 // What one request was billed for, for the log: token counts only, never text
@@ -384,7 +397,7 @@ function usageLine(model, usage) {
     `cache write ${n(usage.cache_creation_input_tokens)}, output ${n(usage.output_tokens)}`;
 }
 
-async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, imageDataUrls, maxTokens, onToken, onActivity, onThinking, speedOptions, stageLabel = 'coding' }) {
+async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, imageDataUrls, maxTokens, onToken, onActivity, onThinking, speedOptions, stageLabel = 'coding', tier }) {
   const Anthropic = require('@anthropic-ai/sdk');
   const client = new Anthropic({ apiKey });
   const images = turnImages(imageDataUrl, imageDataUrls);
@@ -417,16 +430,21 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
     const stream = await client.messages.create(request, hasFallback ? { headers, maxRetries: 0 } : { headers });
     let full = '';
     const usage = {};
-    for await (const ev of stream) {
-      // Any event proves the stream is alive, thinking included.
-      if (onActivity) onActivity();
-      if (ev.type === 'message_start' && ev.message) addUsage(usage, ev.message.usage);
-      if (ev.type === 'message_delta') addUsage(usage, ev.usage);
-      const d = ev.type === 'content_block_delta' && ev.delta;
-      if (d && d.type === 'text_delta') { emitted = true; full += d.text; onToken(d.text); }
-      else if (d && d.type === 'thinking_delta' && d.thinking && onThinking) onThinking(d.thinking);
+    try {
+      for await (const ev of stream) {
+        // Any event proves the stream is alive, thinking included.
+        if (onActivity) onActivity();
+        if (ev.type === 'message_start' && ev.message) addUsage(usage, ev.message.usage);
+        if (ev.type === 'message_delta') addUsage(usage, ev.usage);
+        const d = ev.type === 'content_block_delta' && ev.delta;
+        if (d && d.type === 'text_delta') { emitted = true; full += d.text; onToken(d.text); }
+        else if (d && d.type === 'thinking_delta' && d.thinking && onThinking) onThinking(d.thinking);
+      }
+    } finally {
+      // A stream that broke after it started was still billed for what it read
+      // (and the output so far, when the provider reported it).
+      if (Object.keys(usage).length) recordUsage(model, tier, usage, !!(extra && extra.fast));
     }
-    console.log(usageLine(model, usage));
     return full;
   };
   // Try the fastest options first, then effort alone (fast mode can be off for
@@ -630,7 +648,7 @@ function createLLM(settings, { tier: requestedTier } = {}) {
     configurationError,
     async stream(params) {
       if (!ready) throw new Error(configurationError || `Complete the ${provider} provider settings.`);
-      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, stageLabel, ...params, imageDataUrls: capImages(provider, params.imageDataUrls), turns: sanitizeTurns(params.turns) };
+      const args = { apiKey, baseURL, endpoint, model, maxTokens, speedOptions, stageLabel, tier, ...params, imageDataUrls: capImages(provider, params.imageDataUrls), turns: sanitizeTurns(params.turns) };
       // The cache mark (src/prompt-cache.js) ends here: Anthropic gets cached
       // blocks, every other provider the plain text.
       if (params.system != null) args.system = (provider === 'anthropic' && anthropicSystemBlocks(params.system)) || stripCacheBreak(params.system);
@@ -675,5 +693,6 @@ module.exports = {
   CURRENT_ANTHROPIC_DEFAULT_CODING,
   PUBLIK_PROVIDER,
   isRateLimitError,
-  answerSpeedOptions
+  answerSpeedOptions,
+  setUsageRecorder
 };

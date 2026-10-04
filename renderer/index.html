@@ -129,6 +129,7 @@
         <button class="s-tab" data-tab="prep">Interview prep</button>
         <button class="s-tab" data-tab="style">Answer style</button>
         <button class="s-tab" data-tab="qa">Salary &amp; Q&amp;A</button>
+        <button class="s-tab" data-tab="cost">Cost</button>
       </div>
 
       <!-- Tab: Keys -->
@@ -411,6 +412,24 @@
         <textarea id="questions-to-ask" rows="6" spellcheck="false" placeholder="e.g.&#10;- What does success look like in the first 90 days?&#10;- How does the team handle technical debt?&#10;- What's the biggest challenge the team is facing right now?&#10;- How does feedback and mentorship work here?"></textarea>
       </div>
 
+      <!-- Tab: Cost (renderer/cost-panel.js) -->
+      <div class="s-body s-tab-pane hidden" data-pane="cost">
+        <div class="cost-today">
+          <div class="cost-head">
+            <div class="cost-label">Spent today</div>
+            <div class="cost-total" id="cost-total">$0.00</div>
+            <div class="cost-meta" id="cost-meta"></div>
+          </div>
+          <div class="cost-sub">Worked out from the tokens each Anthropic request used, at list prices. Other providers are not counted. Your Claude Console bill is final: it counts in UTC days and includes anything else on the key.</div>
+        </div>
+        <div class="s-label" id="cost-by-tier-title">By tier</div>
+        <ul class="cost-rows" id="cost-by-tier" aria-labelledby="cost-by-tier-title"></ul>
+        <div class="s-label" id="cost-by-model-title">By model</div>
+        <ul class="cost-rows" id="cost-by-model" aria-labelledby="cost-by-model-title"></ul>
+        <div class="s-label" id="cost-days-title">Last 7 days</div>
+        <ul class="cost-rows" id="cost-days" aria-labelledby="cost-days-title"></ul>
+      </div>
+
       <!-- Tab: Style -->
       <div class="s-body s-tab-pane hidden" data-pane="style">
         <label class="s-label" for="panel-opacity">Panel background <span class="s-hint">lower it to read the screen behind cue</span></label>
@@ -608,6 +627,7 @@
   <script src="coding-library-panel.js"></script>
   <script src="teleprompter-panel.js"></script>
   <script src="history-sidebar.js"></script>
+  <script src="cost-panel.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

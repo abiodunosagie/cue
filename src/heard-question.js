@@ -1,6 +1,6 @@
 // The question a spoken answer replies to: the heard question for answerThis,
 // else the interviewer's newest turn (say and assist read the conversation).
-// Used to route a heard question and to write the follow-ups to an answer.
+// Used to route a heard question.
 //
 // Do not bring back a first line from the Fast model ahead of the answer: it
 // knows nothing about the candidate, so its first-person sentence claimed

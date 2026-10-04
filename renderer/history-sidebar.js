@@ -137,6 +137,12 @@
       clearTimeout(tsRowTimer.you); clearTimeout(tsRowTimer.them);
     }
 
-    return { appendTranscriptHistoryTurn, clearTranscriptSidebar };
+    // Words in progress that never became a turn (main dropped the mic's copy of
+    // the interviewer): only when the row is still that channel's.
+    function clearInterimRow(channel) {
+      if (tsSidebarInterimEl && tsSidebarInterimEl.classList.contains('ts-' + channel)) { tsSidebarInterimEl.remove(); tsSidebarInterimEl = null; }
+    }
+
+    return { appendTranscriptHistoryTurn, clearTranscriptSidebar, clearInterimRow };
   };
 })();

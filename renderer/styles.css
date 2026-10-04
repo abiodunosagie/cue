@@ -1047,3 +1047,19 @@ body.record-mode .script-view p { font-size: 30px; line-height: 1.45; margin-bot
 .lib-flag { color: #fbbf24; font-size: 12px; line-height: 1.4; }
 .lib-row details summary { color: var(--tx-2); font-size: 12px; cursor: pointer; }
 .lib-row details pre { margin: 6px 0 0; max-height: 260px; overflow: auto; padding: 8px 10px; border-radius: 7px; background: var(--field); color: var(--tx-1); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+
+/* Settings > Cost: today's total large, then rows with the amount on the right. */
+.cost-today { border: 1px solid var(--bd-hair); border-radius: 10px; background: var(--field); padding: 14px; margin-bottom: 6px; }
+.cost-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.cost-label { font-size: 13px; font-weight: 600; color: var(--tx-1); }
+.cost-total { font-size: 26px; font-weight: 700; color: var(--tx-1); font-variant-numeric: tabular-nums; margin-left: auto; }
+.cost-meta { flex-basis: 100%; text-align: right; font-size: 12px; color: rgba(255,255,255,0.68); }
+.cost-sub { font-size: 12px; line-height: 1.45; color: rgba(255,255,255,0.68); margin-top: 8px; }
+.cost-rows { list-style: none; margin: 0 0 6px; padding: 0; border: 1px solid var(--bd-hair); border-radius: 10px; background: var(--field); }
+.cost-row { display: flex; align-items: flex-start; gap: 12px; padding: 9px 14px; }
+.cost-row + .cost-row { border-top: 1px solid var(--bd-hair); }
+.cost-text { flex: 1; min-width: 0; }
+.cost-name { font-size: 13px; font-weight: 600; color: var(--tx-1); }
+.cost-detail { font-size: 12px; line-height: 1.4; color: rgba(255,255,255,0.68); margin-top: 2px; overflow-wrap: anywhere; }
+.cost-amount { flex-shrink: 0; font-size: 13.5px; font-weight: 700; color: var(--tx-1); font-variant-numeric: tabular-nums; }
+.cost-empty { padding: 10px 14px; font-size: 12.5px; color: rgba(255,255,255,0.68); }

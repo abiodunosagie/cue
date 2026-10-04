@@ -1,6 +1,6 @@
-// Prompt caching for the live answer's system prompt. Every spoken answer, and
-// the follow-ups written after it, sends the same resume, job description and
-// company notes (about 4,000 tokens) before the parts that change with the
+// Prompt caching for the live answer's system prompt. Every spoken answer sends
+// the same resume, job description and company notes (about 3,150 tokens on the
+// micro1 profile) before the parts that change with the
 // question (projects picked for it, stories for its category). Measured on the
 // 2026-10-04 interview: that stable start was identical on all 25 answers, and
 // the whole system prompt was identical to the previous one 13 times in 24.

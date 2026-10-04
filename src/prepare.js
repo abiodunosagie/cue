@@ -1,8 +1,10 @@
 // Prepared answers: the job's likely questions answered before the interview,
-// for every profile, and the follow-ups of this interview's answers, so a heard
-// question that matches one shows its answer at once (src/prepared-answers.js,
-// src/follow-ups.js), or that matches the shared question bank
+// for every profile, so a heard question that matches one shows its answer at
+// once (src/prepared-answers.js), or that matches the shared question bank
 // (src/question-bank.js). Main passes in its stores and helpers.
+//
+// Nothing is written ahead during an interview: follow-up answers prepared
+// after every answer cost a Smart call each and were almost never asked.
 const Profiles = require('./profiles');
 const { MODES } = require('./prompts');
 const { buildInterviewContext } = require('./interview-context');
@@ -11,7 +13,6 @@ const { quickAsk } = require('./quick-ask');
 const { normalizeLength } = require('../renderer/answer-length');
 const { profileHash, canPrepare, parseItems, findMatches, pickSameQuestion, PREPARE_INSTRUCTIONS, PREPARE_MAX_TOKENS } = require('./prepared-answers');
 const { resolveRoleFocus } = require('../renderer/role-focus');
-const { followUpPrompt, FOLLOW_UP_TIMEOUT_MS, FOLLOW_UP_MAX_TOKENS } = require('./follow-ups');
 
 const PREPARE_TIMEOUT_MS = 180000;
 const PREPARE_DEBOUNCE_MS = 3000;
@@ -19,9 +20,9 @@ const PREPARE_DEBOUNCE_MS = 3000;
 // Close candidates the Fast model chooses between.
 const SHORTLIST = 3;
 
-// getTranscript(): the live transcript; spokenAnswerTexts(): the answers given, for the "already used" note.
+// spokenAnswerTexts(): the answers given, for the "already used" note.
 
-function createPrepare({ store, createLLM, preparedStore, questionBank, followUps, projectMemory, interviewMemory, send, recordEvent, getTranscript, spokenAnswerTexts }) {
+function createPrepare({ store, createLLM, preparedStore, questionBank, projectMemory, send, recordEvent, spokenAnswerTexts }) {
   const preparing = { running: false, error: '' };
   let prepareTimer = null;
 
@@ -38,7 +39,7 @@ function createPrepare({ store, createLLM, preparedStore, questionBank, followUp
 
   // Questions with spoken answers, written with the candidate's context in the
   // system prompt exactly as for a live answer, so they follow the same voice,
-  // length and no-invented-stories rules. Used for the prepared bank and follow-ups.
+  // length and no-invented-stories rules.
   async function askForItems({ llm, settings, turns, prompt, maxTokens, timeoutMs }) {
     const system = MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', turns, { answerTexts: spokenAnswerTexts() }), rulesWithFocus(settings));
     return parseItems(await quickAsk({ llm, system, text: prompt, maxTokens, timeoutMs }));
@@ -132,15 +133,14 @@ function createPrepare({ store, createLLM, preparedStore, questionBank, followUp
   async function findPreparedAnswer(mode, userText, settings) {
     const screen = mode === 'walkthroughAnswer';
     if ((mode !== 'answerThis' && !screen) || normalizeLength(settings.answerLength) !== 'medium') return null;
-    // The job's prepared bank, the walkthrough's likely questions, this
-    // interview's follow-ups and the shared question bank: the closest wins,
+    // The job's prepared bank, the walkthrough's likely questions and the
+    // shared question bank: the closest wins,
     // and on equal scores the candidate's own answers come before the bank.
     const heard = userText || '';
     const project = projectMemory.get();
     const candidates = [
       ...preparedStore.matches(heard, profileHash(settings), SHORTLIST),
       ...(project && project.purpose === 'walkthrough' ? findMatches(project.qa, heard, SHORTLIST) : []),
-      ...findMatches(followUps.items(), heard, SHORTLIST),
       ...(questionBank ? questionBank.matches(heard, resolveRoleFocus(settings), SHORTLIST) : [])
     ];
     const shortlist = candidates.sort((a, b) => b.score - a.score).slice(0, SHORTLIST);
@@ -155,23 +155,7 @@ function createPrepare({ store, createLLM, preparedStore, questionBank, followUp
     return picked >= 0 ? shortlist[picked].item : null;
   }
 
-  // In the background after a spoken answer: the two likely follow-ups and their
-  // answers, with the same context and rules as a live answer. Dropped if the
-  // interview was cleared meanwhile; a failure only means no follow-ups this time.
-  async function prepareFollowUps(question, answer, generation) {
-    if (!question || !answer) return;
-    const settings = store.getSettings();
-    const llm = createLLM({ ...settings, smart: true });
-    if (!llm.ready) return;
-    try {
-      const items = await askForItems({ llm, settings, turns: getTranscript(), prompt: followUpPrompt(question, answer), maxTokens: FOLLOW_UP_MAX_TOKENS, timeoutMs: FOLLOW_UP_TIMEOUT_MS });
-      if (items.length && generation === interviewMemory.generation()) followUps.add(items);
-    } catch (e) {
-      recordEvent({ level: 'warn', event: 'follow_ups_failed', msg: e && e.message ? e.message : String(e), frame: 'prepareFollowUps', context: {} });
-    }
-  }
-
-  return { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer, prepareFollowUps };
+  return { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, findPreparedAnswer };
 }
 
 module.exports = { createPrepare };

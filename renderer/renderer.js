@@ -1439,7 +1439,7 @@
 
   // ---- transcript history sidebar (hidden by default, manual toggle) ----
   // renderer/history-sidebar.js
-  const { appendTranscriptHistoryTurn, clearTranscriptSidebar } = window.createHistorySidebar({ icon });
+  const { appendTranscriptHistoryTurn, clearTranscriptSidebar, clearInterimRow } = window.createHistorySidebar({ icon });
 
   // ---- events from main --------------------------------------------------
   cue.on('capture:state', ({ active, streaming, mode }) => {
@@ -1521,6 +1521,7 @@
     // One line: show the newest words, which is what the speaker is saying now.
     const tail = text.length > 90 ? '…' + text.slice(-90) : text;
     el.textContent = `${label}: ${tail}`;
+    el.dataset.channel = channel;
     el.classList.add('show');
     appendTranscriptHistoryTurn(channel, text, true); // update sidebar interim
     if (channel === 'you' && !isInterviewerEcho(channel, text)) readingFollow.onSpeech(text, false);
@@ -1530,10 +1531,20 @@
       showInterimInInput(text);
     }
   });
-  cue.on('stt:final', ({ channel, text }) => {
+  cue.on('stt:final', ({ channel, text, dropped }) => {
+    // A mic turn main dropped as the interviewer's echo: clear only its own
+    // "You:" words, never the interviewer's that may be showing now.
+    if (dropped) {
+      if (interimEl && interimEl.dataset.channel === channel) { interimEl.textContent = ''; interimEl.classList.remove('show'); }
+      clearInterimRow(channel);
+      return;
+    }
     setLiveDotState('idle');
-    // Clear interim when we get a final
-    if (interimEl) { interimEl.textContent = ''; interimEl.classList.remove('show'); }
+    // Clear interim when we get a final. A mic final arrives up to 0.8 s late
+    // (main's echo hold), when the interviewer may be talking: it clears only
+    // the candidate's own words, never theirs.
+    if (interimEl && (channel !== 'you' || interimEl.dataset.channel === 'you')) { interimEl.textContent = ''; interimEl.classList.remove('show'); }
+    if (channel === 'you') { clearInterimRow('you'); return; }
     clearTranscriptInterim();
     clearInputInterim(); // FIX #12: Clear interim text from input area
     // sidebar: the final turn is added via the 'transcript' event below
@@ -1840,6 +1851,8 @@
     fillSettings();
     scrim.classList.remove('hidden');
     refreshWhisperModels();
+    const costPane = document.querySelector('.s-tab-pane[data-pane="cost"]');
+    if (window.CostPanel && costPane && !costPane.classList.contains('hidden')) window.CostPanel.refresh();
   }
   function closeSettings() { saveSettings(); scrim.classList.add('hidden'); }
   $('#more-btn').addEventListener('click', openSettings);
@@ -1856,6 +1869,7 @@
       tab.classList.add('on');
       const pane = document.querySelector(`.s-tab-pane[data-pane="${tab.dataset.tab}"]`);
       if (pane) pane.classList.remove('hidden');
+      if (tab.dataset.tab === 'cost' && window.CostPanel) window.CostPanel.refresh();
     });
   });
 

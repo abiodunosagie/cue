@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('cue', {
   codingLibraryDelete: (id) => ipcRenderer.invoke('codingLibrary:delete', id),
   memoryState: () => ipcRenderer.invoke('memory:state'),
   preparedState: () => ipcRenderer.invoke('prepared:state'),
+  usageSummary: () => ipcRenderer.invoke('usage:summary'),
   preparedRun: () => ipcRenderer.invoke('prepared:run'),
   turnCheck: (text) => ipcRenderer.invoke('turn:check', text),
   continuationCheck: (asked, added, answer) => ipcRenderer.invoke('turn:continuation', { asked, added, answer }),
