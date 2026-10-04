@@ -314,3 +314,17 @@ test('a mic copy that starts up to 1.5 s before the interviewer\'s own stream is
   at(1005000);
   assert.equal(echo.cleanFinal('tell me about your experience with RITO healing system and the payment flow', 1005000, echo.takeYouStart()).dropped, true);
 });
+
+test('live 2026-10-04: "Great." with no interim from the interviewer, heard by the mic as "Grade.", is still dropped', () => {
+  const { echo, at } = setup();
+  // The mic's first interim 0.5 s after the word; the interviewer's final, no interim, at 1.2 s.
+  at(1000500); echo.noteYou('grade');
+  at(1001200); echo.noteThem('Great.');
+  at(1002150);
+  assert.equal(echo.cleanFinal('Grade.', 1002150, echo.takeYouStart()).dropped, true);
+  // "Ten years." said after "Two years?" (no interim either) is the candidate's.
+  at(1010000); echo.noteThem('Two years?');
+  at(1011300); echo.noteYou('ten');
+  at(1011900);
+  assert.equal(echo.cleanFinal('Ten years.', 1011900, echo.takeYouStart()).dropped, false);
+});

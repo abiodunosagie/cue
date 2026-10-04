@@ -32,6 +32,8 @@ const INSIDE_MARGIN_MS = 300;
 // with their first words, is a copy that started with them.
 const LEAD_MS = 1500;
 const OPENING_WORDS = 2;
+// How far an estimated start (from a final with no interims) can be off.
+const ESTIMATE_ERROR_MS = 700;
 // Started together with the interviewer: half its content words being theirs
 // (3 or more) is enough, the rest is the mic mishearing ("RITO healing system").
 const ALIGNED_SHARE = 0.5;
@@ -220,7 +222,8 @@ function createMicEcho({ now = Date.now } = {}) {
     // Exact: a copy whatever the timing. Nearly the same: only when the mic turn
     // started with theirs ("Ten years." after "Two years?" is an answer).
     const recent = (f) => f.ts >= youTs - EXACT_COPY_MS && f.ts <= youTs + NEWER_SLACK_MS;
-    const startedTogether = (f) => Number.isFinite(start) && f.measured && Math.abs(start - f.start) <= ALIGN_MS;
+    // A one-word turn often comes with no interim, so its start is estimated: allow for that.
+    const startedTogether = (f) => Number.isFinite(start) && Math.abs(start - f.start) <= (f.measured ? ALIGN_MS : ALIGN_MS + ESTIMATE_ERROR_MS);
     if (raw && finals.some((f) => recent(f) && (f.raw === raw || (startedTogether(f) && nearCopy(raw, f.raw))))) return drop;
     const refs = references(youTs, original, start);
     if (!refs.length) return keep;
