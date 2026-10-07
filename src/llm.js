@@ -16,10 +16,11 @@ const CURRENT_GEMINI_DEFAULT = 'gemini-2.5-flash';
 // claude-3-5-haiku-latest / claude-3-5-sonnet-latest were retired by Anthropic
 // (confirmed absent from GET https://api.anthropic.com/v1/models as of Sep 19
 // 2026 — every claude-2.x and claude-3.x id 404s with not_found_error).
-// Fast and Smart are both claude-sonnet-5-5: Haiku answered faster but not well
-// enough for a live interview. Live-verified on 2026-09-29 (GET /v1/models and
-// real streams): first word 1.3 to 1.8s against Haiku 4.5's 0.9s.
-const CURRENT_ANTHROPIC_DEFAULT_FAST = 'claude-sonnet-5-5';
+// Fast is claude-haiku-5-5: its jobs are short verdicts (turn check, continuation
+// check, bank pick), where it matched Sonnet 5.5 on 2026-10-08, faster and far
+// cheaper. Smart stays claude-sonnet-5-5: Haiku 5.5's spoken answers broke the
+// experience-gap rule (a flat no on Kafka and Go) in the same test.
+const CURRENT_ANTHROPIC_DEFAULT_FAST = 'claude-haiku-5-5';
 const CURRENT_ANTHROPIC_DEFAULT_SMART = 'claude-sonnet-5-5';
 // Coding solves (⌘H) run on the strongest model: a wrong answer there fails the
 // interview outright, so they trade cost and a few seconds for correctness.
@@ -334,7 +335,7 @@ const CODING_SPEEDS = {
   careful: { effort: 'high', fast: false }
 };
 // Models that take output_config.effort, and the ones with fast mode.
-const EFFORT_MODEL = /^claude-(opus-4-[5-9]|opus-5|sonnet-4-6|sonnet-5|fable-5|mythos-5)/;
+const EFFORT_MODEL = /^claude-(opus-4-[5-9]|opus-5|sonnet-4-6|sonnet-5|haiku-5|fable-5|mythos-5)/;
 const FAST_MODE_MODEL = /^claude-(opus-4-8|opus-5)/;
 // Models that take thinking {type: 'adaptive'} (4.6 and later), which the summary needs.
 const ADAPTIVE_THINKING_MODEL = /^claude-(opus-4-[6-9]|opus-5|sonnet-4-6|sonnet-5|fable-5|mythos-5)/;
@@ -362,8 +363,8 @@ function codingSpeedOptions(model, speed, apiKey) {
   return Object.keys(out).length ? out : null;
 }
 
-// Spoken and screen answers (every tier but coding): Sonnet 5.5 thinks before
-// its first word by default. Measured 2026-09-30 on a walkthrough answer with a
+// Spoken and screen answers (every tier but coding): Sonnet 5.5 and Haiku 5.5
+// think before their first word by default. Measured on Sonnet 2026-09-30 on a walkthrough answer with a
 // screenshot: 5.2 to 5.9 s to the first word by default, 1.4 to 2.0 s with
 // effort low, same quality for a few spoken sentences. Refused (an older model
 // or a proxy), the plain request follows as the next stage.
@@ -429,13 +430,17 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
     if (extra && extra.summarize) request.thinking = { type: 'adaptive', display: 'summarized' };
     const stream = await client.messages.create(request, hasFallback ? { headers, maxRetries: 0 } : { headers });
     let full = '';
+    let stopReason = null;
     const usage = {};
     try {
       for await (const ev of stream) {
         // Any event proves the stream is alive, thinking included.
         if (onActivity) onActivity();
         if (ev.type === 'message_start' && ev.message) addUsage(usage, ev.message.usage);
-        if (ev.type === 'message_delta') addUsage(usage, ev.usage);
+        if (ev.type === 'message_delta') {
+          addUsage(usage, ev.usage);
+          if (ev.delta && ev.delta.stop_reason) stopReason = ev.delta.stop_reason;
+        }
         const d = ev.type === 'content_block_delta' && ev.delta;
         if (d && d.type === 'text_delta') { emitted = true; full += d.text; onToken(d.text); }
         else if (d && d.type === 'thinking_delta' && d.thinking && onThinking) onThinking(d.thinking);
@@ -445,6 +450,12 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
       // (and the output so far, when the provider reported it).
       if (Object.keys(usage).length) recordUsage(model, tier, usage, !!(extra && extra.fast));
     }
+    // No words at all is a failure, not an empty answer: a declined request
+    // (Haiku 5.5 has no server-side fallback) or a budget spent on thinking.
+    // Thrown, it reaches the next stage or the caller instead of passing as "".
+    if (!full && (stopReason === 'refusal' || stopReason === 'max_tokens')) {
+      throw new Error(stopReason === 'refusal' ? 'The model declined to answer this request.' : 'The model ran out of room before it wrote an answer.');
+    }
     return full;
   };
   // Try the fastest options first, then effort alone (fast mode can be off for
@@ -453,9 +464,13 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
   // the SDK retries those stages skip (an overload 529 or a network blip too).
   // After a word arrived, or on the last stage, the error is real.
   const stages = [];
+  // Effort stays on the retry: a plain request on a model that thinks by
+  // default (Sonnet 5.5, Haiku 5.5) thinks at its default level, slower, and
+  // can spend a small budget on thinking before any word. Plain is last, for
+  // a model or proxy that refuses the effort field.
   if (speedOptions) {
     stages.push(speedOptions);
-    if (speedOptions.fast && speedOptions.effort) stages.push({ effort: speedOptions.effort, summarize: speedOptions.summarize });
+    if (speedOptions.effort) stages.push({ effort: speedOptions.effort, summarize: speedOptions.summarize });
   }
   stages.push(null);
   for (let i = 0; ; i++) {
@@ -471,7 +486,7 @@ async function streamAnthropic({ apiKey, model, system, turns, imageDataUrl, ima
       const reason = (error && (error.status || error.code)) || 'no status';
       const message = hideKey(error && error.message ? error.message : String(error), apiKey).slice(0, 200);
       const next = stages[i + 1];
-      console.log(`[timing] ${stageLabel} stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? 'without fast mode' : 'with no speed options'}${fastRefused ? (noFastMode ? ', fast mode not on this account, off until restart' : ', fast mode paused for 10 minutes') : ''}`);
+      console.log(`[timing] ${stageLabel} stage ${i + 1} failed after ${Date.now() - startedAt}ms (${reason}: ${message}); retrying ${next ? (stage && stage.fast ? 'without fast mode' : 'with the same effort') : 'with no speed options'}${fastRefused ? (noFastMode ? ', fast mode not on this account, off until restart' : ', fast mode paused for 10 minutes') : ''}`);
     }
   }
 }

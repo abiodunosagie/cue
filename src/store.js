@@ -123,7 +123,7 @@ const DEFAULTS = {
     // llm.js's DEAD_ANTHROPIC_MODEL_RE self-heal additionally migrates any
     // settings file already saved with the old dead ids.
     // coding: the ⌘H solve model (CURRENT_ANTHROPIC_DEFAULT_CODING in src/llm.js).
-    anthropic: { fast: 'claude-sonnet-5-5', smart: 'claude-sonnet-5-5', coding: 'claude-opus-5-5' },
+    anthropic: { fast: 'claude-haiku-5-5', smart: 'claude-sonnet-5-5', coding: 'claude-opus-5-5' },
     // Kept in sync with CURRENT_GEMINI_DEFAULT in src/llm.js — gemini-2.0-flash
     // (the previous default here) was retired by Google on 2026-03-03 and 404s
     // on every request. gemini-2.5-flash is current and free-tier available.

@@ -6,10 +6,12 @@ const path = require('path');
 const { createUsageLedger, costOf, priceFor, localDay } = require('../src/usage-ledger');
 const { modelName, money, tokens } = require('../renderer/cost-panel');
 
-test('prices: Sonnet 5.5 with a cache read, Haiku with a dated id, Opus 5.5 fast mode doubles, unknown models have none', () => {
+test('prices: Sonnet 5.5 with a cache read, Haiku 4.5 with a dated id, Haiku 5.5, Opus 5.5 fast mode doubles, unknown models have none', () => {
   // The first live answer of 2026-10-04 after caching: 4,572 in, 3,144 read, 4,656 written, 147 out.
   assert.ok(Math.abs(costOf({ model: 'claude-sonnet-5-5', input: 4572, cacheRead: 3144, cacheWrite: 4656, output: 147 }) - 0.0229) < 0.0001);
   assert.equal(costOf({ model: 'claude-haiku-4-5-20251001', input: 1e6 }), 1);
+  assert.ok(Math.abs(costOf({ model: 'claude-haiku-5-5', input: 1e6, output: 1e6 }) - 0.6) < 1e-9);
+  assert.equal(priceFor('claude-haiku-5-5').input, 0.1);
   assert.equal(costOf({ model: 'claude-opus-5-5', output: 1e6, fast: true }), 40);
   assert.equal(priceFor('claude-opus-5-5').input, 4);
   assert.equal(priceFor('claude-opus-5').input, 5);

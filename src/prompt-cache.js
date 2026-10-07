@@ -12,7 +12,7 @@
 //
 // Measured with count_tokens on the micro1 profile: about 3,150 tokens stable
 // and 4,500 to 6,500 after the mark. Anthropic caches nothing shorter than the
-// model's minimum (512 tokens on Sonnet 5.5, 4,096 on Haiku 4.5), silently;
+// model's minimum (512 tokens on Sonnet 5.5 and Haiku 5.5, 4,096 on Haiku 4.5), silently;
 // the [usage] log line in src/llm.js shows whether reads happen.
 
 // Control characters, so no resume or notes text can contain it by accident.

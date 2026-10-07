@@ -165,6 +165,7 @@ test('spoken and screen answers skip the silent thinking on models that take eff
   const { answerSpeedOptions } = require('../src/llm');
   assert.deepEqual(answerSpeedOptions('claude-sonnet-5-5'), { effort: 'low' });
   assert.deepEqual(answerSpeedOptions('claude-opus-5-5'), { effort: 'low' });
-  assert.equal(answerSpeedOptions('claude-haiku-4-5-20251001'), null, 'Haiku takes no effort field');
+  assert.deepEqual(answerSpeedOptions('claude-haiku-5-5'), { effort: 'low' }, 'Haiku 5.5 thinks by default and takes effort');
+  assert.equal(answerSpeedOptions('claude-haiku-4-5-20251001'), null, 'Haiku 4.5 takes no effort field');
   assert.equal(answerSpeedOptions(''), null);
 });

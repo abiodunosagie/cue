@@ -554,3 +554,42 @@ test('imageLimit names the provider image cap, unlimited when none is documented
   assert.equal(imageLimit('groq'), 3);
   assert.equal(imageLimit('anthropic'), Infinity);
 });
+
+// Swaps the cached Anthropic SDK for one whose create() runs `respond` per call.
+async function withFakeAnthropic(respond, fn) {
+  const sdkPath = require.resolve('@anthropic-ai/sdk');
+  require(sdkPath);
+  const cached = require.cache[sdkPath];
+  const realExports = cached.exports;
+  const seen = [];
+  cached.exports = class { constructor() { this.messages = { create: async (args) => { seen.push(args); return respond(args, seen.length); } }; } };
+  try { await fn(); } finally { cached.exports = realExports; }
+  return seen;
+}
+const haikuFast = { provider: 'anthropic', apiKeys: { anthropic: 'k' }, models: { anthropic: { fast: 'claude-haiku-5-5', smart: 'claude-sonnet-5-5' } } };
+const events = (list) => (async function* () { for (const ev of list) yield ev; })();
+
+test('a retry after an early failure keeps effort low, so Haiku 5.5 does not think at its default level', async () => {
+  const seen = await withFakeAnthropic((args, n) => {
+    if (n === 1) throw Object.assign(new Error('overloaded'), { status: 529 });
+    return events([{ type: 'content_block_delta', delta: { type: 'text_delta', text: 'OK' } }]);
+  }, async () => {
+    assert.equal(await createLLM(haikuFast).stream({ system: 's', turns: [{ role: 'user', text: 'q' }], maxTokens: 5, onToken() {} }), 'OK');
+  });
+  assert.deepEqual(seen.map((a) => a.output_config), [{ effort: 'low' }, { effort: 'low' }]);
+});
+
+test('a reply with no words that stopped on refusal or max_tokens is an error, not an empty answer', async () => {
+  for (const reason of ['refusal', 'max_tokens']) {
+    await withFakeAnthropic(() => events([{ type: 'message_delta', delta: { stop_reason: reason }, usage: { output_tokens: 5 } }]), async () => {
+      await assert.rejects(createLLM(haikuFast).stream({ system: 's', turns: [{ role: 'user', text: 'q' }], maxTokens: 5, onToken() {} }));
+    });
+  }
+  // A short answer that hit the cap still counts: words arrived.
+  await withFakeAnthropic(() => events([
+    { type: 'content_block_delta', delta: { type: 'text_delta', text: '2' } },
+    { type: 'message_delta', delta: { stop_reason: 'max_tokens' }, usage: { output_tokens: 5 } }
+  ]), async () => {
+    assert.equal(await createLLM(haikuFast).stream({ system: 's', turns: [{ role: 'user', text: 'q' }], maxTokens: 5, onToken() {} }), '2');
+  });
+});

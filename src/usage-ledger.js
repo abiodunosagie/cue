@@ -9,9 +9,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// US dollars per million tokens (list prices, 2026-09-25). Cache reads and
-// 5-minute cache writes are priced per model. Fast mode costs `fast` times
-// every rate. Matched by prefix, so dated ids (claude-haiku-4-5-20251001) fit.
+// US dollars per million tokens (list prices, 2026-09-25; the Haiku 5.5 row
+// added 2026-10-08). Cache reads and 5-minute cache writes are priced per
+// model. Fast mode costs `fast` times every rate. Matched by prefix, so dated
+// ids (claude-haiku-4-5-20251001) fit.
 const PRICES = [
   ['claude-fable-5-1', { input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 }],
   ['claude-fable-5', { input: 10, output: 50, cacheRead: 1, cacheWrite: 12.5 }],
@@ -23,6 +24,9 @@ const PRICES = [
   ['claude-sonnet-5-5', { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }],
   ['claude-sonnet-5', { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 }],
   ['claude-sonnet-4-6', { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }],
+  // Haiku 5.5 bills 5 times this above 100K prompt tokens; cue's Fast prompts
+  // stay far below that, so the short-prompt card is the one that applies.
+  ['claude-haiku-5-5', { input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 }],
   ['claude-haiku-4-5', { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 1.25 }]
 ];
 
