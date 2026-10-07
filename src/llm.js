@@ -22,10 +22,11 @@ const CURRENT_GEMINI_DEFAULT = 'gemini-2.5-flash';
 // experience-gap rule (a flat no on Kafka and Go) in the same test.
 const CURRENT_ANTHROPIC_DEFAULT_FAST = 'claude-haiku-5-5';
 const CURRENT_ANTHROPIC_DEFAULT_SMART = 'claude-sonnet-5-5';
-// Coding solves (⌘H) run on the strongest model: a wrong answer there fails the
-// interview outright, so they trade cost and a few seconds for correctness.
-// Live-verified against GET /v1/models and a real solve on 2026-09-23.
-const CURRENT_ANTHROPIC_DEFAULT_CODING = 'claude-opus-5-5';
+// Coding solves (⌘H) run on Sonnet 5.5: a wrong answer there fails the
+// interview, and Opus costs too much (owner's rule since 2026-10-03: no Opus).
+// Live-checked on Sonnet 5.5 the same day. This default only applies when no
+// coding model is saved.
+const CURRENT_ANTHROPIC_DEFAULT_CODING = 'claude-sonnet-5-5';
 const DEFAULT_MODELS = {
   openai: 'gpt-4o-mini',
   anthropic: CURRENT_ANTHROPIC_DEFAULT_FAST,
@@ -325,10 +326,11 @@ async function streamAzure({ apiKey, model, system, turns, imageDataUrl, imageDa
   return full;
 }
 
-// Coding speed (Settings > Answer style). Opus 5.5 always thinks before its
-// first word, and that thinking is hidden, so a solve looked frozen for about
-// 35s. Lower effort means less thinking; fast mode runs the same model up to
-// 2.5x faster (Claude API only, twice the price).
+// Coding speed (Settings > Answer style). Coding models think before their
+// first word and that thinking is hidden, so a solve can look frozen (about 35s
+// measured on Opus 5.5). Lower effort means less thinking. Fast mode runs only
+// on Opus (Claude API only, twice the price, up to 2.5x faster), so it has no
+// effect on the Sonnet default.
 const CODING_SPEEDS = {
   fastest: { effort: 'low', fast: true },
   balanced: { effort: 'medium', fast: true },
