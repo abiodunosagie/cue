@@ -9,7 +9,8 @@
   });
   window.addEventListener('unhandledrejection', (e) => {
     const r = e && e.reason;
-    cue.crash('unhandled rejection: ' + (r && r.stack ? r.stack : String(r)));
+    // A non-Error reason can be any value, page text included: log only its type.
+    cue.crash('unhandled rejection: ' + (r && r.stack ? r.stack : 'a ' + typeof r + ' value'));
   });
   const $ = (s) => document.querySelector(s);
   const isWindows = cue.platform === 'win32';
@@ -1656,7 +1657,11 @@
     pill.textContent = label;
     group.insertBefore(pill, aiEl);
   });
-  cue.on('llm:token', ({ text }) => { if (busy) armBusyFailsafe(); appendToken(text); });
+  cue.on('llm:token', ({ text }) => {
+    if (busy) armBusyFailsafe();
+    if (replacedAi) { replacedAi.remove(); replacedAi = null; backupPill = null; }
+    appendToken(text);
+  });
   // The quick start is done and the full solution follows in the same answer:
   // close the quick part (its code and copy buttons render), label the next
   // part, and show the wait note again while the Coding model thinks.
@@ -1684,18 +1689,25 @@
   // The model failed and main retries on the backup model: the cut-off text
   // goes, a fresh answer area takes its place with the same follow and coding
   // choices, and a label says where the answer came from.
+  // The cut-off text stays, hidden, until the backup's first word: if the backup
+  // fails too, it comes back so the candidate keeps what they were reading.
+  let replacedAi = null;
+  let backupPill = null;
   cue.on('llm:restart', ({ label }) => {
     if (!aiEl) return;
     const old = aiEl;
     const group = old.parentNode;
     if (!group) return;
+    if (replacedAi) replacedAi.remove();
     startAi(old.classList.contains('small'), group);
     for (const key of ['coding', 'follow', 'noFollow', 'section']) if (old.dataset[key]) aiEl.dataset[key] = old.dataset[key];
-    old.remove();
+    old.hidden = true;
+    replacedAi = old;
     const pill = document.createElement('div');
     pill.className = 'prepared-pill';
     pill.textContent = label || 'Backup model';
     group.insertBefore(pill, aiEl);
+    backupPill = pill;
     readingFollow.reset();
     if (aiEl.dataset.coding === '1') showWaitNote(aiEl);
     if (busy) armBusyFailsafe();
@@ -1708,6 +1720,7 @@
     showToast(message || 'cue is busy. Try again in a moment.', 3000);
   });
   cue.on('llm:done', () => {
+    if (replacedAi) { replacedAi.remove(); replacedAi = null; backupPill = null; }
     const done = aiEl; finalizeAi(); addCodingButtons(done); setBusy(false); readingFollow.update();
     if (pendingAnswered) {
       lastAnswered = { text: pendingAnswered, at: Date.now() };
@@ -1717,6 +1730,15 @@
   });
   cue.on('llm:error', ({ message, action }) => {
     pendingAnswered = ''; // not answered: asking again gets a fresh answer
+    // The backup failed before its first word: bring the cut-off answer back.
+    if (replacedAi) {
+      if (aiEl && aiEl !== replacedAi) aiEl.remove();
+      if (backupPill) backupPill.remove();
+      replacedAi.hidden = false;
+      aiEl = replacedAi;
+      replacedAi = null;
+      backupPill = null;
+    }
     // Keep what already streamed (the user may be saying it aloud) and
     // show the error as its own line under it.
     if (aiEl && aiEl.dataset.raw.trim()) {

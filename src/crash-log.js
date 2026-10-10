@@ -6,6 +6,8 @@ const fs = require('fs');
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_ENTRY_CHARS = 4000;
+// A renderer stuck in an error loop must not rotate the first, real failure away.
+const MAX_ENTRIES_PER_MINUTE = 20;
 
 // Key-shaped strings (provider keys, bearer tokens, long secrets) are masked
 // before anything reaches the disk.
@@ -33,20 +35,30 @@ function describe(error) {
 }
 
 function createCrashLog({ file, maxBytes = MAX_BYTES, secrets = () => [], now = () => new Date() }) {
+  let windowStart = 0;
+  let windowCount = 0;
+  let lastBody = '';
+
   function rotateIfFull() {
     try {
       if (fs.statSync(file).size < maxBytes) return;
+      // Windows refuses to rename over an existing file.
+      try { fs.unlinkSync(file + '.1'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
       fs.renameSync(file, file + '.1');
-    } catch (e) {
-      if (e.code !== 'ENOENT') throw e;
-    }
+    } catch { /* could not rotate: keep appending to the current file */ }
   }
 
   // Never throws: a crash logger that crashes would hide the first failure.
   function write(kind, error, context) {
     try {
-      rotateIfFull();
+      const at = now().getTime();
+      if (at - windowStart >= 60000) { windowStart = at; windowCount = 0; }
+      if (++windowCount > MAX_ENTRIES_PER_MINUTE) return;
       const body = redact(describe(error) + (context ? ' | ' + describe(context) : ''), secrets()).slice(0, MAX_ENTRY_CHARS);
+      // The same error again (a handler failing every frame) adds nothing.
+      if (body === lastBody) return;
+      lastBody = body;
+      rotateIfFull();
       const line = `${now().toISOString()} [${kind}] ${body.replace(/\r?\n/g, ' \\n ')}\n`;
       fs.appendFileSync(file, line, { mode: 0o600 });
       fs.chmodSync(file, 0o600);
@@ -56,4 +68,4 @@ function createCrashLog({ file, maxBytes = MAX_BYTES, secrets = () => [], now = 
   return { write, file };
 }
 
-module.exports = { createCrashLog, redact, MAX_BYTES };
+module.exports = { createCrashLog, redact, MAX_BYTES, MAX_ENTRIES_PER_MINUTE };

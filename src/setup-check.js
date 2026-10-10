@@ -5,11 +5,11 @@
 
 const CHECK_TIMEOUT_MS = 20000;
 
-// Each check resolves { status: 'pass' | 'fail' | 'skip', detail }.
 // A sound from the other side within this window counts as working meeting audio.
 const MEETING_AUDIO_FRESH_MS = 2 * 60 * 1000;
 const clock = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
+// Each check resolves { status: 'pass' | 'fail' | 'skip', detail }.
 function buildChecks(d) {
   const reply = async (tier) => {
     const llm = d.llmFor(tier);

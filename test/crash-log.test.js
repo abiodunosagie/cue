@@ -49,3 +49,32 @@ test('caps an entry and keeps saved keys out', () => {
   assert.doesNotMatch(text, /dg-secret-key-1/);
   assert.ok(text.length < 4200);
 });
+
+test('rotation replaces an older rotated file', () => {
+  const file = tmpFile();
+  fs.writeFileSync(file + '.1', 'old');
+  fs.writeFileSync(file, 'x'.repeat(300));
+  createCrashLog({ file, maxBytes: 200 }).write('main', new Error('new'));
+  assert.equal(fs.readFileSync(file + '.1', 'utf8'), 'x'.repeat(300));
+  assert.match(fs.readFileSync(file, 'utf8'), /new/);
+});
+
+test('an error loop is capped per minute', () => {
+  const file = tmpFile();
+  let t = 0;
+  const log = createCrashLog({ file, now: () => new Date(t) });
+  for (let i = 0; i < 50; i++) log.write('renderer', 'loop ' + i);
+  assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 20);
+  t = 61000;
+  log.write('renderer', 'later');
+  assert.match(fs.readFileSync(file, 'utf8'), /later/);
+});
+
+test('the same error twice in a row is written once', () => {
+  const file = tmpFile();
+  const log = createCrashLog({ file });
+  log.write('renderer', 'same');
+  log.write('renderer', 'same');
+  log.write('renderer', 'other');
+  assert.equal(fs.readFileSync(file, 'utf8').trim().split('\n').length, 2);
+});

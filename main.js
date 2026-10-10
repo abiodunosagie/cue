@@ -43,7 +43,8 @@ const { isRenderContents } = require('./src/page-render');
 const { getPermissionStatus, requestPermissions } = require('./src/permissions');
 const { rms16 } = require('./src/wav');
 const { createStreamingSTT, probeDeepgram } = require('./src/stt-streaming');
-const { createCrashLog } = require('./src/crash-log');
+const { buildVocabTerms } = require('./src/vocab');
+const { createCrashLog, redact } = require('./src/crash-log');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
 const { rulesWithFocus } = require('./src/role-focus');
@@ -753,15 +754,15 @@ const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, fi
 // The earlier coding solves a mode builds on: the last two for a new solve,
 // and for explainCode and checkProgress the one being explained or checked
 // (the newest, even after the round).
+// A stream failure worth retrying on the backup model: the provider's verdict
+// (createLLM marks it) or cue's stall watchdog (marked where it fires).
+function isTransient(error) {
+  return !!(error && error.transient);
+}
+
 // The model for a coding quick start: the Smart model, run as a coding solve
 // (so it gets the coding speed options), or null when there is no separate,
 // ready Smart model or the setting is off. Only Cmd+H solves get one.
-// A stream failure worth retrying on the backup model: the provider's own
-// verdict (createLLM marks it) or cue's stall watchdog.
-function isTransient(error) {
-  return !!(error && (error.transient || /timed out/i.test(String(error.message || ''))));
-}
-
 function quickStartLlm(mode, settings, codingLlm) {
   if (mode !== 'leetcode' || settings.codingQuickStart === false) return null;
   const smart = createLLM({ ...settings, smart: true });
@@ -1168,7 +1169,7 @@ async function runFeature(mode, userText, options = {}) {
           const limit = isQuick ? (streamedAny ? QUICK_START_INACTIVITY_MS : QUICK_START_FIRST_WORD_MS)
             : def.tier !== 'coding' ? STREAM_INACTIVITY_MS
               : streamedAny ? CODING_STREAM_INACTIVITY_MS : CODING_FIRST_WORD_SILENCE_MS;
-          watchdog = setTimeout(() => reject(new Error('the model stopped responding (timed out). Please try again.')), limit);
+          watchdog = setTimeout(() => reject(Object.assign(new Error('the model stopped responding (timed out). Please try again.'), { transient: true })), limit);
         };
         rearm();
       });
@@ -1249,7 +1250,7 @@ async function runFeature(mode, userText, options = {}) {
           // whole, never continued mid-sentence.
           const backup = isTransient(first) && !streamSettled ? createFallbackLLM(settings, { tier: def.tier }, llm) : null;
           if (!backup) throw first;
-          console.log(`[timing] ${mode}: fallback from ${llm.model} to ${backup.model} after ${Date.now() - startedAt}ms (${first && first.message ? first.message : String(first)})${first && first.partial ? ', replacing the cut-off answer' : ''}`);
+          console.log(`[timing] ${mode}: fallback from ${llm.model} to ${backup.model} after ${Date.now() - startedAt}ms (${redact(first && first.message ? first.message : String(first)).slice(0, 200)})${first && first.partial ? ', replacing the cut-off answer' : ''}`);
           modelInUse = backup.provider + '/' + backup.model;
           send('llm:restart', { label: 'Backup model' });
           answer = await runStream(backup, system, fullBuilt, 'fallback');
@@ -1378,7 +1379,7 @@ registerSetupIpc({
         if (choice === 'custom') return 'the Custom provider';
         return 'none';
       },
-      probeDeepgram: () => probeDeepgram((settings().apiKeys || {}).deepgram || ''),
+      probeDeepgram: () => probeDeepgram((settings().apiKeys || {}).deepgram || '', { keyterms: buildVocabTerms(settings()) }),
       meetingAudio: () => ({ capturing: !!state.capturing, ...meetingAudioSeen })
     };
   }

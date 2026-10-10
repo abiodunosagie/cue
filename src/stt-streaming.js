@@ -21,6 +21,10 @@ const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
 const RECONNECT_BUDGET_MS = 5 * 60 * 1000;
 // About five seconds of 16 kHz 16-bit mono, replayed once the socket is back.
 const PENDING_AUDIO_BYTES = 16000 * 2 * 5;
+const ERROR_CLOSE_GRACE_MS = 2000;
+// The retry budget resets only once a socket has stayed up this long, so a
+// server that accepts and then drops at once still runs the budget out.
+const HEALTHY_AFTER_MS = 30000;
 
 function createReconnectPolicy({ delays = RECONNECT_DELAYS_MS, budgetMs = RECONNECT_BUDGET_MS, now = Date.now } = {}) {
   let attempt = 0;
@@ -68,16 +72,17 @@ class OpenAIRealtimeSTT {
     this.model = options.model || 'gpt-realtime-whisper';
     this.ws = null;
     this.connected = false;
-    this.reconnecting = false;
     this.onTranscript = options.onTranscript || (() => {});
     this.onInterim = options.onInterim || (() => {});
     this.onError = options.onError || (() => {});
     this.onStatusChange = options.onStatusChange || (() => {});
     this._policy = createReconnectPolicy(options.reconnect);
+    this._healthyAfterMs = options.healthyAfterMs || HEALTHY_AFTER_MS;
+    this._healthyTimer = null;
     this._reconnectTimer = null;
     this._stopped = false;
     this._fatal = null;
-    this._pendingAudio = [];
+    this._pending = { chunks: [], bytes: 0 };
     this._sessionReady = false;
   }
 
@@ -104,7 +109,9 @@ class OpenAIRealtimeSTT {
 
       this.ws.on('open', () => {
         this.connected = true;
-        this._policy.reset();
+        clearTimeout(this._healthyTimer);
+        this._healthyTimer = setTimeout(() => this._policy.reset(), this._healthyAfterMs);
+        if (this._healthyTimer.unref) this._healthyTimer.unref();
         this.onStatusChange('connected');
 
         // Configure the transcription session (GA format)
@@ -137,10 +144,13 @@ class OpenAIRealtimeSTT {
       this.ws.on('close', (code) => {
         this.connected = false;
         this._sessionReady = false;
+        clearTimeout(this._healthyTimer);
         if (this._stopped) return;
         this.onStatusChange('disconnected');
         if (this._fatal) { this.onError(this._fatal); return; }
-        if (code !== 1000) this._attemptReconnect();
+        // Any close cue did not ask for is a drop, a clean 1000 from the server too.
+        console.log(`[streaming-stt] socket closed (${code}), reconnecting`);
+        this._attemptReconnect();
       });
 
       // A socket error is followed by 'close', which decides: retry, or give up
@@ -196,8 +206,7 @@ class OpenAIRealtimeSTT {
   sendAudio(pcmBuffer) {
     if (!this.connected || !this._sessionReady) {
       // Buffer audio until session is ready (max 5 seconds worth)
-      this._pendingAudio.push(pcmBuffer);
-      if (this._pendingAudio.length > 80) this._pendingAudio.shift();
+      if (!this._stopped) pushPending(this._pending, pcmBuffer);
       return;
     }
 
@@ -228,8 +237,9 @@ class OpenAIRealtimeSTT {
   }
 
   _flushPendingAudio() {
-    while (this._pendingAudio.length > 0) {
-      const chunk = this._pendingAudio.shift();
+    const { chunks } = this._pending;
+    this._pending = { chunks: [], bytes: 0 };
+    for (const chunk of chunks) {
       const resampled = this._resample16to24(Buffer.from(chunk));
       const b64 = resampled.toString('base64');
       this._sendEvent({
@@ -252,11 +262,9 @@ class OpenAIRealtimeSTT {
       this.onError({ provider: 'openai-realtime', message: 'Lost the connection for five minutes', status: null });
       return;
     }
-    this.reconnecting = true;
     this.onStatusChange('reconnecting');
     this._reconnectTimer = setTimeout(() => {
       this._reconnectTimer = null;
-      this.reconnecting = false;
       this._open();
     }, delay);
   }
@@ -264,9 +272,9 @@ class OpenAIRealtimeSTT {
   disconnect() {
     this._stopped = true;
     if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
-    this.reconnecting = false;
+    clearTimeout(this._healthyTimer);
     this._sessionReady = false;
-    this._pendingAudio = [];
+    this._pending = { chunks: [], bytes: 0 };
     if (this.ws) {
       this.ws.close(1000);
       this.ws = null;
@@ -292,10 +300,13 @@ class DeepgramStreamingSTT {
     this.onError = options.onError || (() => {});
     this.onStatusChange = options.onStatusChange || (() => {});
     this._policy = createReconnectPolicy(options.reconnect);
+    this._healthyAfterMs = options.healthyAfterMs || HEALTHY_AFTER_MS;
+    this._healthyTimer = null;
     this._reconnectTimer = null;
     this._stopped = false;
     this._fatal = null;
     this._pending = { chunks: [], bytes: 0 };
+    this._errorCloseGraceMs = options.errorCloseGraceMs || ERROR_CLOSE_GRACE_MS;
     this._keepAliveInterval = null;
     this._committed = ''; // is_final segments not yet closed out by speech_final
   }
@@ -338,7 +349,9 @@ class DeepgramStreamingSTT {
 
       this.ws.on('open', () => {
         this.connected = true;
-        this._policy.reset();
+        clearTimeout(this._healthyTimer);
+        this._healthyTimer = setTimeout(() => this._policy.reset(), this._healthyAfterMs);
+        if (this._healthyTimer.unref) this._healthyTimer.unref();
         this.onStatusChange('connected');
         // Speech from the gap goes first, so a question asked while the
         // socket was down still arrives.
@@ -363,10 +376,13 @@ class DeepgramStreamingSTT {
       this.ws.on('close', (code) => {
         this.connected = false;
         this._clearKeepAlive();
+        clearTimeout(this._healthyTimer);
         if (this._stopped) return;
         this.onStatusChange('disconnected');
         if (this._fatal) { this.onError(this._fatal); return; }
-        if (code !== 1000) this._attemptReconnect();
+        // Any close cue did not ask for is a drop, a clean 1000 from the server too.
+        console.log(`[streaming-stt] socket closed (${code}), reconnecting`);
+        this._attemptReconnect();
       });
 
       // A socket error is followed by 'close', which decides: retry, or give up
@@ -411,8 +427,12 @@ class DeepgramStreamingSTT {
       // segments we accumulated so the turn is not silently dropped.
       this._flushCommitted();
     } else if (msg.type === 'Error') {
-      // Deepgram closes the socket after an error message; 'close' reconnects.
+      // Deepgram normally closes the socket after an error message, and 'close'
+      // reconnects. If it ever stays open, close it after a short grace so the
+      // reconnect still runs instead of listening going quietly dead.
       console.log(`[streaming-stt] deepgram error message: ${msg.variant || ''} ${msg.description || msg.message || ''}`);
+      const ws = this.ws;
+      setTimeout(() => { if (ws && ws === this.ws && ws.readyState === 1) ws.close(4000); }, this._errorCloseGraceMs);
     }
   }
 
@@ -452,6 +472,7 @@ class DeepgramStreamingSTT {
   disconnect() {
     this._stopped = true;
     if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    clearTimeout(this._healthyTimer);
     this._pending = { chunks: [], bytes: 0 };
     this._flushCommitted();
     this._clearKeepAlive();
@@ -499,7 +520,7 @@ async function transcribeBatchGemini(apiKey, wav) {
 
 // Test my setup: opens the same Deepgram socket listening uses, then closes it
 // at once with no audio sent. Resolves { ok, detail }; never throws.
-function probeDeepgram(apiKey, { timeoutMs = 8000, WebSocketImpl } = {}) {
+function probeDeepgram(apiKey, { timeoutMs = 8000, WebSocketImpl, keyterms = [] } = {}) {
   return new Promise((resolve) => {
     let ws;
     let done = false;
@@ -513,7 +534,8 @@ function probeDeepgram(apiKey, { timeoutMs = 8000, WebSocketImpl } = {}) {
     const timer = setTimeout(() => finish(false, 'Deepgram did not answer within ' + Math.round(timeoutMs / 1000) + ' s. Check your internet connection.'), timeoutMs);
     try {
       const WebSocket = WebSocketImpl || require('ws');
-      const probe = new DeepgramStreamingSTT(apiKey, {});
+      // The same URL listening uses, key terms included, so a rejected term list fails here too.
+      const probe = new DeepgramStreamingSTT(apiKey, { keyterms });
       ws = new WebSocket(probe._listenUrl(), { headers: { Authorization: `Token ${apiKey}` } });
       ws.on('open', () => {
         try { ws.send(JSON.stringify({ type: 'CloseStream' })); } catch (e) { /* closing anyway */ }

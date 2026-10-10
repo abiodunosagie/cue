@@ -161,3 +161,69 @@ test('probeDeepgram: opens and closes, reports a refused key and a timeout', asy
   assert.equal(slow.ok, false);
   assert.match(slow.detail, /did not answer/);
 });
+
+test('Deepgram: an error message that leaves the socket open still leads to a reconnect', async () => {
+  sockets.length = 0;
+  const t = { now: 0 };
+  const { stt, errors, statuses } = deepgram(t, { errorCloseGraceMs: 5 });
+  await stt.connect();
+  sockets[0].open();
+  sockets[0].emit('message', Buffer.from(JSON.stringify({ type: 'Error', description: 'NET-0001' })));
+  await new Promise((r) => setTimeout(r, 40));
+  assert.ok(statuses.includes('reconnecting'));
+  assert.equal(sockets.length, 2);
+  assert.deepEqual(errors, []);
+  stt.disconnect();
+});
+
+test('OpenAI realtime: audio from the gap is replayed once the session is ready', async () => {
+  sockets.length = 0;
+  const t = { now: 0 };
+  const stt = new OpenAIRealtimeSTT('sk-test', { reconnect: { delays: [5], budgetMs: 1000, now: () => t.now } });
+  await stt.connect();
+  stt.sendAudio(Buffer.alloc(320, 1));
+  sockets[0].open();
+  sockets[0].emit('message', Buffer.from(JSON.stringify({ type: 'session.updated' })));
+  const appends = sockets[0].sent.map((m) => JSON.parse(m)).filter((e) => e.type === 'input_audio_buffer.append');
+  assert.equal(appends.length, 1);
+  stt.disconnect();
+  stt.sendAudio(Buffer.alloc(320, 1));
+  assert.equal(stt._pending.bytes, 0);
+});
+
+test('Deepgram: a socket that opens then drops at once still runs the budget out', async () => {
+  sockets.length = 0;
+  const t = { now: 0 };
+  const { stt, errors } = deepgram(t, { healthyAfterMs: 10000 });
+  await stt.connect();
+  sockets[0].open();
+  sockets[0].fail('closed by server', 1011);
+  t.now = 2000;
+  await new Promise((r) => setTimeout(r, 20));
+  sockets[1].open();
+  sockets[1].fail('closed by server', 1011);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0].message, /five minutes/);
+  stt.disconnect();
+});
+
+test('Deepgram: a clean close from the server is a drop too', async () => {
+  sockets.length = 0;
+  const t = { now: 0 };
+  const { stt, statuses } = deepgram(t);
+  await stt.connect();
+  sockets[0].open();
+  sockets[0].close(1000);
+  assert.ok(statuses.includes('reconnecting'));
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(sockets.length, 2);
+  stt.disconnect();
+});
+
+test('probeDeepgram uses the same key terms as listening', async () => {
+  sockets.length = 0;
+  const p = probeDeepgram('dg', { timeoutMs: 200, keyterms: ['Riverpod'] });
+  assert.match(sockets[0].url, /keyterm=Riverpod/);
+  sockets[0].open();
+  await p;
+});
