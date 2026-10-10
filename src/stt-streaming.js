@@ -10,6 +10,54 @@ const { pcmToWav } = require('./wav');
 const { CURRENT_GEMINI_DEFAULT } = require('./llm');
 
 // ============================================================================
+// Reconnect policy shared by both streaming providers
+// ============================================================================
+
+// A dropped socket mid-call (Wi-Fi blip, laptop lid, provider restart) must not
+// end listening for the rest of the interview. Retry with growing gaps, then
+// every 30 s, for up to five minutes of continuous failure. Only after that,
+// or on a refused key, does the caller fall back to batch or stop.
+const RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000, 30000];
+const RECONNECT_BUDGET_MS = 5 * 60 * 1000;
+// About five seconds of 16 kHz 16-bit mono, replayed once the socket is back.
+const PENDING_AUDIO_BYTES = 16000 * 2 * 5;
+
+function createReconnectPolicy({ delays = RECONNECT_DELAYS_MS, budgetMs = RECONNECT_BUDGET_MS, now = Date.now } = {}) {
+  let attempt = 0;
+  let failingSince = null;
+  return {
+    // The wait before the next try, or null once the budget is spent.
+    next() {
+      if (failingSince === null) failingSince = now();
+      if (now() - failingSince >= budgetMs) return null;
+      const delay = delays[Math.min(attempt, delays.length - 1)];
+      attempt++;
+      return delay;
+    },
+    reset() { attempt = 0; failingSince = null; }
+  };
+}
+
+// The HTTP status of a refused WebSocket handshake ('Unexpected server response: 401').
+function handshakeStatus(err) {
+  const match = /Unexpected server response: (\d{3})/.exec(String((err && err.message) || ''));
+  return match ? Number(match[1]) : null;
+}
+
+// A refused key or account: retrying cannot fix it.
+function isAuthRefusal(status) {
+  return status === 401 || status === 402 || status === 403;
+}
+
+// Keeps the newest audio up to a byte cap while the socket is down.
+function pushPending(queue, chunk, capBytes = PENDING_AUDIO_BYTES) {
+  const buf = Buffer.from(chunk);
+  queue.chunks.push(buf);
+  queue.bytes += buf.length;
+  while (queue.bytes > capBytes && queue.chunks.length > 1) queue.bytes -= queue.chunks.shift().length;
+}
+
+// ============================================================================
 // OpenAI Realtime Transcription Session (WebSocket)
 // Uses the dedicated transcription session type for lowest latency streaming STT
 // ============================================================================
@@ -25,15 +73,22 @@ class OpenAIRealtimeSTT {
     this.onInterim = options.onInterim || (() => {});
     this.onError = options.onError || (() => {});
     this.onStatusChange = options.onStatusChange || (() => {});
-    this._reconnectAttempts = 0;
-    this._maxReconnectAttempts = 5;
-    this._reconnectDelay = 1000;
+    this._policy = createReconnectPolicy(options.reconnect);
+    this._reconnectTimer = null;
+    this._stopped = false;
+    this._fatal = null;
     this._pendingAudio = [];
     this._sessionReady = false;
   }
 
   async connect() {
-    if (this.ws && this.connected) return;
+    this._stopped = false;
+    return this._open();
+  }
+
+  async _open() {
+    if (this._stopped || (this.ws && this.connected)) return;
+    this._fatal = null;
 
     try {
       const WebSocket = require('ws');
@@ -49,7 +104,7 @@ class OpenAIRealtimeSTT {
 
       this.ws.on('open', () => {
         this.connected = true;
-        this._reconnectAttempts = 0;
+        this._policy.reset();
         this.onStatusChange('connected');
 
         // Configure the transcription session (GA format)
@@ -82,14 +137,18 @@ class OpenAIRealtimeSTT {
       this.ws.on('close', (code) => {
         this.connected = false;
         this._sessionReady = false;
+        if (this._stopped) return;
         this.onStatusChange('disconnected');
-        if (code !== 1000 && !this.reconnecting) {
-          this._attemptReconnect();
-        }
+        if (this._fatal) { this.onError(this._fatal); return; }
+        if (code !== 1000) this._attemptReconnect();
       });
 
+      // A socket error is followed by 'close', which decides: retry, or give up
+      // only for a refused key.
       this.ws.on('error', (err) => {
-        this.onError({ provider: 'openai-realtime', message: err.message, status: null });
+        const status = handshakeStatus(err);
+        console.log(`[streaming-stt] openai-realtime socket error${status ? ' ' + status : ''}: ${err && err.message}`);
+        if (isAuthRefusal(status)) this._fatal = { provider: 'openai-realtime', message: `OpenAI refused the key (${status}). Check it in Settings > Keys.`, status };
       });
 
     } catch (e) {
@@ -127,11 +186,9 @@ class OpenAIRealtimeSTT {
         break;
 
       case 'error':
-        this.onError({
-          provider: 'openai-realtime',
-          message: event.error?.message || 'Unknown realtime error',
-          status: event.error?.code
-        });
+        // Most realtime errors are per event (a bad append) and the session
+        // carries on; a fatal one closes the socket and 'close' takes over.
+        console.log(`[streaming-stt] openai-realtime error event: ${event.error?.code || ''} ${event.error?.message || ''}`);
         break;
     }
   }
@@ -189,20 +246,25 @@ class OpenAIRealtimeSTT {
   }
 
   _attemptReconnect() {
-    if (this._reconnectAttempts >= this._maxReconnectAttempts) {
-      this.onError({ provider: 'openai-realtime', message: 'Max reconnection attempts reached', status: null });
+    if (this._reconnectTimer || this._stopped) return;
+    const delay = this._policy.next();
+    if (delay == null) {
+      this.onError({ provider: 'openai-realtime', message: 'Lost the connection for five minutes', status: null });
       return;
     }
     this.reconnecting = true;
-    this._reconnectAttempts++;
-    const delay = this._reconnectDelay * Math.pow(2, this._reconnectAttempts - 1);
-    setTimeout(() => {
+    this.onStatusChange('reconnecting');
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
       this.reconnecting = false;
-      this.connect();
-    }, Math.min(delay, 16000));
+      this._open();
+    }, delay);
   }
 
   disconnect() {
+    this._stopped = true;
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    this.reconnecting = false;
     this._sessionReady = false;
     this._pendingAudio = [];
     if (this.ws) {
@@ -229,9 +291,11 @@ class DeepgramStreamingSTT {
     this.onInterim = options.onInterim || (() => {});
     this.onError = options.onError || (() => {});
     this.onStatusChange = options.onStatusChange || (() => {});
-    this._reconnectAttempts = 0;
-    this._maxReconnectAttempts = 5;
-    this._reconnectDelay = 1000;
+    this._policy = createReconnectPolicy(options.reconnect);
+    this._reconnectTimer = null;
+    this._stopped = false;
+    this._fatal = null;
+    this._pending = { chunks: [], bytes: 0 };
     this._keepAliveInterval = null;
     this._committed = ''; // is_final segments not yet closed out by speech_final
   }
@@ -256,7 +320,13 @@ class DeepgramStreamingSTT {
   }
 
   async connect() {
-    if (this.ws && this.connected) return;
+    this._stopped = false;
+    return this._open();
+  }
+
+  async _open() {
+    if (this._stopped || (this.ws && this.connected)) return;
+    this._fatal = null;
 
     try {
       const WebSocket = require('ws');
@@ -268,8 +338,13 @@ class DeepgramStreamingSTT {
 
       this.ws.on('open', () => {
         this.connected = true;
-        this._reconnectAttempts = 0;
+        this._policy.reset();
         this.onStatusChange('connected');
+        // Speech from the gap goes first, so a question asked while the
+        // socket was down still arrives.
+        const { chunks } = this._pending;
+        this._pending = { chunks: [], bytes: 0 };
+        for (const chunk of chunks) this.ws.send(chunk);
         // Keep-alive every 3 seconds to prevent timeout
         this._keepAliveInterval = setInterval(() => {
           if (this.ws && this.ws.readyState === 1) {
@@ -288,12 +363,19 @@ class DeepgramStreamingSTT {
       this.ws.on('close', (code) => {
         this.connected = false;
         this._clearKeepAlive();
+        if (this._stopped) return;
         this.onStatusChange('disconnected');
+        if (this._fatal) { this.onError(this._fatal); return; }
         if (code !== 1000) this._attemptReconnect();
       });
 
+      // A socket error is followed by 'close', which decides: retry, or give up
+      // only for a refused key. Before this, one network blip ended streaming
+      // for the rest of the call.
       this.ws.on('error', (err) => {
-        this.onError({ provider: 'deepgram', message: err.message, status: null });
+        const status = handshakeStatus(err);
+        console.log(`[streaming-stt] deepgram socket error${status ? ' ' + status : ''}: ${err && err.message}`);
+        if (isAuthRefusal(status)) this._fatal = { provider: 'deepgram', message: `Deepgram refused the key (${status}). Check it in Settings > Keys.`, status };
       });
 
     } catch (e) {
@@ -329,7 +411,8 @@ class DeepgramStreamingSTT {
       // segments we accumulated so the turn is not silently dropped.
       this._flushCommitted();
     } else if (msg.type === 'Error') {
-      this.onError({ provider: 'deepgram', message: msg.description || msg.message, status: msg.variant });
+      // Deepgram closes the socket after an error message; 'close' reconnects.
+      console.log(`[streaming-stt] deepgram error message: ${msg.variant || ''} ${msg.description || msg.message || ''}`);
     }
   }
 
@@ -343,6 +426,8 @@ class DeepgramStreamingSTT {
   sendAudio(pcmBuffer) {
     if (this.ws && this.ws.readyState === 1) {
       this.ws.send(Buffer.from(pcmBuffer));
+    } else if (!this._stopped) {
+      pushPending(this._pending, pcmBuffer);
     }
   }
 
@@ -351,16 +436,23 @@ class DeepgramStreamingSTT {
   }
 
   _attemptReconnect() {
-    if (this._reconnectAttempts >= this._maxReconnectAttempts) {
-      this.onError({ provider: 'deepgram', message: 'Max reconnection attempts reached', status: null });
+    if (this._reconnectTimer || this._stopped) return;
+    const delay = this._policy.next();
+    if (delay == null) {
+      this.onError({ provider: 'deepgram', message: 'Lost the connection for five minutes', status: null });
       return;
     }
-    this._reconnectAttempts++;
-    const delay = this._reconnectDelay * Math.pow(2, this._reconnectAttempts - 1);
-    setTimeout(() => this.connect(), Math.min(delay, 16000));
+    this.onStatusChange('reconnecting');
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      this._open();
+    }, delay);
   }
 
   disconnect() {
+    this._stopped = true;
+    if (this._reconnectTimer) { clearTimeout(this._reconnectTimer); this._reconnectTimer = null; }
+    this._pending = { chunks: [], bytes: 0 };
     this._flushCommitted();
     this._clearKeepAlive();
     if (this.ws) {
@@ -457,6 +549,11 @@ function createStreamingSTT(settings, channel, callbacks) {
 }
 
 module.exports = {
+  createReconnectPolicy,
+  handshakeStatus,
+  isAuthRefusal,
+  pushPending,
+  RECONNECT_DELAYS_MS,
   OpenAIRealtimeSTT,
   DeepgramStreamingSTT,
   createStreamingSTT,

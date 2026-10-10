@@ -963,6 +963,7 @@ body.record-mode .script-view p { font-size: 30px; line-height: 1.45; margin-bot
 .stt-disconnected { color: rgba(255,255,255,0.25); }
 .stt-connecting   { color: #facc15; }
 .stt-streaming    { color: var(--live); }
+.stt-reconnecting { color: var(--stop); }
 .stt-local        { color: var(--live); }
 /* Who is talking right now, so an answer is never read over the interviewer. */
 #speaker-label {
