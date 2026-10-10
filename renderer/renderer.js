@@ -2,6 +2,15 @@
 (function () {
   const { icon } = window.ICONS;
   const cue = window.cue; // exposed by preload
+  // Uncaught errors go to the local crash log (src/crash-log.js) with their stack, never page text.
+  window.addEventListener('error', (e) => {
+    const err = e && e.error;
+    cue.crash(err && err.stack ? err.stack : `${(e && e.message) || 'error'} at ${(e && e.filename) || '?'}:${(e && e.lineno) || 0}`);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e && e.reason;
+    cue.crash('unhandled rejection: ' + (r && r.stack ? r.stack : String(r)));
+  });
   const $ = (s) => document.querySelector(s);
   const isWindows = cue.platform === 'win32';
   const isMac = cue.platform === 'darwin';

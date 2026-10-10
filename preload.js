@@ -76,6 +76,7 @@ contextBridge.exposeInMainWorld('cue', {
   permissionsContinue: () => ipcRenderer.send('permissions:continue'),
   copyText: (text) => ipcRenderer.invoke('clipboard:write', text),
   log: (msg) => ipcRenderer.send('log', msg),
+  crash: (report) => ipcRenderer.send('crash:renderer', String(report).slice(0, 4000)),
   on: (channel, cb) => {
     const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'scrollReading:changed', 'follow:toggle', 'question:changed', 'rounds:saved', 'llm:busy', 'script:heard', 'answer:scroll', 'llm:thinking', 'llm:section', 'llm:restart', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state', 'projects:draft-progress'];
     if (!allowed.includes(channel)) return;
