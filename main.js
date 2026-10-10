@@ -20,7 +20,7 @@ const { registerProjectsIpc } = require('./src/ipc/projects');
 const { createSTT } = require('./src/stt');
 const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
-const { createLLM, imageLimit, setUsageRecorder } = require('./src/llm');
+const { createLLM, createFallbackLLM, imageLimit, setUsageRecorder } = require('./src/llm');
 const { createUsageLedger } = require('./src/usage-ledger');
 const { MODES, turnsSentByBuild } = require('./src/prompts');
 const { answeredQuestion } = require('./src/heard-question');
@@ -739,6 +739,12 @@ const { preparedState, prepareAnswers, prepareOtherProfiles, schedulePrepare, fi
 // The model for a coding quick start: the Smart model, run as a coding solve
 // (so it gets the coding speed options), or null when there is no separate,
 // ready Smart model or the setting is off. Only Cmd+H solves get one.
+// A stream failure worth retrying on the backup model: the provider's own
+// verdict (createLLM marks it) or cue's stall watchdog.
+function isTransient(error) {
+  return !!(error && (error.transient || /timed out/i.test(String(error.message || ''))));
+}
+
 function quickStartLlm(mode, settings, codingLlm) {
   if (mode !== 'leetcode' || settings.codingQuickStart === false) return null;
   const smart = createLLM({ ...settings, smart: true });
@@ -1218,7 +1224,19 @@ async function runFeature(mode, userText, options = {}) {
     } else {
       const fullBuilt = quickPlan ? buildTurn({ quickPlan }) : built;
       try {
-        answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');
+        try {
+          answer = await runStream(llm, system, fullBuilt, quick ? 'full solution' : '');
+        } catch (first) {
+          // A transient failure (overload, rate limit, timeout, dropped connection)
+          // gets one more try on the next model down. A cut-off answer is replaced
+          // whole, never continued mid-sentence.
+          const backup = isTransient(first) && !streamSettled ? createFallbackLLM(settings, { tier: def.tier }, llm) : null;
+          if (!backup) throw first;
+          console.log(`[timing] ${mode}: fallback from ${llm.model} to ${backup.model} after ${Date.now() - startedAt}ms (${first && first.message ? first.message : String(first)})${first && first.partial ? ', replacing the cut-off answer' : ''}`);
+          modelInUse = backup.provider + '/' + backup.model;
+          send('llm:restart', { label: 'Backup model' });
+          answer = await runStream(backup, system, fullBuilt, 'fallback');
+        }
       } catch (e) {
         // The quick start is on screen and may already be typed: keep it for Check and Explain.
         if (quickPlan && !def.notAnswer) interviewMemory.addAnswer({ mode, text: quickPlan, generation: memoryGeneration, ts: startedAt });

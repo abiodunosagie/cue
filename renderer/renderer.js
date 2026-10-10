@@ -1578,6 +1578,14 @@
       const label = document.getElementById('stt-status');
       if (label) { label.textContent = sttState; label.className = 'stt-status stt-streaming'; }
     }
+    // The socket dropped and main is retrying (src/stt-streaming.js): say so in
+    // red, so a dead mic is never silent. 'connected' clears it.
+    if (status === 'reconnecting') {
+      if (sttState !== 'reconnecting') showToast('Transcription dropped. Reconnecting.', 2600);
+      sttState = 'reconnecting';
+      const label = document.getElementById('stt-status');
+      if (label) { label.textContent = 'reconnecting'; label.className = 'stt-status stt-reconnecting'; }
+    }
   });
   cue.on('vad:state', ({ channel, speaking }) => {
     setLiveDotState(speaking ? 'speaking' : 'idle');
@@ -1662,6 +1670,25 @@
     // of view: say where it is, once now and once when its first words land.
     aiEl.dataset.section = 'full';
     showToast('Quick start ready. The full solution comes in below it.', 2600);
+    if (busy) armBusyFailsafe();
+  });
+  // The model failed and main retries on the backup model: the cut-off text
+  // goes, a fresh answer area takes its place with the same follow and coding
+  // choices, and a label says where the answer came from.
+  cue.on('llm:restart', ({ label }) => {
+    if (!aiEl) return;
+    const old = aiEl;
+    const group = old.parentNode;
+    if (!group) return;
+    startAi(old.classList.contains('small'), group);
+    for (const key of ['coding', 'follow', 'noFollow', 'section']) if (old.dataset[key]) aiEl.dataset[key] = old.dataset[key];
+    old.remove();
+    const pill = document.createElement('div');
+    pill.className = 'prepared-pill';
+    pill.textContent = label || 'Backup model';
+    group.insertBefore(pill, aiEl);
+    readingFollow.reset();
+    if (aiEl.dataset.coding === '1') showWaitNote(aiEl);
     if (busy) armBusyFailsafe();
   });
   // Main was busy with something the panel did not know of (a project read):

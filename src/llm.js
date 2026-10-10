@@ -143,6 +143,21 @@ function isConnectionError(error) {
     /fetch failed|ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|network|connection error|aborted/i.test(text);
 }
 
+// A failure another model on the same key can get past: an overload (529), a
+// server error, a rate limit (Anthropic limits each model separately), a
+// timeout or a dropped connection. Never a bad key, a bad request or a missing
+// model: those fail the same way on any model, so a fallback only adds delay.
+const TRANSIENT_STATUS = new Set([408, 429, 500, 502, 503, 504, 529]);
+function isTransientError(error) {
+  if (!error) return false;
+  const status = Number(error.status || (error.response && error.response.status) || 0);
+  if (status === 400 || status === 401 || status === 403 || status === 404) return false;
+  if (TRANSIENT_STATUS.has(status)) return true;
+  const type = error.error && (error.error.type || (error.error.error && error.error.error.type));
+  if (type === 'overloaded_error' || type === 'api_error' || type === 'rate_limit_error') return true;
+  return isConnectionError(error) || /\b(overloaded|timed out|timeout)\b/i.test(String(error.message || ''));
+}
+
 // publik gateway failures, mapped BEFORE isQuotaError: its regex matches
 // "billing"/"quota" in message text and the generic 429 copy tells the user to
 // "add billing to your publik API account", which is wrong for publik. Reads
@@ -686,10 +701,30 @@ function createLLM(settings, { tier: requestedTier } = {}) {
         const wrapped = formatProviderErrorMessage(error, provider, model);
         const out = wrapped instanceof Error ? wrapped : new Error(wrapped);
         out.message = hideKey(out.message, apiKey);
+        // The status is gone from the friendly message, so the verdict travels with it.
+        out.transient = isTransientError(error);
         throw out;
       }
     }
   };
+}
+
+// The model to retry on when a request fails for a transient reason (see
+// isTransientError): a Smart answer falls back to the Fast model, a Coding
+// solve to the Smart model. Fast has nothing below it. Failure only: never
+// used for speed or cost. Null when there is no different, ready model.
+function createFallbackLLM(settings, { tier: requestedTier } = {}, primary) {
+  const tier = requestedTier === 'coding' || requestedTier === 'fast' ? requestedTier : (settings.smart ? 'smart' : 'fast');
+  if (tier === 'fast') return null;
+  // A coding backup keeps the coding tier (its token budget and speed options)
+  // with the Smart model swapped in, the same way the quick start does.
+  const models = settings.models || {};
+  const smartModel = createLLM({ ...settings, smart: true }).model;
+  const backup = tier === 'coding'
+    ? createLLM({ ...settings, models: { ...models, [settings.provider]: { ...(models[settings.provider] || {}), coding: smartModel } } }, { tier: 'coding' })
+    : createLLM({ ...settings, smart: false }, { tier: 'fast' });
+  if (!backup.ready || !backup.model || (primary && backup.model === primary.model)) return null;
+  return backup;
 }
 
 // Test-only hooks, kept apart from the real API.
@@ -698,6 +733,8 @@ const _test = { resetFastMode: () => fastModePausedUntil.clear(), turnImages, op
 module.exports = {
   _test,
   createLLM,
+  createFallbackLLM,
+  isTransientError,
   imageLimit,
   hideKey,
   codingSpeedOptions,
