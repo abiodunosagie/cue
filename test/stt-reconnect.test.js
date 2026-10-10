@@ -18,7 +18,7 @@ Module._load = function (request, parent, isMain) {
   return originalLoad.call(this, request, parent, isMain);
 };
 
-const { createReconnectPolicy, handshakeStatus, isAuthRefusal, pushPending, RECONNECT_DELAYS_MS, DeepgramStreamingSTT, OpenAIRealtimeSTT } = require('../src/stt-streaming');
+const { probeDeepgram, createReconnectPolicy, handshakeStatus, isAuthRefusal, pushPending, RECONNECT_DELAYS_MS, DeepgramStreamingSTT, OpenAIRealtimeSTT } = require('../src/stt-streaming');
 
 test('backoff grows, then holds at 30 s, until the five minute budget is spent', () => {
   let t = 0;
@@ -145,4 +145,19 @@ test('OpenAI realtime: a blip reconnects, a refused key stops', async () => {
   sockets[1].fail('Unexpected server response: 401');
   assert.equal(errors.length, 1);
   stt.disconnect();
+});
+
+test('probeDeepgram: opens and closes, reports a refused key and a timeout', async () => {
+  sockets.length = 0;
+  const ok = probeDeepgram('dg', { timeoutMs: 200 });
+  sockets[0].open();
+  assert.deepEqual(await ok, { ok: true, detail: 'Connected to Deepgram live transcription.' });
+  const refused = probeDeepgram('dg', { timeoutMs: 200 });
+  sockets[1].fail('Unexpected server response: 401');
+  const r = await refused;
+  assert.equal(r.ok, false);
+  assert.match(r.detail, /refused the key \(401\)/);
+  const slow = await probeDeepgram('dg', { timeoutMs: 30 });
+  assert.equal(slow.ok, false);
+  assert.match(slow.detail, /did not answer/);
 });

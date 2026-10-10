@@ -497,6 +497,41 @@ async function transcribeBatchGemini(apiKey, wav) {
   return ((res && res.text) || '').trim();
 }
 
+// Test my setup: opens the same Deepgram socket listening uses, then closes it
+// at once with no audio sent. Resolves { ok, detail }; never throws.
+function probeDeepgram(apiKey, { timeoutMs = 8000, WebSocketImpl } = {}) {
+  return new Promise((resolve) => {
+    let ws;
+    let done = false;
+    const finish = (ok, detail) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { if (ws) ws.close(1000); } catch (e) { /* closing a failed socket */ }
+      resolve({ ok, detail });
+    };
+    const timer = setTimeout(() => finish(false, 'Deepgram did not answer within ' + Math.round(timeoutMs / 1000) + ' s. Check your internet connection.'), timeoutMs);
+    try {
+      const WebSocket = WebSocketImpl || require('ws');
+      const probe = new DeepgramStreamingSTT(apiKey, {});
+      ws = new WebSocket(probe._listenUrl(), { headers: { Authorization: `Token ${apiKey}` } });
+      ws.on('open', () => {
+        try { ws.send(JSON.stringify({ type: 'CloseStream' })); } catch (e) { /* closing anyway */ }
+        finish(true, 'Connected to Deepgram live transcription.');
+      });
+      ws.on('error', (err) => {
+        const status = handshakeStatus(err);
+        finish(false, isAuthRefusal(status)
+          ? `Deepgram refused the key (${status}). Check it in Settings > Keys.`
+          : `Could not reach Deepgram${status ? ' (' + status + ')' : ''}: ${String((err && err.message) || 'connection failed').slice(0, 120)}`);
+      });
+      ws.on('close', () => finish(false, 'Deepgram closed the connection before it opened.'));
+    } catch (e) {
+      finish(false, 'Could not start the Deepgram check: ' + String((e && e.message) || e).slice(0, 120));
+    }
+  });
+}
+
 // ============================================================================
 // Unified Streaming STT Factory
 // Creates the best available streaming STT based on the user's API keys.
@@ -549,6 +584,7 @@ function createStreamingSTT(settings, channel, callbacks) {
 }
 
 module.exports = {
+  probeDeepgram,
   createReconnectPolicy,
   handshakeStatus,
   isAuthRefusal,

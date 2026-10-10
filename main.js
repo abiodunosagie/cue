@@ -42,7 +42,8 @@ const { registerPublikIpc } = require('./src/ipc/publik');
 const { isRenderContents } = require('./src/page-render');
 const { getPermissionStatus, requestPermissions } = require('./src/permissions');
 const { rms16 } = require('./src/wav');
-const { createStreamingSTT } = require('./src/stt-streaming');
+const { createStreamingSTT, probeDeepgram } = require('./src/stt-streaming');
+const { createCrashLog } = require('./src/crash-log');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
 const { rulesWithFocus } = require('./src/role-focus');
@@ -515,8 +516,10 @@ function createWindow() {
   });
   win.webContents.on('render-process-gone', (_e, d) => {
     console.log('[cue] renderer gone', JSON.stringify(d));
+    crashLog.write('renderer-gone', d);
     recordEvent({ level: 'fatal', event: 'renderer_gone', code: d && d.reason, msg: 'renderer process ended: ' + JSON.stringify(d), frame: 'BrowserWindow' });
   });
+  win.on('unresponsive', () => crashLog.write('unresponsive', 'the panel stopped responding'));
 }
 
 // -------- STT flushing (batch mode fallback) --------
@@ -633,8 +636,22 @@ function stopStreamingSTT() {
 }
 
 // -------- audio routing (streaming or batch) --------
+// Test my setup reads this: when meeting audio last arrived, and when it last
+// carried sound (not digital silence, which an unpermitted capture sends).
+const meetingAudioSeen = { lastChunkAt: 0, lastSoundAt: 0 };
+const SOUND_PEAK = 300; // of 32767: above the noise floor of a silent capture
+function noteMeetingAudio(buf) {
+  const now = Date.now();
+  meetingAudioSeen.lastChunkAt = now;
+  if (now - meetingAudioSeen.lastSoundAt < 1000) return; // checked once a second is enough
+  for (let i = 0; i + 1 < buf.length; i += 32) {
+    if (Math.abs(buf.readInt16LE(i)) > SOUND_PEAK) { meetingAudioSeen.lastSoundAt = now; return; }
+  }
+}
+
 function routeAudio(channel, pcmBuffer) {
   const buf = Buffer.from(pcmBuffer);
+  if (channel === 'them') noteMeetingAudio(buf);
 
   if (localWhisperTranscriber) {
     localWhisperTranscriber.push(channel, buf);
@@ -1293,6 +1310,17 @@ ipcMain.handle('settings:set', (_e, patch) => {
 ipcMain.handle('prepared:state', () => preparedState());
 // Settings > Cost: today's spend by tier and model, and the last 7 days (src/usage-ledger.js).
 const usageLedger = createUsageLedger({ file: path.join(app.getPath('userData'), 'cue-usage.json') });
+// A local record of crashes and hangs (src/crash-log.js): never sent anywhere.
+const crashLog = createCrashLog({
+  file: path.join(app.getPath('userData'), 'cue-crash.log'),
+  secrets: () => Object.values((store.getSettings() || {}).apiKeys || {})
+});
+// A handler here also stops Electron's own error dialog, which would pop up
+// over a shared screen mid-call. The error is logged and the app carries on.
+process.on('uncaughtException', (error) => { console.error('[cue] uncaught exception', error); crashLog.write('main', error); });
+process.on('unhandledRejection', (reason) => { console.error('[cue] unhandled rejection', reason); crashLog.write('main-promise', reason); });
+app.on('child-process-gone', (_e, details) => crashLog.write('child-gone', details));
+ipcMain.on('crash:renderer', (_e, report) => crashLog.write('renderer', typeof report === 'string' ? report.slice(0, 4000) : 'unreadable report'));
 setUsageRecorder((entry) => usageLedger.record(entry));
 ipcMain.handle('usage:summary', () => usageLedger.summary());
 // A long interviewer turn that ends on a statement: is a question in it waiting
@@ -1337,7 +1365,21 @@ registerSetupIpc({
       elevenLabsKey: () => (settings().apiKeys || {}).elevenlabs || '',
       practiceVoice: () => settings().practiceVoice,
       codingShortcut: isMac ? '⌘H' : 'Ctrl+H',
-      synthesize
+      synthesize,
+      // The live provider listening would use, by the same rule as createStreamingSTT.
+      sttProvider: () => {
+        const s = settings();
+        const keys = s.apiKeys || {};
+        const choice = s.sttProvider || 'auto';
+        if ((choice === 'auto' || choice === 'deepgram') && keys.deepgram) return 'deepgram';
+        if ((choice === 'auto' || choice === 'openai') && keys.openai) return 'OpenAI';
+        if (choice === 'local') return 'local Whisper';
+        if (choice === 'gemini' || (choice === 'auto' && keys.gemini)) return 'Gemini';
+        if (choice === 'custom') return 'the Custom provider';
+        return 'none';
+      },
+      probeDeepgram: () => probeDeepgram((settings().apiKeys || {}).deepgram || ''),
+      meetingAudio: () => ({ capturing: !!state.capturing, ...meetingAudioSeen })
     };
   }
 });

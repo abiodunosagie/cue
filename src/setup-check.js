@@ -6,6 +6,10 @@
 const CHECK_TIMEOUT_MS = 20000;
 
 // Each check resolves { status: 'pass' | 'fail' | 'skip', detail }.
+// A sound from the other side within this window counts as working meeting audio.
+const MEETING_AUDIO_FRESH_MS = 2 * 60 * 1000;
+const clock = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
 function buildChecks(d) {
   const reply = async (tier) => {
     const llm = d.llmFor(tier);
@@ -53,6 +57,32 @@ function buildChecks(d) {
         return /^\s*(NONE|QUESTION\s*:|CODING\s*:)/i.test(answer)
           ? { status: 'pass', detail: 'The Fast model can read your screen.' }
           : { status: 'fail', detail: 'The Fast model did not answer in the expected form. It may not accept images; pick a Fast model that does.' };
+      }
+    },
+    {
+      name: 'Live transcription',
+      run: async () => {
+        const stt = d.sttProvider();
+        if (stt !== 'deepgram') return { status: 'skip', detail: stt === 'none' ? 'No transcription key in Settings > Keys.' : 'Uses ' + stt + '. Only Deepgram is tested here.' };
+        const probe = await d.probeDeepgram();
+        return probe.ok ? { status: 'pass', detail: probe.detail } : { status: 'fail', detail: probe.detail };
+      }
+    },
+    {
+      // Meeting audio needs a call or video playing, so this reports what cue
+      // actually received; it never passes on a guess.
+      name: 'Meeting audio',
+      run: async () => {
+        const a = d.meetingAudio();
+        const now = Date.now();
+        if (a.lastSoundAt && now - a.lastSoundAt < MEETING_AUDIO_FRESH_MS) {
+          return { status: 'pass', detail: 'Heard the other side at ' + clock(a.lastSoundAt) + '.' };
+        }
+        if (!a.capturing) return { status: 'skip', detail: 'Start Listening with a call or a video playing, then test again.' };
+        if (a.lastChunkAt && now - a.lastChunkAt < 5000) {
+          return { status: 'fail', detail: 'Meeting audio is connected but silent. Play a sound in the call app; if it stays silent, check Screen & System Audio Recording.' };
+        }
+        return { status: 'fail', detail: 'Listening is on but no meeting audio is arriving. Meeting audio needs macOS 14.4 or later and the Screen & System Audio Recording permission.' };
       }
     },
     {
