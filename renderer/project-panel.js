@@ -59,16 +59,22 @@
     });
   }
 
+  // What the sheet says about what is loaded, by kind of read.
+  const LOADED_TEXT = {
+    onboarding: (l) => `Guide to ${l.name} ready${l.reviewedAt ? ' (' + when(l.reviewedAt) + ')' : ''}. Every reply at your job uses it. Type questions about the code: "where is the invoice total worked out", "how do I add a field to the payment form".` +
+      (l.changed ? ' The code has new commits since: press Learn it again to bring the guide up to date.' : ''),
+    walkthrough: (l) => `Walkthrough of ${l.name} ready (${when(l.reviewedAt)}).` +
+      (l.questions ? ` ${l.questions} likely questions are answered already and show at once.` : '') +
+      ' In the interview, press Cmd+Shift+E on any file or app screen. Answers to questions you hear or type use it too. It stays until you press Forget it.' +
+      (l.changed ? ' The code has new commits since it was made: press Walk through it again to bring it up to date.' : ''),
+    review: (l) => `${l.name} was reviewed ${when(l.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`
+  };
+  const WHAT = { walkthrough: 'The walkthrough', onboarding: 'The guide', review: 'The review' };
+
   function showLoaded(loaded) {
     $('project-loaded').classList.toggle('hidden', !loaded);
     if (!loaded) return;
-    const answered = loaded.questions ? ` ${loaded.questions} likely questions are answered already and show at once.` : '';
-    const moved = loaded.changed ? ' The code has new commits since it was made: press Walk through it again to bring it up to date.' : '';
-    $('project-loaded-text').textContent = loaded.purpose === 'onboarding'
-      ? `Guide to ${loaded.name} ready (${when(loaded.reviewedAt)}). Every reply at your job uses it. Type questions about the code: "where is the invoice total worked out", "how do I add a field to the payment form".${loaded.changed ? ' The code has new commits since: press Learn it again to bring the guide up to date.' : ''}`
-      : loaded.purpose === 'walkthrough'
-      ? `Walkthrough of ${loaded.name} ready (${when(loaded.reviewedAt)}).${answered} In the interview, press Cmd+Shift+E on any file or app screen. Answers to questions you hear or type use it too. It stays until you press Forget it.${moved}`
-      : `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`;
+    $('project-loaded-text').textContent = (LOADED_TEXT[loaded.purpose] || LOADED_TEXT.review)(loaded);
   }
 
   const starters = () => [$('project-review'), $('project-walk'), $('project-learn')];
@@ -100,9 +106,7 @@
   async function start(purpose) {
     if (starting) return;
     const typed = $('project-path').value.trim();
-    // Several folders can be pasted, separated by commas, for one walkthrough.
-    // A walkthrough can read several apps: ticked, or pasted with commas between.
-    // A review reads one codebase, and a pasted path is taken whole for it.
+    // A review reads one codebase, so a pasted path is taken whole; a walkthrough or a guide reads several folders, pasted with commas between.
     const values = typed ? (purpose !== 'review' ? typed.split(',').map((t) => t.trim()).filter(Boolean) : [typed]) : picked;
     if (!values.length) { status('Pick a project or paste its folder path.'); return; }
     if (purpose === 'review' && values.length > 1) { status('Review it reads one project. Untick the others, or press Walk through it to read them together.'); return; }
@@ -112,7 +116,7 @@
     const res = await window.cue.projectStart({ values, purpose }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
     starting = false;
     starters().forEach((b) => { b.disabled = false; });
-    const what = purpose === 'walkthrough' ? 'The walkthrough' : purpose === 'onboarding' ? 'The guide' : 'The review';
+    const what = WHAT[purpose] || WHAT.review;
     if (!res || res.error) { status((res && res.error) || `${what} could not start.`); return; }
     close();
   }

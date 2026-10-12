@@ -6,10 +6,11 @@ const CompanyResearch = require('../company-research');
 
 function registerProfileIpc({ ipcMain, store, createLLM, quickAsk, onProfileChanged }) {
   // Every change goes through src/profiles.js and store.setProfileState.
-  function applyProfileChange(change) {
+  // info.deleted: the name of the profile a change removed.
+  function applyProfileChange(change, info = {}) {
     try {
       const saved = store.setProfileState(change(store.getSettings()));
-      onProfileChanged(saved);
+      onProfileChanged(saved, info);
       return { settings: store.redactForRenderer(saved) };
     } catch (e) {
       return { error: e && e.message ? e.message : String(e) };
@@ -17,7 +18,7 @@ function registerProfileIpc({ ipcMain, store, createLLM, quickAsk, onProfileChan
   }
   ipcMain.handle('profile:switch', (_e, name) => applyProfileChange((s) => Profiles.switchTo(s, String(name || ''))));
   ipcMain.handle('profile:create', (_e, name) => applyProfileChange((s) => Profiles.create(s, String(name || ''))));
-  ipcMain.handle('profile:delete-current', () => applyProfileChange((s) => Profiles.removeCurrent(s)));
+  ipcMain.handle('profile:delete-current', () => applyProfileChange((s) => Profiles.removeCurrent(s), { deleted: store.getSettings().activeProfile }));
 
   // Company research: notes and a Why-this-company draft for the renderer to put
   // in the form (saved with Done, like an import).

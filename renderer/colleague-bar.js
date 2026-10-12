@@ -55,7 +55,12 @@
     const host = bar();
     if (!host) return;
     current = Work.isWork(settings) ? Work.normalizeColleagues(settings.colleagues) : [];
-    if (!current.some((c) => c.id === selected)) selected = '';
+    // The colleague selected is gone (deleted, or the profile is no longer a
+    // job): main must stop tagging turns with them too.
+    if (selected && !current.some((c) => c.id === selected)) {
+      selected = '';
+      void window.cue.workSpeaker('').catch(() => {});
+    }
     host.replaceChildren();
     host.classList.toggle('hidden', !current.length);
     if (!current.length) return;

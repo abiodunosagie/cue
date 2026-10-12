@@ -114,6 +114,9 @@ const WALK_ASK_SYSTEM =
 // cue reads its spoken sections before every reply in work mode
 // (src/prompts.js workProjectNote), so its section names are fixed.
 
+// The guide's sections, in order. src/work-modes.js finds them by these names.
+const GUIDE_SECTIONS = ['What it is', 'How it is built', 'Where things live', 'Key flows', 'How things are done here', 'Words to know', 'Watch out for', 'Good questions for the team'];
+
 const ONBOARD_RULES =
   'The user works on this project at their job and must talk about it with their team: the tech lead, other engineers, the product manager. ' +
   'Teach it the way a generous tech lead teaches a new teammate: plain words, short sentences, the real names of folders, files, classes and functions. ' +
@@ -174,4 +177,4 @@ function filesBlock(files) {
   return files.map((f) => `<file path="${attr(f.rel)}">\n${String(f.text).replace(/<\/file>/gi, '</ file>')}\n</file>`).join('\n\n');
 }
 
-module.exports = { CORE_RULES, ONBOARD_SYSTEM, ONBOARD_NOTES_SYSTEM, ONBOARD_MERGE_SYSTEM, ONBOARD_ASK_SYSTEM, REVIEW_SYSTEM, NOTES_SYSTEM, MERGE_SYSTEM, ASK_SYSTEM, WALK_SYSTEM, WALK_NOTES_SYSTEM, WALK_MERGE_SYSTEM, WALK_ASK_SYSTEM, WALK_RULES, mapBlock, filesBlock };
+module.exports = { CORE_RULES, GUIDE_SECTIONS, ONBOARD_SYSTEM, ONBOARD_NOTES_SYSTEM, ONBOARD_MERGE_SYSTEM, ONBOARD_ASK_SYSTEM, REVIEW_SYSTEM, NOTES_SYSTEM, MERGE_SYSTEM, ASK_SYSTEM, WALK_SYSTEM, WALK_NOTES_SYSTEM, WALK_MERGE_SYSTEM, WALK_ASK_SYSTEM, WALK_RULES, mapBlock, filesBlock };

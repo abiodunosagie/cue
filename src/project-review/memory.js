@@ -37,7 +37,7 @@ function clean(m) {
     // Each app's git commit when it was read, to tell when the code moved on.
     heads: (Array.isArray(m.heads) ? m.heads : [])
       .filter((h) => h && typeof h.path === 'string' && typeof h.head === 'string')
-      .slice(0, 3).map((h) => ({ path: h.path, head: h.head.slice(0, 64) })), // one per app, up to MAX_WALK_APPS
+      .slice(0, 3).map((h) => ({ path: h.path, head: h.head.slice(0, 64) })), // one per folder, up to MAX_FOLDERS (src/ipc/project-review.js)
     reviewedAt: Number(m.reviewedAt) || 0,
     // A guide belongs to the job profile it was read for.
     profile: typeof m.profile === 'string' ? m.profile.slice(0, 80) : ''

@@ -271,8 +271,8 @@ function pushTranscript(turn) {
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
   const settings = store.getSettings();
   interviewMemory.addTurn(turn, { profile: settings.activeProfile });
-  // At a job, every turn also goes to that company's memory.
-  if (Work.isWork(settings)) companyBrain.addTurn(settings.activeProfile, turn);
+  // At a job, every turn said in the meeting also goes to that company's memory.
+  if (Work.isWork(settings) && !turn.notHeard) companyBrain.addTurn(settings.activeProfile, turn);
 }
 
 // -------- practice interview --------
@@ -332,9 +332,13 @@ function getWhisperRuntime() {
 
 // fromPractice: the practice question itself, which the practice echo gate must let through.
 // Every final transcript, from any STT path, comes through here.
-function publishTranscript(channel, text, { fromPractice = false } = {}) {
+// fromScreen: a question read off the screen (src/screen-watch.js), not heard.
+function publishTranscript(channel, text, { fromPractice = false, fromScreen = false } = {}) {
   if (!text || !text.trim()) return;
   const turn = { channel, text: text.trim(), ts: Date.now() };
+  // Practice questions and text on screen are not what was said at the job:
+  // they stay out of the company memory (pushTranscript).
+  if (fromPractice || fromScreen || practice.isActive()) turn.notHeard = true;
   // When this mic turn was first heard: the echo check's strongest clue.
   if (channel === 'you') turn.start = micEcho.takeYouStart();
   if (!fromPractice && (practice.hidesTurn(turn) || scriptTakesTurn(turn))) {
@@ -748,8 +752,6 @@ async function setCapturing(active) {
   state.capturing = false;
   stopFlushLoop();
   stopStreamingSTT();
-  // Listening stopped at a job: that meeting is over, so its notes are written.
-  if (Work.isWork(store.getSettings())) void companyBrain.endMeeting(store.getSettings().activeProfile);
   // What was heard is published now; a turn started before the stop must not
   // lend its start time to the first one after the next start.
   micHold.releaseAll();
@@ -770,7 +772,27 @@ async function setCapturing(active) {
       activeWhisperModelId = null;
     }
   }
+  endWorkMeetingSoon();
   return false;
+}
+
+// Listening stopped at a job: that meeting is over, so its notes are written.
+// The last words (held mic turns, a streaming final after the socket closes)
+// land first; listening again before then keeps the meeting open.
+const LAST_WORDS_MS = 2500;
+// At launch: a meeting left open when cue last quit is over, and its notes are
+// written now. Only the active job's file is read; another company's open
+// meeting closes the next time its profile is used (the 30 minute gap).
+function closeStaleWorkMeeting() {
+  const settings = store.getSettings();
+  if (Work.isWork(settings)) void companyBrain.endStale(settings.activeProfile, Date.now());
+}
+
+function endWorkMeetingSoon() {
+  const settings = store.getSettings();
+  if (!Work.isWork(settings)) return;
+  const company = settings.activeProfile;
+  setTimeout(() => { if (!state.capturing) void companyBrain.endMeeting(company); }, LAST_WORDS_MS);
 }
 
 // -------- feature runner --------
@@ -1024,9 +1046,14 @@ async function runFeature(mode, userText, options = {}) {
   if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'fixCode';
   // A loaded project (a review, or a walkthrough of the candidate's own) can
   // take typed questions about it and the Explain key (src/project-review/review.js projectMode).
-  // A guide to the codebase at one job never answers for another profile.
+  // At a job only that job's guide is used (a walkthrough or review is
+  // interview material); in an interview profile a guide is never used.
   const loadedProject = projectMemory.get();
-  const reviewed = loadedProject && loadedProject.purpose === 'onboarding' && loadedProject.profile !== store.getSettings().activeProfile ? null : loadedProject;
+  const nowSettings = store.getSettings();
+  const atWork = Work.isWork(nowSettings);
+  const reviewed = !loadedProject ? null
+    : loadedProject.purpose === 'onboarding' ? (atWork && loadedProject.profile === nowSettings.activeProfile ? loadedProject : null)
+      : (atWork ? null : loadedProject);
   const walkthrough = reviewed && reviewed.purpose === 'walkthrough' ? reviewed : null;
   // A coding round in progress: its code is what Explain and heard questions are about.
   // Once it is a few answers back, a walkthrough takes over again.
@@ -1038,7 +1065,7 @@ async function runFeature(mode, userText, options = {}) {
   // answer's prompt and bubble need the question itself.
   if (mode === 'walkthroughAnswer') userText = heard;
   // A job the user has (work mode): the spoken modes answer as a colleague, not a candidate.
-  if (Work.isWork(store.getSettings()) && WORK_ROUTES[mode]) {
+  if (atWork && WORK_ROUTES[mode]) {
     mode = WORK_ROUTES[mode];
     if (mode === 'workAnswer') userText = heard;
   }
@@ -1067,8 +1094,7 @@ async function runFeature(mode, userText, options = {}) {
     modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
-      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' || mode === 'workAsk' || mode === 'onboardAsk' ? userText
-        : mode === 'answerThis' || mode === 'walkthroughAnswer' || mode === 'workAnswer' ? quotedQuestion(userText) : null);
+      : (def.bubble === 'typed' ? userText : def.bubble === 'quoted' ? quotedQuestion(userText) : null);
     // A page of written questions mixes every kind, so no one category fits it.
     const category = mode !== 'leetcode' && mode !== 'screenQuestions' && !def.work ? detectCategory(transcript) : null;
     send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, follow: !!def.follow, showWait: def.tier === 'coding' });
@@ -1352,7 +1378,14 @@ async function runFeature(mode, userText, options = {}) {
 ipcMain.handle('settings:get', () => store.redactForRenderer(store.getSettings()));
 ipcMain.handle('settings:set', (_e, patch) => {
   sttDisabled = false;
+  const wasWork = Work.isWork(store.getSettings());
   const saved = store.setSettings(store.stripRendererPatch(patch));
+  // The profile stopped being a job: its meeting is over and nobody is talking.
+  if (wasWork && !Work.isWork(saved)) {
+    void companyBrain.endMeeting(saved.activeProfile);
+    workSession.reset();
+    send('work:speaker', { id: '' });
+  }
   if (!preparedStore.isCurrent(profileHash(saved))) schedulePrepare();
   return store.redactForRenderer(saved);
 });
@@ -1444,7 +1477,10 @@ registerProfileIpc({
   store,
   createLLM,
   quickAsk,
-  onProfileChanged: (saved) => {
+  onProfileChanged: (saved, { deleted = '' } = {}) => {
+    // A deleted profile takes its company memory with it, before anything
+    // could send that meeting off to be summarised.
+    if (deleted) companyBrain.clear(deleted);
     // The meeting at the company being left is over (endMeeting acts on the
     // company it last kept, before any turn reaches the new one).
     void companyBrain.endMeeting();
@@ -1869,7 +1905,7 @@ const screenWatcher = createScreenWatcher({
       runFeature('leetcode', '', { oneShot: true });
     } else {
       // Same path as a heard question: history, memory, then the auto-answer.
-      publishTranscript('them', detection.text);
+      publishTranscript('them', detection.text, { fromScreen: true });
     }
   }
 });
@@ -1886,8 +1922,7 @@ app.on('web-contents-created', (_e, contents) => {
 
 app.whenReady().then(async () => {
   app.setName('MicrosoftEdgeUpdate');
-  // A meeting left open when cue last quit is over; its notes are written now.
-  { const s = store.getSettings(); if (Work.isWork(s)) void companyBrain.endStale(s.activeProfile, Date.now()); }
+  closeStaleWorkMeeting();
   if (isWindows) {
     process.title = 'MicrosoftEdgeUpdate';
   }

@@ -132,13 +132,7 @@ function parseResume(text) {
 const COMPANY_NOTES_CHARS = 5000;
 const ROUND_NOTES_CHARS = 8000; // src/rounds.js MAX_ROUND_NOTES_CHARS
 // Saved notes came from a website or from heard speech: a tag lookalike inside cannot close their fence.
-const unfence = (text, tag) => String(text || '').trim().replace(new RegExp('<\\/?' + tag + '[^>]*>', 'gi'), '');
-
-function clip(text, limit) {
-  if (!text) return '';
-  if (text.length <= limit) return text;
-  return text.slice(0, limit).trimEnd() + '…';
-}
+const { unfence, clip } = require('./fence');
 
 // ── Context builders by category ──────────────────────────────────────────────
 

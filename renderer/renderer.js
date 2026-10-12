@@ -874,7 +874,9 @@
   // Work mode answers on its own only while a colleague (not Everyone) is
   // selected as talking: group talk is not the user's to answer.
   const atWork = () => !!settings && window.WorkProfile.isWork(settings);
-  const autoAnswerOn = () => !!settings && settings.autoAnswer !== false && (!atWork() || !!window.ColleagueBar.selected());
+  // With no colleagues entered there is no bar to click, so the turn check alone decides.
+  const autoAnswerOn = () => !!settings && settings.autoAnswer !== false &&
+    (!atWork() || !!window.ColleagueBar.selected() || !window.WorkProfile.normalizeColleagues(settings.colleagues).length);
   const isUntouchedSTT = () => inputFromSTT && input.value.trim() === (lastSTTValue || '').trim();
   // A turn worth main's turn check: long, or it asked something earlier, or it
   // ends on something shaped like a question the rules could not settle.
@@ -905,7 +907,10 @@
     // question never joins onto it.
     const autoSends = autoAnswerOn() && isUntouchedSTT();
     const heardNow = input.value;
-    if (autoSends && (window.SpokenQuestion.questionToAnswer(heardNow).state === 'question' || (mayHoldQuestion(heardNow) && heardNow !== gateSaidNo))) return;
+    // At work a heard question can be for someone else: once the turn check said
+    // so (gateSaidNo), it clears like any other turn instead of joining the next one.
+    const gatedOff = atWork() && heardNow === gateSaidNo;
+    if (autoSends && !gatedOff && (window.SpokenQuestion.questionToAnswer(heardNow).state === 'question' || (mayHoldQuestion(heardNow) && heardNow !== gateSaidNo))) return;
     
     // FIX #3: Reset userSpeechStart at the beginning before setting new timestamp
     // This ensures we always track from fresh when a new soft-clear cycle begins
@@ -2239,7 +2244,7 @@
   $('#profile-delete-btn').addEventListener('click', (e) => {
     const btn = e.currentTarget;
     if (!deleteArmedTimer) {
-      btn.textContent = 'Click again to delete ' + settings.activeProfile;
+      btn.textContent = 'Click again to delete ' + settings.activeProfile + (window.WorkProfile.isWork(settings) ? ' and its company memory' : '');
       deleteArmedTimer = setTimeout(() => { deleteArmedTimer = null; btn.textContent = 'Delete this profile'; }, 3000);
       return;
     }

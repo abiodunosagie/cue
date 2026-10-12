@@ -11,6 +11,7 @@
 // progress check found wrong is flagged and solved fresh next time.
 
 const fs = require('fs');
+const { stripTags } = require('./fence');
 const crypto = require('crypto');
 const { writeFileAtomic } = require('./atomic-file');
 const { tokenize, countShared } = require('../renderer/reading-tracker');
@@ -86,7 +87,7 @@ function identifyTask({ llm, imageDataUrl, imageDataUrls, timeoutMs = IDENTIFY_T
 function confirmSameTask({ llm, now, saved, timeoutMs = CONFIRM_TIMEOUT_MS }) {
   const describe = (t) => 'Title: ' + t.title + '\nLanguage: ' + (t.language || 'not shown') + '\n' + t.statement;
   // Screen text is fenced as data, and tag lookalikes inside it cannot close the fence.
-  const fence = (tag, t) => '<' + tag + '>\n' + describe(t).replace(/<\/?task_[a-z_]*>/gi, '') + '\n</' + tag + '>';
+  const fence = (tag, t) => '<' + tag + '>\n' + stripTags(describe(t), 'task_[a-z_]*') + '\n</' + tag + '>';
   const text = fence('task_on_screen', now) + '\n\n' + fence('task_solved_before', saved);
   return quickAsk({ llm, system: CONFIRM_SYSTEM, text, maxTokens: CONFIRM_MAX_TOKENS, timeoutMs })
     .then((reply) => {

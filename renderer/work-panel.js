@@ -9,8 +9,15 @@
   let level = '';
   let colleagues = [];
 
+  const CONFIRM_MS = 3000; // the second click of Forget it must come this soon
+
+  function press(button, on) {
+    button.classList.toggle('on', on);
+    button.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
+
   function showKind() {
-    document.querySelectorAll('#profile-kind-seg button').forEach((b) => b.classList.toggle('on', b.dataset.profileKind === kind));
+    document.querySelectorAll('#profile-kind-seg button').forEach((b) => press(b, b.dataset.profileKind === kind));
     $('#work-section').classList.toggle('hidden', kind !== 'work');
     $('#profile-kind-note').textContent = kind === 'work'
       ? 'cue helps you in meetings at this job: pick who is talking in the panel and it answers in the way that person expects. Every meeting is kept on this Mac as this company\'s memory.'
@@ -18,7 +25,7 @@
   }
 
   function showLevel() {
-    document.querySelectorAll('#work-level-seg button').forEach((b) => b.classList.toggle('on', b.dataset.workLevel === level));
+    document.querySelectorAll('#work-level-seg button').forEach((b) => press(b, b.dataset.workLevel === level));
   }
 
   function field(tag, attrs) {
@@ -30,38 +37,46 @@
     return el;
   }
 
+  // Returns the rows' name inputs, so a new row's can take the focus.
   function renderList() {
     const host = $('#colleague-list');
     host.replaceChildren();
     if (!colleagues.length) {
       host.append(field('div', { class: 'colleague-empty', text: 'No colleagues yet. Add the people you meet: your tech lead, the back end developer, your PM.' }));
-      return;
+      return [];
     }
+    const names = [];
     colleagues.forEach((c, i) => {
-      const row = field('div', { class: 'colleague-row' });
+      // Each row's labels carry its number, so a screen reader can tell the rows apart.
+      const n = ' ' + (i + 1);
+      const row = field('div', { class: 'colleague-row', role: 'group', 'aria-label': 'Colleague' + n });
       const head = field('div', { class: 'colleague-head' });
-      const name = field('input', { type: 'text', maxlength: '40', placeholder: 'Name', 'aria-label': 'Colleague name', autocomplete: 'off' });
+      const name = field('input', { type: 'text', maxlength: '40', placeholder: 'Name', 'aria-label': 'Colleague' + n + ' name', autocomplete: 'off' });
       name.value = c.name;
-      name.addEventListener('input', () => { c.name = name.value; });
-      const role = field('select', { class: 's-select compact', 'aria-label': 'Role' });
+      const role = field('select', { class: 's-select compact', 'aria-label': 'Colleague' + n + ' role' });
       for (const [key, r] of Object.entries(Work.ROLES)) {
         const o = field('option', { value: key, text: r.label });
         role.append(o);
       }
       role.value = c.role || 'other';
       role.addEventListener('change', () => { c.role = role.value; });
-      const remove = field('button', { class: 's-action danger', type: 'button', text: 'Remove', 'aria-label': 'Remove ' + (c.name || 'colleague') });
+      const remove = field('button', { class: 's-action danger', type: 'button', text: 'Remove' });
+      const removeLabel = () => remove.setAttribute('aria-label', 'Remove ' + (c.name.trim() || 'colleague' + n));
+      removeLabel();
+      name.addEventListener('input', () => { c.name = name.value; removeLabel(); });
       remove.addEventListener('click', () => { colleagues.splice(i, 1); renderList(); });
       head.append(name, role, remove);
-      const owns = field('input', { type: 'text', maxlength: '200', placeholder: 'What they own, for example payments API, design system', 'aria-label': 'What they own', autocomplete: 'off' });
+      const owns = field('input', { type: 'text', maxlength: '200', placeholder: 'What they own, for example payments API, design system', 'aria-label': 'Colleague' + n + ': what they own', autocomplete: 'off' });
       owns.value = c.owns;
       owns.addEventListener('input', () => { c.owns = owns.value; });
-      const notes = field('input', { type: 'text', maxlength: '400', placeholder: 'How they like to work, for example wants short status, cares about tests', 'aria-label': 'Notes about them', autocomplete: 'off' });
+      const notes = field('input', { type: 'text', maxlength: '400', placeholder: 'How they like to work, for example wants short status, cares about tests', 'aria-label': 'Colleague' + n + ': notes about them', autocomplete: 'off' });
       notes.value = c.notes;
       notes.addEventListener('input', () => { c.notes = notes.value; });
       row.append(head, owns, notes);
       host.append(row);
+      names.push(name);
     });
+    return names;
   }
 
   // Company memory: how much is kept for this job, read from main.
@@ -104,10 +119,8 @@
   $('#colleague-add-btn').addEventListener('click', () => {
     if (colleagues.length >= Work.MAX_COLLEAGUES) return;
     colleagues.push({ id: Work.newId(), name: '', role: 'techlead', owns: '', notes: '' });
-    renderList();
-    const inputs = document.querySelectorAll('#colleague-list .colleague-row input');
-    const last = inputs[inputs.length - 3];
-    if (last) last.focus();
+    const names = renderList();
+    if (names.length) names[names.length - 1].focus();
   });
 
   $('#work-memory-show').addEventListener('click', async () => {
@@ -116,13 +129,14 @@
     const res = await window.cue.workMemoryShow().catch(() => null);
     if (res && res.error && window.cue.log) window.cue.log('[company memory] ' + res.error);
   });
-  // Forgetting deletes the file, so it takes a second click within 3 s.
+  // Forgetting deletes the file, so it takes a second click within CONFIRM_MS.
   let clearArmed = null;
   $('#work-memory-clear').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     if (!clearArmed) {
       btn.textContent = 'Click again to forget every meeting';
-      clearArmed = setTimeout(() => { clearArmed = null; btn.textContent = 'Forget it'; }, 3000);
+      $('#work-memory-status').textContent = 'Click Forget it again within 3 seconds to delete every meeting kept for this job.';
+      clearArmed = setTimeout(() => { clearArmed = null; btn.textContent = 'Forget it'; void showMemory(); }, CONFIRM_MS);
       return;
     }
     clearTimeout(clearArmed); clearArmed = null;

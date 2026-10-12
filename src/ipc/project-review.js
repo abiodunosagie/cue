@@ -22,8 +22,8 @@ const READS = {
 const message = (e) => (e && e.message ? e.message : String(e));
 // The Explain key main.js registers (fixed, not in Settings), as the owner reads it.
 const EXPLAIN_KEY = 'Cmd+Shift+E';
-// Apps read together for one walkthrough (a rider app and a driver app).
-const MAX_WALK_APPS = 3;
+// Folders read together for one walkthrough (a rider app and a driver app) or one guide.
+const MAX_FOLDERS = 3;
 // With several apps the walkthrough may run longer than for one.
 const SEVERAL_APPS_TOUR_STOPS = 14;
 const SEVERAL_APPS_QUESTIONS = 16;
@@ -72,29 +72,53 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     return resolveFolder(value, { protected: [userDataDir], allowed: [cloneDir] });
   }
 
+  // What is loaded for the active profile. A guide belongs to one job: at that
+  // job its saved copy stands in when the read itself was forgotten; anywhere
+  // else (another job, an interview profile) it is not shown.
+  function loadedFor(settings) {
+    const current = projectMemory.get();
+    const work = Work.isWork(settings);
+    if (work) {
+      if (current && current.purpose === 'onboarding' && current.profile === settings.activeProfile) return current;
+      const guide = String(settings.workGuide || '').trim();
+      // A review or walkthrough is interview material; at a job runFeature does not use it, so it is not shown either.
+      return guide ? { purpose: 'onboarding', name: settings.activeProfile, report: guide, qa: [], reviewedAt: 0, heads: [], savedOnly: true } : null;
+    }
+    return current && current.purpose !== 'onboarding' ? current : null;
+  }
+
   ipcMain.handle('project:detect', async () => {
     try {
-      const current = projectMemory.get();
       const settings = getSettings();
+      const current = loadedFor(settings);
       return {
         projects: detectProjects().map((p) => ({ ...p, shown: shown(p.path) })),
-        // A job profile (work mode) offers Learn it; hasGuide says it has one already.
+        // A job profile (work mode) offers Learn it.
         work: Work.isWork(settings),
-        hasGuide: !!String(settings.workGuide || '').trim(),
-        loaded: current ? { name: current.name, reviewedAt: current.reviewedAt, purpose: current.purpose, questions: current.qa.length, changed: await codeMovedOn(current) } : null
+        loaded: current ? { name: current.name, reviewedAt: current.reviewedAt, purpose: current.purpose, questions: current.qa.length, changed: current.savedOnly ? false : await codeMovedOn(current) } : null
       };
     } catch (e) {
       return { projects: [], error: message(e) };
     }
   });
 
-  ipcMain.handle('project:clear', () => { projectMemory.clear(); return { ok: true }; });
+  // Forget it: what is loaded, and at a job the guide kept with its profile too.
+  ipcMain.handle('project:clear', () => {
+    const settings = getSettings();
+    const current = projectMemory.get();
+    const atWork = Work.isWork(settings);
+    // Only what this profile shows is forgotten: another job's guide stays with that job.
+    const shown = current && (current.purpose === 'onboarding' ? atWork && current.profile === settings.activeProfile : !atWork);
+    if (shown) projectMemory.clear();
+    if (atWork) saveWorkGuide(settings.activeProfile, '');
+    return { ok: true };
+  });
 
   // Shows the saved walkthrough or review again, as an answer in the panel.
   // A review renders like it first streamed (code blocks, no read-aloud follow);
   // a walkthrough is read aloud, so the panel follows the voice through it.
   ipcMain.handle('project:show', () => {
-    const current = projectMemory.get();
+    const current = loadedFor(getSettings());
     if (!current) return { error: 'Nothing is loaded yet.' };
     if (state.busy) return { error: BUSY };
     send('llm:start', { userBubble: (READS[current.purpose] || READS.review).shown(current.name), small: false, coding: current.purpose !== 'walkthrough', follow: current.purpose === 'walkthrough' });
@@ -116,13 +140,13 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     const settings = getSettings();
     if (purpose === 'onboarding' && !Work.isWork(settings)) return { error: 'Learn it is for the codebase at your job. In Settings > Profile, set this profile to A job I got first.' };
     const manyFolders = purpose !== 'review';
-    // One folder, or for a walkthrough or a guide up to MAX_WALK_APPS folders read as one system.
+    // One folder, or for a walkthrough or a guide up to MAX_FOLDERS folders read as one system.
     const values = (source && Array.isArray(source.values) ? source.values : [source && source.value])
       .filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim().slice(0, 2000));
     const unique = [...new Set(values)];
     if (!unique.length) return { error: 'Pick a project or paste its folder path.' };
     if (unique.length > 1 && !manyFolders) return { error: 'A review reads one codebase. Pick one project.' };
-    if (unique.length > MAX_WALK_APPS) return { error: `A ${READS[purpose].label} reads up to ${MAX_WALK_APPS} folders at once.` };
+    if (unique.length > MAX_FOLDERS) return { error: `A ${READS[purpose].label} reads up to ${MAX_FOLDERS} folders at once.` };
     if (unique.length > 1 && unique.some((v) => parseGitHub(v))) return { error: 'To read several folders together, pick folders on this Mac.' };
     if (state.busy) return { error: BUSY };
     const llm = createLLM(getSettings(), { tier: 'coding' });
@@ -166,6 +190,9 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     const name = roots.map((r) => path.basename(r)).join(' + ');
     const walk = purpose === 'walkthrough';
     const learn = purpose === 'onboarding';
+    // A walkthrough and a guide show what the code does: its commits are noted,
+    // assets are skipped, and no analyzer runs.
+    const readsWhatItDoes = walk || learn;
     const label = READS[purpose].label;
     const startedAt = Date.now();
     const generation = projectMemory.generation();
@@ -178,15 +205,14 @@ function registerProjectReviewIpc({ ipcMain, createLLM, getSettings, send, state
     try {
       status(`Reading ${name}...`);
       // Each app's commit when its files are read, so a later commit shows as new.
-      const heads = walk || learn ? await Promise.all(roots.map(async (r) => ({ path: r, head: await folderHead(r) }))) : [];
-      const keep = walk || learn ? walkthroughWorthy : null;
+      const heads = readsWhatItDoes ? await Promise.all(roots.map(async (r) => ({ path: r, head: await folderHead(r) }))) : [];
+      const keep = readsWhatItDoes ? walkthroughWorthy : null;
       const collected = several ? collectProjects(roots, { keep }) : { ...collectProject(root, { keep }), root };
       if (!collected.files.length) throw new Error('No source files were found in that folder.');
       const kind = several ? collected.kind : kindOf(collected.files);
       const tree = treeOf(collected.files);
       log(`[timing] ${label}: read ${collected.files.length} files (${collected.totalChars} chars) after ${Date.now() - startedAt}ms`);
-      // A walkthrough or a guide shows what the code does, not what an analyzer flags.
-      const analyzer = walk || learn ? null : await runTools(collected.root, kind, { onStatus: status });
+      const analyzer = readsWhatItDoes ? null : await runTools(collected.root, kind, { onStatus: status });
       if (analyzer) log(`[timing] review: ${analyzer.tool || 'no analyzer'} ${analyzer.findings.length} findings after ${Date.now() - startedAt}ms`);
       const report = await review({
         llm,
