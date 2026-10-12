@@ -3,6 +3,7 @@
 // (src/rounds.js). Also the Clear interview handler, which saves the round
 // first, then clears. Main passes in what these need.
 const { summarizeRound, appendRound, canSummarize } = require('../rounds');
+const Work = require('../work');
 
 function registerRoundsIpc({ ipcMain, store, createLLM, interviewMemory, send, schedulePrepare, preparedState, clearInterview }) {
   // roundSaved marks the interview already saved, so Clear does not save it twice.
@@ -39,6 +40,13 @@ function registerRoundsIpc({ ipcMain, store, createLLM, interviewMemory, send, s
     send('prepared:state', preparedState());
     return store.getSettings().roundNotes;
   }
+  // A job profile's conversations are meetings, kept in its company memory
+  // (src/company-brain.js), never interview rounds.
+  const isJob = (profileName) => {
+    const s = store.getSettings();
+    const fields = profileName === s.activeProfile ? s : ((s.profiles || {})[profileName] || {});
+    return Work.isWork(fields);
+  };
   const sameInterview = (a, b) => !!a && a.startedAt === b.startedAt && a.turnCount === b.turnCount;
   const alreadySaved = (summary) => !!summary.roundSaved || sameInterview(roundSaved, summary) || sameInterview(roundSaving, summary);
   // The profile an interview belongs to: the one in use when it started, else the active one.
@@ -54,6 +62,7 @@ function registerRoundsIpc({ ipcMain, store, createLLM, interviewMemory, send, s
   ipcMain.handle('rounds:save', async () => {
     const summary = interviewMemory.summary();
     const turns = interviewMemory.turns();
+    if (isJob(profileOf(summary))) return { error: 'Meetings at a job are kept in its company memory, not as interview rounds.' };
     if (!canSummarize(turns)) return { error: 'This interview is too short to learn from yet.' };
     if (alreadySaved(summary)) return { error: 'This interview is already saved as a round.' };
     try {
@@ -69,7 +78,7 @@ function registerRoundsIpc({ ipcMain, store, createLLM, interviewMemory, send, s
   ipcMain.handle('transcript:clear', () => {
     const summary = interviewMemory.summary();
     const turns = interviewMemory.turns();
-    if (canSummarize(turns) && !alreadySaved(summary)) saveInBackground(turns, profileOf(summary), summary, '');
+    if (canSummarize(turns) && !alreadySaved(summary) && !isJob(profileOf(summary))) saveInBackground(turns, profileOf(summary), summary, '');
     return clearInterview();
   });
 
@@ -77,7 +86,7 @@ function registerRoundsIpc({ ipcMain, store, createLLM, interviewMemory, send, s
   // is kept as a round of the profile it was recorded under, not dropped. One
   // from before interviews knew their profile is left alone: its profile is unknown.
   function saveStaleRound(record) {
-    if (!record || record.roundSaved || !record.profile || !canSummarize(record.turns)) return null;
+    if (!record || record.roundSaved || !record.profile || !canSummarize(record.turns) || isJob(record.profile)) return null;
     const summary = { startedAt: record.startedAt, turnCount: record.turns.length, profile: record.profile, roundSaved: false };
     return saveInBackground(record.turns, record.profile, summary, 'Your last interview was left open. ');
   }

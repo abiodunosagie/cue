@@ -1222,7 +1222,8 @@
       
       // Irreversible: the memory file is deleted, so no undo hint here. cue has
       // already forgotten it either way; only the disk copy can fail to go.
-      showToast(res && res.ok ? 'Interview memory cleared' : 'Interview memory could not be deleted from this computer. Try again.', 3500);
+      const what = atWork() ? 'This conversation' : 'Interview memory';
+      showToast(res && res.ok ? what + ' cleared' + (atWork() ? '; the company memory is kept' : '') : what + ' could not be deleted from this computer. Try again.', 3500);
     });
   }
 
@@ -1794,7 +1795,9 @@
     if (!memory || !memory.turnCount || !Array.isArray(memory.turns)) return;
     memory.turns.forEach((t) => appendTranscriptHistoryTurn(t.channel, t.text, false, { merge: false }));
     const since = new Date(memory.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    showStatus(`Continuing the interview from ${since}. Clear interview memory in History to start fresh.`);
+    showStatus(atWork()
+      ? `Continuing the conversation from ${since}. Clear this conversation in History to start fresh.`
+      : `Continuing the interview from ${since}. Clear interview memory in History to start fresh.`);
   }
 
   function showStatus(message, button) {
@@ -1855,6 +1858,23 @@
   panelOpacityInput.min = String(window.PanelOpacity.MIN);
   panelOpacityInput.max = String(window.PanelOpacity.MAX);
   panelOpacityInput.addEventListener('input', (e) => applyPanelOpacity(e.target.value));
+  // History's buttons name what they act on: an interview, or at a job the
+  // conversation on screen (the company memory has its own Forget it).
+  function showWorkLabels() {
+    const work = atWork();
+    const report = document.getElementById('interview-report-btn');
+    const clear = document.getElementById('clear-transcript-btn');
+    if (report) {
+      report.textContent = work ? 'Meeting notes' : 'Interview report';
+      report.title = work ? 'Summary, decisions, your actions and an update to post' : 'Summary, answers to strengthen and a thank-you email';
+    }
+    if (clear) {
+      const label = Array.from(clear.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
+      if (label) label.textContent = work ? 'Clear this conversation' : 'Clear interview memory';
+      clear.title = work ? 'Clears this conversation from this Mac; the company memory is kept (Settings > Profile)' : 'Delete this interview\'s memory from this Mac';
+    }
+  }
+
   function updatePrepStatus() {
     if (!settings) return;
     // The interview checklist (resume, job description, stories, salary) means nothing at a job the user already has.
@@ -2220,7 +2240,7 @@
       if (!res || res.error || !res.settings) { showStatus((res && res.error) || 'The profile could not be changed.'); return false; }
       settings = res.settings;
       fillSettings();
-      ColleagueBar.render(settings);
+      ColleagueBar.render(settings); showWorkLabels();
       updatePrepStatus();
       if (done) showToast(done, 1800);
       return true;
@@ -2695,7 +2715,7 @@
     settings.questionsToAsk = $('#questions-to-ask').value.trim();
     try {
       settings = await cue.settingsSet(settings);
-      ColleagueBar.render(settings);
+      ColleagueBar.render(settings); showWorkLabels();
       $('#s-status').textContent = statusText();
       updatePrepStatus();
       updateSmartTooltip();
@@ -2938,7 +2958,7 @@
   // ---- boot --------------------------------------------------------------
   (async function boot() {
     settings = await cue.settingsGet();
-    ColleagueBar.render(settings);
+    ColleagueBar.render(settings); showWorkLabels();
     applyPanelOpacity(settings.panelOpacity);
     const platformInfo = await cue.platformInfo();
     publikState = await cue.publikState();

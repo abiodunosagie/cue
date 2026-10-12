@@ -81,3 +81,24 @@ test('the work turn check asks whether the words were said to the user, with the
   assert.match(body, /<meeting>/);
   assert.doesNotMatch(body, /<cache>/);
 });
+
+test('explain code, buy time, recap and the report each have a work version without interview wording', () => {
+  for (const from of ['explainCode', 'buyTime', 'recap', 'report']) {
+    const to = WORK_ROUTES[from];
+    assert.ok(to && MODES[to].work, from);
+    assert.doesNotMatch(MODES[to].buildSystem('CTX', ''), /interview|candidate/i, to);
+  }
+  assert.equal(MODES.workBuyTime.tier, 'fast');
+  assert.match(MODES.workReport.buildSystem('', ''), /Update to post/);
+});
+
+test('the continuation check at work asks whether the added words were for the user', async () => {
+  const { checkContinuation } = require('../src/continuation-check');
+  let system = '';
+  const llm = { ready: true, stream: async (p) => { system = p.system; return '{"answer": false}'; } };
+  await checkContinuation({ llm, asked: 'How is the cache?', added: 'Bola, and yours?', answer: 'Going well.', work: true });
+  assert.match(system, /work meeting/);
+  assert.match(system, /said to someone else/);
+  await checkContinuation({ llm, asked: 'a', added: 'b', answer: 'c' });
+  assert.match(system, /job interview/);
+});

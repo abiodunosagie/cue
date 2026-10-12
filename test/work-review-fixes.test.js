@@ -138,3 +138,22 @@ test('a meeting whose notes were never sent (no model yet) keeps all its tries',
   for (let i = 0; i < 5; i++) await b.endMeeting('Acme');
   assert.equal(calls, 5);
 });
+
+test('a job profile never saves its conversation as an interview round', async () => {
+  const { registerRoundsIpc } = require('../src/ipc/rounds');
+  const handlers = {};
+  let summarized = 0;
+  const settings = { activeProfile: 'Acme', profileKind: 'work', profiles: {} };
+  const turns = Array.from({ length: 12 }, (_, i) => ({ channel: i % 2 ? 'you' : 'them', text: 'a long enough line number ' + i, ts: i }));
+  const { saveStaleRound } = registerRoundsIpc({
+    ipcMain: { handle: (n, fn) => { handlers[n] = fn; } },
+    store: { getSettings: () => settings, setSettings() {}, setProfileState() {} },
+    createLLM: () => { summarized += 1; return { ready: true, stream: async () => '' }; },
+    interviewMemory: { summary: () => ({ startedAt: 1, turnCount: turns.length, profile: 'Acme' }), turns: () => turns },
+    send() {}, schedulePrepare() {}, preparedState: () => ({}), clearInterview: () => ({ ok: true })
+  });
+  assert.match((await handlers['rounds:save']()).error, /company memory/);
+  await handlers['transcript:clear']();
+  assert.equal(saveStaleRound({ profile: 'Acme', turns, startedAt: 1 }), null);
+  assert.equal(summarized, 0);
+});

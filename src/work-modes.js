@@ -147,6 +147,105 @@ const WORK_MODES = {
     build(ctx) { return ctx.projectTurn || String(ctx.userText || ''); }
   },
 
+  // Explain this code (the solve shortcut's answer, or the editor) to a colleague.
+  workExplainCode: {
+    work: true,
+    codingFollowUp: true,
+    skipMemory: true,
+    contextTurns: 6,
+    needsScreen: true,
+    userBubble: 'Explaining the code',
+    small: false,
+    buildSystem(contextBlock, aiRules) {
+      return workSystem(
+        'The user is explaining code to a colleague, out loud, in a meeting or a code review. You get the solution cue wrote for this task earlier (if any) and a screenshot of their editor now; ' +
+        'when the two differ, the editor wins. Answer in this order:\n' +
+        '**Say this:** 3 to 6 short first-person sentences to the colleague: answer exactly what they asked (a choice, an edge case, a test, a change), otherwise what the code does, why it works and what it costs.\n' +
+        'Then walk through the code in small pieces: the lines in a fenced block tagged with the language, copied exactly, then **Say:** one to three plain sentences on what they do and why.\n' +
+        'Never invent tests that were run, results or numbers. Code only inside fenced blocks. No markdown headings.',
+        contextBlock, aiRules, 'workExplainCode');
+    },
+    build(ctx) {
+      const solve = (ctx.priorSolves || [])[0] || '';
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
+      const asked = String(ctx.userText || '').trim();
+      return (solve ? 'The solution cue wrote for this task earlier:\n\n' + solve + '\n\n' : '') +
+        (t ? 'The meeting so far:\n' + t + '\n\n' : '') +
+        (asked ? 'They asked: "' + asked + '"\n\nHelp me answer that about my code.' : 'Help me explain this code from the start.');
+    }
+  },
+
+  // A few seconds to think, at work: an honest holding line and one useful question.
+  workBuyTime: {
+    work: true,
+    tier: 'fast',
+    skipMemory: true,
+    notAnswer: true,
+    contextTurns: 4,
+    needsScreen: false,
+    userBubble: 'Buying time',
+    small: false,
+    buildSystem(contextBlock, aiRules) {
+      return workSystem(
+        'The user needs a few seconds to think before answering a colleague. Write two short lines they say out loud, in first person:\n' +
+        '1. A natural line that buys time without sounding stuck, tied to what was asked (never "Great question").\n' +
+        '2. One clarifying question that is genuinely useful: scope, the edge case, who owns it, or what done means.\n' +
+        'Under 30 words in total. No labels, no quotes, no preamble. Each line on its own line.',
+        contextBlock, aiRules, 'workBuyTime');
+    },
+    build(ctx) {
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
+      return 'The meeting so far:\n' + (t || '(none)') + '\n\nGive me the two lines to say now.';
+    }
+  },
+
+  // The meeting so far, short, for a glance mid-meeting.
+  workRecap: {
+    work: true,
+    skipMemory: true,
+    contextTurns: 0,
+    needsScreen: false,
+    userBubble: 'Recap',
+    small: true,
+    buildSystem(contextBlock, aiRules) {
+      return workSystem(
+        'Summarise the meeting so far for the user, as short bullets under bold headers: **Discussed**, **Decided**, **Asked of me** (with who asked), **Open questions**. ' +
+        'Only what was said. Be concise.',
+        contextBlock, aiRules, 'workRecap');
+    },
+    build(ctx) {
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
+      return 'The whole meeting so far:\n' + (t || '(nothing captured yet)') + '\n\nRecap it.';
+    }
+  },
+
+  // After the meeting: notes, what to do next, and a message to post.
+  workReport: {
+    work: true,
+    skipMemory: true,
+    notAnswer: true,
+    contextTurns: 0,
+    needsScreen: false,
+    userBubble: 'Meeting notes',
+    small: false,
+    buildSystem(contextBlock, aiRules) {
+      return workSystem(
+        'The meeting has ended. Write the user their notes from the transcript, each section a bold label with short bullets:\n' +
+        '**Summary:** what was discussed and where it landed, in 2 or 3 bullets.\n' +
+        '**Decided:** every decision, with who made it when known.\n' +
+        '**My actions:** what the user said they would do or was asked to do, with any date said; mark each with who asked.\n' +
+        '**Others will:** what the others will do, with their names.\n' +
+        '**Before the next meeting:** what the user should read, check or ask so they arrive ready, naming the real parts of the project.\n' +
+        '**Update to post:** a short message the user can post in the team chat: what they are taking on and when, plain words, claiming nothing not said.\n' +
+        'If the transcript is too short to judge something, say so instead of guessing.',
+        contextBlock, aiRules, 'workReport');
+    },
+    build(ctx) {
+      const t = formatTranscript(ctx.transcript, this.contextTurns);
+      return 'The whole meeting:\n' + (t || '(nothing captured)') + '\n\nWrite my notes.';
+    }
+  },
+
   workFollowup: {
     work: true,
     contextTurns: 20,
@@ -167,6 +266,6 @@ const WORK_MODES = {
 };
 
 // The spoken modes a work profile answers with instead.
-const WORK_ROUTES = { answerThis: 'workAnswer', say: 'workSay', assist: 'workAssist', ask: 'workAsk', followup: 'workFollowup' };
+const WORK_ROUTES = { answerThis: 'workAnswer', say: 'workSay', assist: 'workAssist', ask: 'workAsk', followup: 'workFollowup', explainCode: 'workExplainCode', buyTime: 'workBuyTime', recap: 'workRecap', report: 'workReport' };
 
 module.exports = { WORK_MODES, WORK_ROUTES, workGuideText };

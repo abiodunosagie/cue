@@ -156,7 +156,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
   // "your code" only makes sense while the coding round is still going.
   function recentCodingSolve({ withinAnswers = 4, maxChars = MAX_CODING_ANSWER_CHARS } = {}) {
     // Explaining the code is still the coding round, so it does not count toward the window.
-    const recent = record.answers.filter((a) => a.mode !== 'explainCode' && sinceQuestion(a)).slice(-withinAnswers);
+    const recent = record.answers.filter((a) => a.mode !== 'explainCode' && a.mode !== 'workExplainCode' && sinceQuestion(a)).slice(-withinAnswers);
     for (let i = recent.length - 1; i >= 0; i--) {
       if (recent[i].mode === 'leetcode') return recent[i].text.slice(0, maxChars);
     }

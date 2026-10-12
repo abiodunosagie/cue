@@ -825,7 +825,7 @@ function quickStartLlm(mode, settings, codingLlm) {
 function priorSolvesFor(def, mode) {
   // The whole solve: a progress check needs the plan's later steps, not its first few thousand characters.
   // Checked before the tier: a progress check runs on the Coding model too.
-  if (mode === 'explainCode' || mode === 'checkProgress' || mode === 'fixCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
+  if (mode === 'explainCode' || mode === 'workExplainCode' || mode === 'checkProgress' || mode === 'fixCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
   if (def.tier === 'coding') return interviewMemory.codingHistory();
   return [];
 }
@@ -1434,7 +1434,7 @@ ipcMain.handle('turn:continuation', async (_e, payload) => {
   const llm = createLLM({ ...store.getSettings(), smart: false });
   if (!llm.ready) return { answer: true, question: wholeQuestion(asked, added) };
   const startedAt = Date.now();
-  const verdict = await checkContinuation({ llm, asked, added, answer: field('answer') });
+  const verdict = await checkContinuation({ llm, asked, added, answer: field('answer'), work: Work.isWork(store.getSettings()) });
   console.log(`[timing] continuation check: ${verdict.answer ? 'answer again' : 'already covered'} after ${Date.now() - startedAt}ms`);
   return verdict;
 });
