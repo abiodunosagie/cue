@@ -22,7 +22,7 @@ const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM, createFallbackLLM, imageLimit, setUsageRecorder } = require('./src/llm');
 const { createUsageLedger } = require('./src/usage-ledger');
-const { MODES, turnsSentByBuild } = require('./src/prompts');
+const { MODES, WORK_ROUTES, turnsSentByBuild, formatTranscript } = require('./src/prompts');
 const { answeredQuestion } = require('./src/heard-question');
 const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
@@ -49,6 +49,8 @@ const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
 const { rulesWithFocus } = require('./src/role-focus');
 const { createWorkSession } = require('./src/work-session');
+const Work = require('./src/work');
+const { buildWorkContext, userName } = require('./src/work-context');
 const { startAppLink, stopAppLink, recordEvent, appLinkConsentState, revokeAppLinkCaller } = require('./src/applink');
 const publik = require('./src/publik');
 // The app token release.yml baked into src/publik-build.json (empty in a dev
@@ -1010,6 +1012,11 @@ async function runFeature(mode, userText, options = {}) {
   // class?", "what happens when I tap that?") is answered from the screen; the
   // answer's prompt and bubble need the question itself.
   if (mode === 'walkthroughAnswer') userText = heard;
+  // A job the user has (work mode): the spoken modes answer as a colleague, not a candidate.
+  if (Work.isWork(store.getSettings()) && WORK_ROUTES[mode]) {
+    mode = WORK_ROUTES[mode];
+    if (mode === 'workAnswer') userText = heard;
+  }
   const def = MODES[mode];
   if (!def) return;
   state.busy = true;
@@ -1035,10 +1042,10 @@ async function runFeature(mode, userText, options = {}) {
     modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
-      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' ? userText
-        : mode === 'answerThis' || mode === 'walkthroughAnswer' ? quotedQuestion(userText) : null);
+      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' || mode === 'workAsk' ? userText
+        : mode === 'answerThis' || mode === 'walkthroughAnswer' || mode === 'workAnswer' ? quotedQuestion(userText) : null);
     // A page of written questions mixes every kind, so no one category fits it.
-    const category = mode !== 'leetcode' && mode !== 'screenQuestions' ? detectCategory(transcript) : null;
+    const category = mode !== 'leetcode' && mode !== 'screenQuestions' && !def.work ? detectCategory(transcript) : null;
     send('llm:start', { userBubble, small: !!def.small, category, coding: def.tier === 'coding' || !!def.codingFollowUp, follow: !!def.follow, showWait: def.tier === 'coding' });
 
     if (!llm.ready) {
@@ -1133,8 +1140,14 @@ async function runFeature(mode, userText, options = {}) {
     const memoryBlock = def.tier === 'coding' || def.skipMemory
       ? ''
       : interviewMemory.digest({ skipRecent: turnsSentByBuild(mode, { transcript, userText: userText || '' }) });
-    const contextBlock = buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: spokenAnswerTexts() });
-    const system = def.buildSystem ? def.buildSystem(contextBlock, rulesWithFocus(settingsForPrompt)) : (def.system || '');
+    // Work mode answers from the job (who the user is there, the team, who is
+    // talking); the interview context is about getting a job. The role focus
+    // lines are interview framing, so work mode uses the user's own rules only.
+    const contextBlock = def.work
+      ? buildWorkContext(settingsForPrompt, { speaker: workSession.speaker(settingsForPrompt) })
+      : buildInterviewContext(settingsForPrompt, mode, transcript, { answerTexts: spokenAnswerTexts() });
+    const rules = def.work ? String(settingsForPrompt.aiRules || '') : rulesWithFocus(settingsForPrompt);
+    const system = def.buildSystem ? def.buildSystem(contextBlock, rules) : (def.system || '');
     // One user turn builder for the answer, the quick start and the full
     // solution, so none of them can miss the memory or length parts.
     const buildArgs = {
@@ -1334,7 +1347,13 @@ ipcMain.handle('turn:check', async (_e, text) => {
   const llm = createLLM({ ...store.getSettings(), smart: false });
   if (!llm.ready) return noAnswer();
   const startedAt = Date.now();
-  const verdict = await checkTurn({ llm, text });
+  const settings = store.getSettings();
+  // Work mode: is it said to the user? The check needs who said it and the meeting around it.
+  const speaker = workSession.speaker(settings);
+  const work = Work.isWork(settings)
+    ? { userName: userName(settings), speaker: speaker ? speaker.name + ' (' + Work.roleLabel(speaker.role) + ')' : '', recent: formatTranscript(transcript, 6) }
+    : null;
+  const verdict = await checkTurn({ llm, text, work });
   console.log(`[timing] turn check: ${verdict.answer ? 'answer' : 'wait'} after ${Date.now() - startedAt}ms`);
   return verdict;
 });

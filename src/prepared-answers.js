@@ -47,7 +47,9 @@ function profileHash(settings) {
 }
 
 // Enough profile to write real answers: a resume and a job description.
+// A job the user already has (work mode) needs no interview answers.
 function canPrepare(settings) {
+  if (settings && settings.profileKind === 'work') return false;
   return !!(settings && String(settings.resumeText || '').trim() && String(settings.jobDescription || '').trim());
 }
 

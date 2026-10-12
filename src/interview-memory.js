@@ -19,7 +19,7 @@ const STALE_MS = 6 * 60 * 60 * 1000;
 // per sentence. Anything pending is flushed on quit.
 const SAVE_DEBOUNCE_MS = 1000;
 // Only these answers are read aloud, so only these count as "what you said last".
-const SPOKEN_MODES = new Set(['say', 'answerThis', 'assist']);
+const SPOKEN_MODES = new Set(['say', 'answerThis', 'assist', 'workSay', 'workAnswer', 'workAssist']);
 // Prompt budgets: enough to recall the interview without crowding the answer.
 const DIGEST_MAX_CHARS = 3000;
 const DIGEST_QUESTION_CHARS = 240;

@@ -5,7 +5,7 @@
 (function () {
   const LENGTHS = ['short', 'medium', 'long'];
   // The modes whose answers are spoken aloud, and so take a length.
-  const LENGTH_MODES = new Set(['say', 'answerThis', 'assist']);
+  const LENGTH_MODES = new Set(['say', 'answerThis', 'assist', 'workSay', 'workAnswer', 'workAssist']);
   const DEFAULT_LENGTH = 'medium';
   const LABELS = { short: 'Short', medium: 'Medium', long: 'Long' };
 

@@ -782,13 +782,16 @@
     questionFinalizeTimer = setTimeout(function finalizeQuestion() {
       const heard = window.SpokenQuestion.questionToAnswer(input.value);
       // If the user edited the heard question, leave sending to them (Enter).
-      const autoSends = settings && settings.autoAnswer !== false && isUntouchedSTT();
+      const autoSends = autoAnswerOn() && isUntouchedSTT();
       if (heard.state === 'question') {
         if (autoSends) {
           // Still streaming the previous answer: wait for it instead of dropping this question.
           // New interviewer words or the user answering clear this timer; setBusy's
           // failsafe bounds it if an answer never finishes.
           if (busy) { questionFinalizeTimer = setTimeout(finalizeQuestion, 700); return; }
+          // At work a question may be for someone else: main's turn check says
+          // whether it was said to the user before cue answers.
+          if (atWork()) { if (input.value !== lastGatedTurn) void gateTurn(input.value); return; }
           autoSend(heard.question);
           return;
         }
@@ -868,6 +871,10 @@
     run();
   }
 
+  // Work mode answers on its own only while a colleague (not Everyone) is
+  // selected as talking: group talk is not the user's to answer.
+  const atWork = () => !!settings && window.WorkProfile.isWork(settings);
+  const autoAnswerOn = () => !!settings && settings.autoAnswer !== false && (!atWork() || !!window.ColleagueBar.selected());
   const isUntouchedSTT = () => inputFromSTT && input.value.trim() === (lastSTTValue || '').trim();
   // A turn worth main's turn check: long, or it asked something earlier, or it
   // ends on something shaped like a question the rules could not settle.
@@ -896,7 +903,7 @@
     // One auto-answer will not send (auto-answer off, the question edited), or
     // an explanation with no question in it, clears as usual, so the next
     // question never joins onto it.
-    const autoSends = settings && settings.autoAnswer !== false && isUntouchedSTT();
+    const autoSends = autoAnswerOn() && isUntouchedSTT();
     const heardNow = input.value;
     if (autoSends && (window.SpokenQuestion.questionToAnswer(heardNow).state === 'question' || (mayHoldQuestion(heardNow) && heardNow !== gateSaidNo))) return;
     
@@ -1845,6 +1852,9 @@
   panelOpacityInput.addEventListener('input', (e) => applyPanelOpacity(e.target.value));
   function updatePrepStatus() {
     if (!settings) return;
+    // The interview checklist (resume, job description, stories, salary) means nothing at a job the user already has.
+    const prep = document.getElementById('prep-status');
+    if (prep) prep.classList.toggle('hidden', window.WorkProfile.isWork(settings));
     const fields = {
       resume:  !!(settings.resumeText && settings.resumeText.trim()),
       jd:      !!(settings.jobDescription && settings.jobDescription.trim()),
@@ -2206,6 +2216,7 @@
       settings = res.settings;
       fillSettings();
       ColleagueBar.render(settings);
+      updatePrepStatus();
       if (done) showToast(done, 1800);
       return true;
     } finally {
