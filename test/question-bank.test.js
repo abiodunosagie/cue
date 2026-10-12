@@ -69,7 +69,8 @@ const bank = createQuestionBank({
   qa: [
     { id: 'f', roles: ['mobile'], anchors: ['flutter'], level: 'mid', question: 'How do you manage state in a large app?', variants: [], answer: 'Flutter answer' },
     { id: 'w', roles: ['frontend'], anchors: ['react'], level: 'mid', question: 'How do you manage state in a large web app?', variants: [], answer: 'React answer' },
-    { id: 'g', roles: ['all'], level: 'mid', question: 'How do you review a pull request?', variants: [], answer: 'General answer' }
+    { id: 'g', roles: ['all'], level: 'mid', question: 'How do you review a pull request?', variants: [], answer: 'General answer' },
+    { id: 'c', roles: ['cms'], anchors: ['wordpress'], level: 'mid', question: 'How do you make a slow site fast?', variants: [], answer: 'CMS answer' }
   ],
   coding: []
 });
@@ -81,6 +82,28 @@ test('a question only matches items for the role focus, unless it names their te
   assert.ok(!ids('How do you manage state in a large app?', 'mobile').includes('w'));
   assert.ok(ids('How do you manage state in a large app?', null).includes('f'), 'no focus: every item');
   assert.deepEqual(ids('How do you review a pull request?', 'backend'), ['g']);
+});
+
+test('cms items reach only a CMS interview, which also draws on front end and general items', () => {
+  const ids = (heard, role) => bank.matches(heard, role).map((m) => m.item.id);
+  assert.deepEqual(ids('How do you make a slow site fast?', 'cms'), ['c']);
+  for (const role of ['frontend', 'fullstack', 'backend', 'mobile']) assert.ok(!ids('How do you make a slow site fast?', role).includes('c'), role);
+  assert.ok(ids('How do you make a slow WordPress site fast?', 'frontend').includes('c'), 'named technology still matches');
+  assert.ok(ids('How do you manage state in a large web app?', 'cms').includes('w'));
+  assert.ok(!ids('How do you manage state in a large app?', 'cms').includes('f'));
+});
+
+test('the shipped CMS answers stay out of other interviews on generic words', () => {
+  const shipped = createQuestionBank();
+  const cmsIds = new Set(rawQa.filter((it) => it.roles.includes('cms') || it.roles.includes('named')).map((it) => it.id));
+  const leaks = [];
+  const heard = { mobile: ['How do you handle plugin updates?', 'How would you handle a CMS for the app content?'],
+    backend: ['How do you schedule a cron job?', 'How do you design a REST API?', 'What is in the request payload?', 'How do you run a database migration?'],
+    frontend: ['How do you handle SEO?', 'How do you secure a form with a nonce?', 'How do you use git in your team?'] };
+  for (const [role, list] of Object.entries(heard)) {
+    for (const q of list) for (const m of shipped.matches(q, role)) if (cmsIds.has(m.item.id)) leaks.push(role + ': ' + q + ' -> ' + m.item.id);
+  }
+  assert.deepEqual(leaks, []);
 });
 
 // ---- prepared answer lookup ---------------------------------------------------

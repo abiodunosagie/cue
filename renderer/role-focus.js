@@ -4,14 +4,15 @@
 // choice. auto reads the job description; the rest are set by hand.
 
 (function () {
-  const ROLE_FOCUS = ['auto', 'mobile', 'frontend', 'backend', 'fullstack'];
-  const LABELS = { mobile: 'Mobile', frontend: 'Front end', backend: 'Back end', fullstack: 'Full stack' };
+  const ROLE_FOCUS = ['auto', 'mobile', 'frontend', 'backend', 'fullstack', 'cms'];
+  const LABELS = { mobile: 'Mobile', frontend: 'Front end', backend: 'Back end', fullstack: 'Full stack', cms: 'CMS' };
   // What answers do under each focus, for the note under the control.
   const SUMMARIES = {
     mobile: 'a mobile developer first',
     frontend: 'a front end engineer first',
     backend: 'a back end engineer first',
-    fullstack: 'someone who builds the app and its backend'
+    fullstack: 'someone who builds the app and its backend',
+    cms: 'a CMS developer first'
   };
 
   // Saying "full stack" settles it, unless the posting says it is not one.
@@ -53,7 +54,10 @@
   const TITLES = {
     mobile: new RegExp('\\b(?:mobile|flutter|ios|android|react native|kotlin|swift)\\s+(?:app\\s+)?' + ROLE, 'i'),
     frontend: new RegExp('\\b(?:front[\\s-]?end|react|vue|angular|ui|web)\\s+' + ROLE, 'i'),
-    backend: new RegExp('\\b(?:back[\\s-]?end|server[\\s-]side|api)\\s+' + ROLE, 'i')
+    backend: new RegExp('\\b(?:back[\\s-]?end|server[\\s-]side|api)\\s+' + ROLE, 'i'),
+    // A bare "CMS developer" counts only where a title sits (line start or after
+    // a colon): mid-sentence it names the team the role works with.
+    cms: new RegExp('\\b(?:wordpress|woocommerce|drupal|headless cms)\\s+(?:(?:web|theme|plugin)\\s+)?' + ROLE + '|(?:^|:)\\s*(?:(?:senior|junior|lead)\\s+)?cms\\s+' + ROLE, 'im')
   };
 
   function normalizeRoleFocus(value) {
@@ -72,6 +76,9 @@
     // One kind of title: that is the role. A mobile or web title that also
     // asks for real server work is full stack; a backend title stays backend.
     const titled = Object.keys(TITLES).filter((kind) => TITLES[kind].test(jd));
+    // "WordPress Web Developer" is a CMS role that also reads as a web title.
+    if (titled.length === 2 && titled.includes('cms') && titled.includes('frontend')) return 'cms';
+    if (titled.length === 1 && titled[0] === 'cms') return 'cms';
     if (titled.length === 1) {
       const kind = titled[0];
       return kind !== 'backend' && buildsServer ? 'fullstack' : kind;
@@ -101,7 +108,9 @@
     backend: 'Role focus for this job: back end. Present me as a back end engineer first: the APIs, data models, databases, security, reliability and deployment. ' +
       'Take examples from my server-side work; bring in the apps only as the clients my services serve, or when the interviewer asks.',
     fullstack: 'Role focus for this job: full stack. Present me as someone who builds the app and the backend it depends on. ' +
-      'When the question allows, show both sides: the app, and the APIs, data and deployment behind it.'
+      'When the question allows, show both sides: the app, and the APIs, data and deployment behind it.',
+    cms: 'Role focus for this job: CMS developer. Present me as a CMS developer first: WordPress themes and plugins, custom content models, the editor experience, performance, security, SEO and site migrations. ' +
+      'Take examples from my client websites; bring in React and Next.js as headless front ends, and mobile work only when the interviewer asks.'
   };
 
   const api = { ROLE_FOCUS, LABELS, SUMMARIES, FOCUS_RULES, normalizeRoleFocus, detectRoleFocus, resolveRoleFocus };

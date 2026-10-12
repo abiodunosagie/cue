@@ -19,14 +19,16 @@ const { literal } = require('./bank/literal');
 const DIR = path.join(__dirname, 'bank');
 // 'named': only when the question names the item's technology (an anchor), in
 // every role, for answers about a product the candidate should not volunteer.
-const ROLES = ['mobile', 'frontend', 'backend', 'all', 'named'];
+const ROLES = ['mobile', 'frontend', 'backend', 'cms', 'all', 'named'];
 // What each resolved role focus may draw on without the question naming the
 // technology. A null focus (nothing set, nothing detected) draws on everything.
 const ROLE_SCOPE = {
   mobile: ['mobile', 'all'],
   frontend: ['frontend', 'all'],
   backend: ['backend', 'all'],
-  fullstack: ['frontend', 'backend', 'all']
+  fullstack: ['frontend', 'backend', 'all'],
+  // A CMS interview also asks the web fundamentals; no other focus draws on cms.
+  cms: ['cms', 'frontend', 'all']
 };
 // Looser than a prepared answer's 0.4: an interviewer words a general question
 // many ways, and every candidate under the near-identical line still goes to

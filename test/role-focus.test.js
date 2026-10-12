@@ -16,6 +16,20 @@ test('one server word in a mobile posting stays mobile; two make it full stack',
   assert.equal(detectRoleFocus('Android engineer. Backend development with PostgreSQL is part of the job.'), 'fullstack');
 });
 
+test('a CMS title reads as cms, even when it also says web developer', () => {
+  assert.equal(detectRoleFocus('WordPress Developer. Build custom themes and plugins.'), 'cms');
+  assert.equal(detectRoleFocus('Senior WordPress Web Developer, remote. React a plus.'), 'cms');
+  assert.equal(detectRoleFocus('Headless CMS Engineer for our Next.js sites.'), 'cms');
+  assert.equal(detectRoleFocus('Front end developer. Some WordPress experience is a plus.'), 'frontend');
+  assert.equal(detectRoleFocus('CMS Developer\nRemote. Maintain our content platform.'), 'cms');
+  assert.equal(detectRoleFocus('Role: CMS Engineer. Content platform work.'), 'cms');
+  assert.equal(detectRoleFocus('Looking for a React developer. Experience working with a CMS developer team. Next.js, Node.js'), 'frontend');
+  assert.equal(detectRoleFocus('Flutter developer; integrate with our CMS developer portal.'), 'mobile');
+  assert.equal(detectRoleFocus('Backend engineer. Maintain our cms developer tools. Node.js, PostgreSQL, microservices.'), 'backend');
+  assert.equal(resolveRoleFocus({ roleFocus: 'cms', jobDescription: 'React developer' }), 'cms');
+  assert.equal(normalizeRoleFocus('cms'), 'cms');
+});
+
 test('an empty or unrelated description gives no focus', () => {
   assert.equal(detectRoleFocus(''), null);
   assert.equal(detectRoleFocus('   '), null);
