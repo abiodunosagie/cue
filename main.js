@@ -140,7 +140,7 @@ const companyBrain = createCompanyBrain({
   dir: path.join(app.getPath('userData'), 'cue-work-memory'),
   summarize: async (meeting) => {
     const llm = createLLM({ ...store.getSettings(), smart: true });
-    if (!llm.ready) throw new Error('no model is set up');
+    if (!llm.ready) throw Object.assign(new Error('no model is set up'), { notSent: true });
     const { system, text } = summaryRequest(meeting);
     const startedAt = Date.now();
     const reply = await quickAsk({ llm, system, text, maxTokens: SUMMARY_MAX_TOKENS, timeoutMs: SUMMARY_TIMEOUT_MS });

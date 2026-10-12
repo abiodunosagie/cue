@@ -130,3 +130,11 @@ test('lines quoted back from earlier meetings carry no angle brackets', async ()
   assert.match(text, /Said then:/);
   assert.doesNotMatch(text, /[<>]/);
 });
+
+test('a meeting whose notes were never sent (no model yet) keeps all its tries', async () => {
+  let calls = 0;
+  const { b } = brain(async () => { calls += 1; throw Object.assign(new Error('no model'), { notSent: true }); });
+  for (let j = 0; j < 3; j++) b.addTurn('Acme', { channel: 'them', text: 'x' + j, ts: j + 1 });
+  for (let i = 0; i < 5; i++) await b.endMeeting('Acme');
+  assert.equal(calls, 5);
+});

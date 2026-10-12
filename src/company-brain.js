@@ -241,7 +241,8 @@ function createCompanyBrain({ dir, summarize = null, now = Date.now, log = () =>
         if (notes) done += 1;
         else log('[company memory] the notes for a meeting could not be read');
       } catch (e) {
-        applyNotes(name, m.id, (target) => { target.tries = (target.tries || 0) + 1; });
+        // notSent: nothing reached the provider (no model set up yet), so it is not a try.
+        if (!(e && e.notSent)) applyNotes(name, m.id, (target) => { target.tries = (target.tries || 0) + 1; });
         log('[company memory] summary failed: ' + (e && e.message ? e.message : e));
       } finally {
         running.delete(m.id);
