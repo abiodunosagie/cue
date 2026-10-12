@@ -1,8 +1,8 @@
 // WordPress and CMS development: themes, plugins, the block editor, content
 // modelling, performance, security, migrations and headless set-ups. Role 'cms'
 // so these answers only reach a CMS developer interview, never a React one.
-// Products the candidate has not confirmed shipping (WooCommerce, Multisite,
-// the hosted headless CMSs) are 'named': answered only when the question names them.
+// Products the candidate has not confirmed shipping (Multisite, the hosted
+// headless CMSs) are 'named': answered only when the question names them.
 module.exports = [
   {
     id: 'wp-template-hierarchy',
@@ -252,7 +252,7 @@ For new work I use the REST API over admin-ajax: it has clear URLs, proper statu
     ],
     answer: `Headless means WordPress keeps the editing experience editors already know, and a separate Next.js front end renders the site, fetching content over the REST API or GraphQL.
 
-The way I would set it up: content models in WordPress with custom post types and fields exposed to the API; Next.js fetching on the server, with static generation or incremental revalidation for most pages; and a webhook from WordPress on publish that triggers on-demand revalidation, so updates appear quickly without rebuilding the whole site. Draft previews go through Next.js draft mode with an authenticated request back to WordPress. Menus, SEO fields, redirects and images all need a deliberate plan, because the theme no longer handles them.
+The way I set it up: content models in WordPress with custom post types and fields exposed to the API; Next.js fetching on the server, with static generation or incremental revalidation for most pages; and a webhook from WordPress on publish that triggers on-demand revalidation, so updates appear quickly without rebuilding the whole site. Draft previews go through Next.js draft mode with an authenticated request back to WordPress. Menus, SEO fields, redirects and images all need a deliberate plan, because the theme no longer handles them.
 
 The gains are speed, security, since WordPress can sit behind a private URL, and a modern front end. The costs are two systems to host and maintain, and losing plugins that render on the front end. So I recommend it when performance or a custom app experience justifies it, not by default.`
   },
@@ -476,7 +476,7 @@ For maintenance I keep a staging copy, take backups before updates, update on st
   },
   {
     id: 'wp-woocommerce',
-    roles: ['named'],
+    roles: ['cms'],
     anchors: ['woocommerce'],
     level: 'senior',
     question: 'How do you customise WooCommerce?',

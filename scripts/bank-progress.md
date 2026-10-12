@@ -8,8 +8,8 @@ Rules for every item:
   stories or numbers, never volunteer a technology the question did not ask about, no tool or
   product names unless the question is about them, 4 to 6 natural phrasings (casual ones too).
   Anchors are technology names only. Supabase answers are role "named": only when asked by name.
-  WordPress and CMS answers are role "cms" (CMS focus only); WooCommerce, Multisite and the hosted
-  headless CMSs are "named".
+  WordPress and CMS answers are role "cms" (CMS focus only); Multisite and the hosted headless CMSs
+  are "named".
 - Coding: statement in our own words (never copied), LeetCode-style signatures, Dart and
   TypeScript unless the task belongs to one language, 3 to 6 //@step marks matching the steps.
 
