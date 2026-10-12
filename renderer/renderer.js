@@ -2089,6 +2089,7 @@
     $('#resume-text').value = settings.resumeText || '';
     $('#job-description').value = settings.jobDescription || '';
     showRoleFocus();
+    WorkPanel.fill(settings);
     // Interview Prep tab
     $('#star-stories').value = settings.starStories || '';
     $('#why-company').value = settings.whyCompany || '';
@@ -2663,6 +2664,7 @@
     // Profile
     settings.resumeText = $('#resume-text').value.trim();
     settings.jobDescription = $('#job-description').value.trim();
+    Object.assign(settings, WorkPanel.collect());
     // Interview Prep
     settings.starStories = $('#star-stories').value.trim();
     settings.whyCompany = $('#why-company').value.trim();

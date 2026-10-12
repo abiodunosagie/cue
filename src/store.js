@@ -10,6 +10,7 @@ const { normalizeScripts } = require('./scripts');
 const { normalizeRecording } = require('./recording');
 const { normalizeProjects } = require('./projects');
 const PanelOpacity = require('../renderer/panel-opacity');
+const Work = require('./work');
 
 const FILE = path.join(app.getPath('userData'), 'cue-data.json');
 
@@ -87,6 +88,12 @@ const DEFAULTS = {
   activeProfile: '',
   companyNotes: '',         // facts from the company website (src/company-research.js), per profile
   companyUrl: '',           // that website's address, per profile, so it can be read again
+  // Work mode (src/work.js), per profile: a job the user already has.
+  profileKind: 'interview', // interview | work
+  workTitle: '',            // the title they were hired at
+  workLevel: '',            // junior | mid | senior, the level they really work at
+  colleagues: [],           // [{ id, name, role, owns, notes }], the people they meet
+  workDocs: '',             // notes and docs about the project, pasted by the user
   roundNotes: '',           // what earlier interview rounds with this company taught (src/rounds.js), per profile
   codingQuickStart: true,  // Cmd+H: the Smart model writes the first part within seconds, then the Coding model continues
   // Cmd+H starts reading: the candidate scrolls and switches tabs, Cmd+H again
@@ -146,6 +153,18 @@ const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile', 'projects', '
 
 let data = null;
 
+// The work fields as they may be saved: a colleague list replaced whole (one
+// removed in the form must not survive a merge) and every text capped.
+function normalizeWork(s) {
+  return {
+    profileKind: Work.normalizeKind(s.profileKind),
+    workTitle: Work.clip(s.workTitle, Work.MAX_TITLE),
+    workLevel: Work.normalizeLevel(s.workLevel),
+    colleagues: Work.normalizeColleagues(s.colleagues),
+    workDocs: String(s.workDocs || '').slice(0, Work.MAX_DOCS)
+  };
+}
+
 function deepMerge(base, over) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
   for (const k of Object.keys(over || {})) {
@@ -185,6 +204,7 @@ function load() {
   }
   data.panelOpacity = PanelOpacity.normalize(data.panelOpacity);
   data.answerLength = normalizeLength(data.answerLength);
+  Object.assign(data, normalizeWork(data));
   const migrated = Profiles.migrate(data);
   if (migrated) Object.assign(data, migrated);
 
@@ -247,6 +267,7 @@ module.exports = {
   setProfileState({ profiles, activeProfile, fields }) {
     load();
     data = { ...data, ...fields, profiles, activeProfile };
+    Object.assign(data, normalizeWork(data));
     save();
     return data;
   },
@@ -276,6 +297,7 @@ module.exports = {
     nextSettings.scripts = normalizeScripts(nextSettings.scripts);
     nextSettings.recording = normalizeRecording(nextSettings.recording);
     nextSettings.projects = normalizeProjects(nextSettings.projects);
+    Object.assign(nextSettings, normalizeWork(nextSettings));
     data = nextSettings;
     save();
     return data;

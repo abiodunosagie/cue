@@ -307,6 +307,33 @@
         </div>
         <div class="s-note">A new profile starts with a copy of your resume, stories, work style and AI rules, and an empty job description. After that, each profile keeps its own.</div>
 
+        <label class="s-label" style="margin-top:14px;">This profile is for</label>
+        <div class="s-seg" id="profile-kind-seg">
+          <button data-profile-kind="interview">An interview</button>
+          <button data-profile-kind="work">A job I got</button>
+        </div>
+        <div class="s-note" id="profile-kind-note"></div>
+
+        <!-- Work mode (renderer/work-panel.js): only shown for a job the user already has -->
+        <div id="work-section" class="work-section hidden">
+          <label class="s-label">My title there <span class="s-hint">the title you were hired at</span></label>
+          <div class="s-field"><input id="work-title" type="text" maxlength="80" placeholder="For example Senior Front-end Engineer" autocomplete="off" aria-label="My title there" /></div>
+
+          <label class="s-label">The level I really work at <span class="s-hint">cue explains more when this is below your title</span></label>
+          <div class="s-seg" id="work-level-seg">
+            <button data-work-level="junior">Junior</button>
+            <button data-work-level="mid">Mid</button>
+            <button data-work-level="senior">Senior</button>
+          </div>
+
+          <label class="s-label">Colleagues <span class="s-hint">a button for each appears in the panel; click whoever is talking</span></label>
+          <div id="colleague-list" class="colleague-list"></div>
+          <div class="s-field"><button class="s-action" id="colleague-add-btn">Add a colleague</button></div>
+
+          <label class="s-label">About the project <span class="s-hint">paste docs, tickets or notes; cue reads them before every reply</span></label>
+          <textarea id="work-docs" rows="5" spellcheck="false" maxlength="20000" placeholder="What the product does, the stack, the repo layout, how the team works, the ticket you are on."></textarea>
+        </div>
+
         <label class="s-label">Your resume <span class="s-hint">paste full resume, or import a PDF, DOCX, TXT or Markdown file</span></label>
         <div class="s-field s-upload"><span class="s-filename" id="resume-filename"></span><button class="s-action s-upload-btn" id="upload-resume-btn">Import file</button></div>
         <textarea id="resume-text" rows="7" spellcheck="false" placeholder="Paste your full resume here. cue will extract Name, Summary, Experience, Skills, Projects, and Education automatically."></textarea>
@@ -616,6 +643,7 @@
   <script src="panel-opacity.js"></script>
   <script src="answer-length.js"></script>
   <script src="role-focus.js"></script>
+  <script src="work-profile.js"></script>
   <script src="stream-blocks.js"></script>
   <script src="script-blocks.js"></script>
   <script src="script-follow.js"></script>
@@ -629,6 +657,7 @@
   <script src="teleprompter-panel.js"></script>
   <script src="history-sidebar.js"></script>
   <script src="cost-panel.js"></script>
+  <script src="work-panel.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

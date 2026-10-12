@@ -8,21 +8,27 @@
 // next a mobile full stack engineer, and one job's rules must not reach another.
 // companyUrl and roundNotes belong to the job: its website, and what each
 // interview round with that company taught.
-const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk', 'aiRules', 'roleFocus'];
+// profileKind says whether the profile is for an interview or for a job the
+// user already has (src/work.js); the work fields belong to that job.
+const WORK_FIELDS = ['profileKind', 'workTitle', 'workLevel', 'colleagues', 'workDocs'];
+const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk', 'aiRules', 'roleFocus', ...WORK_FIELDS];
+// The colleague list is the one field that is not text.
+const LIST_FIELDS = new Set(['colleagues']);
 // A new profile is for another job with the same person: the CV, stories, work
 // style and AI rules carry over; everything about the job starts empty, and the
 // role focus goes back to reading the new job description.
-const JOB_FIELDS = ['jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk', 'roleFocus'];
+const JOB_FIELDS = ['jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'whyCompany', 'salaryTarget', 'questionsToAsk', 'roleFocus', ...WORK_FIELDS];
 // Profiles saved before these fields were per profile have no copy of them.
 // Switching to one keeps the value in use instead of blanking it.
 const KEEP_WHEN_MISSING = ['aiRules'];
+const { normalizeColleagues } = require('./work');
 const DEFAULT_NAME = 'My profile';
 const MAX_NAME = 40;
 const MAX_PROFILES = 20;
 
 function snapshot(settings) {
   const out = {};
-  for (const k of PROFILE_FIELDS) out[k] = String((settings && settings[k]) || '');
+  for (const k of PROFILE_FIELDS) out[k] = LIST_FIELDS.has(k) ? normalizeColleagues(settings && settings[k]) : String((settings && settings[k]) || '');
   return out;
 }
 
@@ -55,6 +61,7 @@ function switchTo(settings, name) {
   if (!has(profiles, name)) throw new Error('There is no profile called ' + name + '.');
   const target = profiles[name];
   const fields = { ...snapshot({}), ...target };
+  for (const k of LIST_FIELDS) fields[k] = normalizeColleagues(fields[k]);
   for (const k of KEEP_WHEN_MISSING) if (!has(target, k)) fields[k] = String((settings && settings[k]) || '');
   return { profiles, activeProfile: name, fields };
 }
@@ -67,7 +74,7 @@ function create(settings, rawName) {
   if (name === '__proto__') throw new Error('Choose another name for the profile.');
   if (Object.keys(profiles).length >= MAX_PROFILES) throw new Error('Delete an old profile first; cue keeps up to ' + MAX_PROFILES + '.');
   const fields = snapshot(settings);
-  for (const k of JOB_FIELDS) fields[k] = '';
+  for (const k of JOB_FIELDS) fields[k] = LIST_FIELDS.has(k) ? [] : '';
   return { profiles: { ...profiles, [name]: fields }, activeProfile: name, fields };
 }
 
@@ -86,4 +93,4 @@ function names(settings) {
   return Object.keys((settings && settings.profiles) || {});
 }
 
-module.exports = { migrate, switchTo, create, removeCurrent, names, snapshot, PROFILE_FIELDS, JOB_FIELDS, DEFAULT_NAME };
+module.exports = { migrate, switchTo, create, removeCurrent, names, snapshot, PROFILE_FIELDS, JOB_FIELDS, WORK_FIELDS, DEFAULT_NAME };
