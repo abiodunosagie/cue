@@ -333,6 +333,14 @@
 
           <label class="s-label">About the project <span class="s-hint">paste docs, tickets or notes; cue reads them before every reply</span></label>
           <textarea id="work-docs" rows="5" spellcheck="false" maxlength="20000" placeholder="What the product does, the stack, the repo layout, how the team works, the ticket you are on."></textarea>
+
+          <label class="s-label">Company memory <span class="s-hint">every meeting at this job, kept only on this Mac</span></label>
+          <div class="s-field s-upload">
+            <span class="s-status" id="work-memory-status">Nothing kept yet</span>
+            <button class="s-action s-upload-btn" id="work-memory-show">Show it</button>
+            <button class="s-action s-upload-btn danger" id="work-memory-clear">Forget it</button>
+          </div>
+          <div class="s-note">cue keeps what is said while you listen with this profile, and writes notes when a meeting ends: what was decided, who asked what, what you said you would do. Before each reply it reads the parts that matter. Only those parts go to your AI provider, with the question.</div>
         </div>
 
         <label class="s-label">Your resume <span class="s-hint">paste full resume, or import a PDF, DOCX, TXT or Markdown file</span></label>

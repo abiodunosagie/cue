@@ -64,6 +64,17 @@
     });
   }
 
+  // Company memory: how much is kept for this job, read from main.
+  async function showMemory() {
+    const el = $('#work-memory-status');
+    if (kind !== 'work') { el.textContent = ''; return; }
+    let st = null;
+    try { st = await window.cue.workMemoryState(); } catch (_) { st = null; }
+    if (!st || !st.meetings) { el.textContent = 'Nothing kept yet'; return; }
+    const last = st.lastAt ? new Date(st.lastAt).toLocaleDateString([], { day: 'numeric', month: 'short' }) : '';
+    el.textContent = st.meetings + (st.meetings === 1 ? ' meeting' : ' meetings') + ', ' + st.noted + ' with notes' + (last ? ', last on ' + last : '');
+  }
+
   function fill(settings) {
     kind = Work.normalizeKind(settings.profileKind);
     level = Work.normalizeLevel(settings.workLevel);
@@ -73,6 +84,7 @@
     showKind();
     showLevel();
     renderList();
+    void showMemory();
   }
 
   // The form's values, ready for settings:set. A colleague with no name yet is
@@ -96,6 +108,27 @@
     const inputs = document.querySelectorAll('#colleague-list .colleague-row input');
     const last = inputs[inputs.length - 3];
     if (last) last.focus();
+  });
+
+  $('#work-memory-show').addEventListener('click', async () => {
+    // The notes show in the panel, under Settings: close it first (Done saves).
+    $('#s-close').click();
+    const res = await window.cue.workMemoryShow().catch(() => null);
+    if (res && res.error && window.cue.log) window.cue.log('[company memory] ' + res.error);
+  });
+  // Forgetting deletes the file, so it takes a second click within 3 s.
+  let clearArmed = null;
+  $('#work-memory-clear').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    if (!clearArmed) {
+      btn.textContent = 'Click again to forget every meeting';
+      clearArmed = setTimeout(() => { clearArmed = null; btn.textContent = 'Forget it'; }, 3000);
+      return;
+    }
+    clearTimeout(clearArmed); clearArmed = null;
+    btn.textContent = 'Forget it';
+    const res = await window.cue.workMemoryClear().catch(() => null);
+    $('#work-memory-status').textContent = res && res.ok ? 'Forgotten' : ((res && res.error) || 'Could not forget it');
   });
 
   window.WorkPanel = { fill, collect };

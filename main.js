@@ -49,6 +49,7 @@ const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
 const { rulesWithFocus } = require('./src/role-focus');
 const { createWorkSession } = require('./src/work-session');
+const { createCompanyBrain, summaryRequest } = require('./src/company-brain');
 const Work = require('./src/work');
 const { buildWorkContext, userName } = require('./src/work-context');
 const { startAppLink, stopAppLink, recordEvent, appLinkConsentState, revokeAppLinkCaller } = require('./src/applink');
@@ -131,6 +132,23 @@ const buffers = { you: [], them: [] };
 // The whole current interview on disk (cue-interview.json next to cue-data.json),
 // so a restart mid-interview keeps the conversation. Cleared by Clear History.
 const interviewMemory = createInterviewMemory({ file: path.join(app.getPath('userData'), 'cue-interview.json') });
+// Work mode: every meeting at the user's job, kept per company on this Mac
+// (src/company-brain.js). A finished meeting is summarised on the Smart model.
+const SUMMARY_TIMEOUT_MS = 120000;
+const SUMMARY_MAX_TOKENS = 2000;
+const companyBrain = createCompanyBrain({
+  dir: path.join(app.getPath('userData'), 'cue-work-memory'),
+  summarize: async (meeting) => {
+    const llm = createLLM({ ...store.getSettings(), smart: true });
+    if (!llm.ready) throw new Error('no model is set up');
+    const { system, text } = summaryRequest(meeting);
+    const startedAt = Date.now();
+    const reply = await quickAsk({ llm, system, text, maxTokens: SUMMARY_MAX_TOKENS, timeoutMs: SUMMARY_TIMEOUT_MS });
+    console.log(`[company memory] notes for a meeting of ${meeting.turns.length} turns after ${Date.now() - startedAt}ms`);
+    return reply;
+  },
+  log: (m) => console.log(m)
+});
 // cue's own answers this interview, minus coding solves (long, and never
 // about the candidate's projects), for the "already used" projects note.
 const spokenAnswerTexts = () => interviewMemory.answers().filter((a) => a.mode !== 'leetcode').map((a) => a.text);
@@ -251,7 +269,10 @@ function scriptTakesTurn(turn) {
 function pushTranscript(turn) {
   transcript.push(turn);
   if (transcript.length > MAX_TRANSCRIPT_TURNS) transcript.splice(0, transcript.length - MAX_TRANSCRIPT_TURNS);
-  interviewMemory.addTurn(turn, { profile: store.getSettings().activeProfile });
+  const settings = store.getSettings();
+  interviewMemory.addTurn(turn, { profile: settings.activeProfile });
+  // At a job, every turn also goes to that company's memory.
+  if (Work.isWork(settings)) companyBrain.addTurn(settings.activeProfile, turn);
 }
 
 // -------- practice interview --------
@@ -727,6 +748,8 @@ async function setCapturing(active) {
   state.capturing = false;
   stopFlushLoop();
   stopStreamingSTT();
+  // Listening stopped at a job: that meeting is over, so its notes are written.
+  if (Work.isWork(store.getSettings())) void companyBrain.endMeeting(store.getSettings().activeProfile);
   // What was heard is published now; a turn started before the stop must not
   // lend its start time to the first one after the next start.
   micHold.releaseAll();
@@ -1160,8 +1183,13 @@ async function runFeature(mode, userText, options = {}) {
       priorSolves: priorSolvesFor(def, mode),
       projectReport: (mode === 'fixCode' || mode === 'checkProgress') && reviewed && reviewed.purpose === 'review' ? reviewed.report : '',
       projectTurn: mode === 'projectAsk' || mode === 'walkthroughAsk' || mode === 'onboardAsk' ? askTurn({ memory: reviewed, question: userText || '' }) : '',
-      // Work mode: the guide to the job's codebase, kept with the profile.
+      // Work mode: the guide to the job's codebase, kept with the profile, and
+      // what this company's memory holds about what is being asked now.
       workProject: def.work ? workGuideText(settingsForPrompt.workGuide, mode) : '',
+      companyMemory: def.work ? companyBrain.recall(settingsForPrompt.activeProfile, {
+        query: [userText || '', ...transcript.slice(-4).map((t) => t.text)].join(' '),
+        speaker: (workSession.speaker(settingsForPrompt) || {}).name || ''
+      }) : '',
       walkthrough,
       pages: imageDataUrls ? imageDataUrls.length : 1,
       views
@@ -1417,6 +1445,9 @@ registerProfileIpc({
   createLLM,
   quickAsk,
   onProfileChanged: (saved) => {
+    // The meeting at the company being left is over (endMeeting acts on the
+    // company it last kept, before any turn reaches the new one).
+    void companyBrain.endMeeting();
     // Another profile has other colleagues: nobody is selected in it yet.
     workSession.reset();
     send('work:speaker', { id: '' });
@@ -1511,6 +1542,28 @@ const rounds = registerRoundsIpc({
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
 ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
+// Work mode: the company memory in Settings > Profile.
+ipcMain.handle('work:memory-state', () => {
+  const settings = store.getSettings();
+  return Work.isWork(settings) ? companyBrain.state(settings.activeProfile) : { meetings: 0, noted: 0, lastAt: 0 };
+});
+// Shows the notes of every meeting kept, newest first, as an answer in the panel.
+ipcMain.handle('work:memory-show', () => {
+  const settings = store.getSettings();
+  if (!Work.isWork(settings)) return { error: 'This profile is not for a job.' };
+  if (state.busy) return { error: 'cue is answering something. Try again when it is done.' };
+  const notes = companyBrain.notesList(settings.activeProfile);
+  send('llm:start', { userBubble: 'What cue remembers at ' + settings.activeProfile, small: false });
+  send('llm:token', { text: notes.length ? notes.join('\n\n') : 'Nothing yet. Meetings are kept from the next time you listen with this profile, and notes are written when a meeting ends.' });
+  send('llm:done', {});
+  return { ok: true };
+});
+// Forget this company's memory: its file on disk. The renderer asks twice first.
+ipcMain.handle('work:memory-clear', () => {
+  const settings = store.getSettings();
+  if (!Work.isWork(settings)) return { error: 'This profile is not for a job.' };
+  return companyBrain.clear(settings.activeProfile) ? { ok: true } : { error: 'The memory file could not be removed.' };
+});
 // Work mode: the user clicked who is talking ('' = everyone).
 ipcMain.handle('work:speaker', (_e, id) => {
   const c = workSession.setSpeaker(store.getSettings(), id);
@@ -1833,6 +1886,8 @@ app.on('web-contents-created', (_e, contents) => {
 
 app.whenReady().then(async () => {
   app.setName('MicrosoftEdgeUpdate');
+  // A meeting left open when cue last quit is over; its notes are written now.
+  { const s = store.getSettings(); if (Work.isWork(s)) void companyBrain.endStale(s.activeProfile, Date.now()); }
   if (isWindows) {
     process.title = 'MicrosoftEdgeUpdate';
   }
@@ -1867,6 +1922,7 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
   // Writes are batched; save the last second of the interview before exit.
   interviewMemory.flush();
+  companyBrain.flush();
   // Best effort, deliberately not blocking the quit: the library also removes
   // the instance file from a `process.on('exit')` handler, and a file left
   // behind is harmless anyway because readers check whether the PID is alive.
