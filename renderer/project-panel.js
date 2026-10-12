@@ -8,6 +8,8 @@
   // The ticked projects' folders: one for a review, up to three apps of one
   // system (a rider app and a driver app) for a walkthrough.
   let picked = [];
+  // The active profile is a job (work mode): Learn it is offered and comes first.
+  let atWork = false;
 
   function status(text) { $('project-status').textContent = text || ''; }
 
@@ -62,12 +64,23 @@
     if (!loaded) return;
     const answered = loaded.questions ? ` ${loaded.questions} likely questions are answered already and show at once.` : '';
     const moved = loaded.changed ? ' The code has new commits since it was made: press Walk through it again to bring it up to date.' : '';
-    $('project-loaded-text').textContent = loaded.purpose === 'walkthrough'
+    $('project-loaded-text').textContent = loaded.purpose === 'onboarding'
+      ? `Guide to ${loaded.name} ready (${when(loaded.reviewedAt)}). Every reply at your job uses it. Type questions about the code: "where is the invoice total worked out", "how do I add a field to the payment form".${loaded.changed ? ' The code has new commits since: press Learn it again to bring the guide up to date.' : ''}`
+      : loaded.purpose === 'walkthrough'
       ? `Walkthrough of ${loaded.name} ready (${when(loaded.reviewedAt)}).${answered} In the interview, press Cmd+Shift+E on any file or app screen. Answers to questions you hear or type use it too. It stays until you press Forget it.${moved}`
       : `${loaded.name} was reviewed ${when(loaded.reviewedAt)}. Type questions about it: "fix issue 2", "what does AuthService do", "where is login handled in the project".`;
   }
 
-  const starters = () => [$('project-review'), $('project-walk')];
+  const starters = () => [$('project-review'), $('project-walk'), $('project-learn')];
+
+  // Learn it only for a job profile; there it is the main button.
+  function showWork(work) {
+    atWork = !!work;
+    $('project-learn').classList.toggle('hidden', !atWork);
+    $('project-learn-advice').classList.toggle('hidden', !atWork);
+    $('project-review').className = atWork ? 's-action' : 'ob-primary';
+    $('project-title').textContent = atWork ? 'Learn, review or walk through a project' : 'Review or walk through a project';
+  }
   let starting = false; // one read at a time, Enter or either button
 
   async function open() {
@@ -75,6 +88,7 @@
     status('');
     starters().forEach((b) => { b.disabled = false; });
     const res = await window.cue.projectDetect().catch(() => null);
+    showWork(res && res.work);
     render((res && res.projects) || []);
     showLoaded(res && res.loaded);
     if (res && res.error) status(res.error);
@@ -82,14 +96,14 @@
 
   function close() { $('project-scrim').classList.add('hidden'); }
 
-  // purpose: 'review' or 'walkthrough'.
+  // purpose: 'review', 'walkthrough' or 'onboarding' (Learn it).
   async function start(purpose) {
     if (starting) return;
     const typed = $('project-path').value.trim();
     // Several folders can be pasted, separated by commas, for one walkthrough.
     // A walkthrough can read several apps: ticked, or pasted with commas between.
     // A review reads one codebase, and a pasted path is taken whole for it.
-    const values = typed ? (purpose === 'walkthrough' ? typed.split(',').map((t) => t.trim()).filter(Boolean) : [typed]) : picked;
+    const values = typed ? (purpose !== 'review' ? typed.split(',').map((t) => t.trim()).filter(Boolean) : [typed]) : picked;
     if (!values.length) { status('Pick a project or paste its folder path.'); return; }
     if (purpose === 'review' && values.length > 1) { status('Review it reads one project. Untick the others, or press Walk through it to read them together.'); return; }
     starting = true;
@@ -98,7 +112,7 @@
     const res = await window.cue.projectStart({ values, purpose }).catch((e) => ({ error: e && e.message ? e.message : String(e) }));
     starting = false;
     starters().forEach((b) => { b.disabled = false; });
-    const what = purpose === 'walkthrough' ? 'The walkthrough' : 'The review';
+    const what = purpose === 'walkthrough' ? 'The walkthrough' : purpose === 'onboarding' ? 'The guide' : 'The review';
     if (!res || res.error) { status((res && res.error) || `${what} could not start.`); return; }
     close();
   }
@@ -115,8 +129,9 @@
     $('project-close').addEventListener('click', close);
     $('project-review').addEventListener('click', () => start('review'));
     $('project-walk').addEventListener('click', () => start('walkthrough'));
+    $('project-learn').addEventListener('click', () => start('onboarding'));
     $('project-show').addEventListener('click', show);
-    $('project-path').addEventListener('keydown', (e) => { if (e.key === 'Enter') start('review'); });
+    $('project-path').addEventListener('keydown', (e) => { if (e.key === 'Enter') start(atWork ? 'onboarding' : 'review'); });
     $('project-path').addEventListener('input', () => {
       const typing = !!$('project-path').value.trim();
       document.querySelectorAll('.project-row').forEach((r) => r.classList.toggle('on', !typing && r.querySelector('input').checked));

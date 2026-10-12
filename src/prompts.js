@@ -3,7 +3,7 @@
 // System prompt receives the interview context block prepended by main.js,
 // then optionally the user's AI rules appended at the end.
 
-const { ASK_SYSTEM: PROJECT_ASK_SYSTEM, WALK_ASK_SYSTEM, WALK_RULES } = require('./project-review/prompts');
+const { ASK_SYSTEM: PROJECT_ASK_SYSTEM, WALK_ASK_SYSTEM, WALK_RULES, ONBOARD_ASK_SYSTEM } = require('./project-review/prompts');
 const { appendAiRules } = require('./profile-context');
 const { WORK_ROLE, WORK_VOICE, WORK_HONESTY } = require('./work-prompts');
 
@@ -786,9 +786,33 @@ function companyMemoryNote(ctx) {
     text.replace(/<\/?company_memory[^>]*>/gi, '') + '\n</company_memory>\n\n';
 }
 
-// What cue learned by reading the company's code (Project > Learn this
-// project, src/project-review), so a reply uses the real names and structure.
+// What cue learned by reading the company's code (Project > Learn it,
+// src/project-review), so a reply uses the real names and structure. Spoken
+// replies get the sections that name things, capped for speed (a long
+// context slows the first word, measured on the walkthrough); a typed
+// question gets the whole guide.
 const WORK_PROJECT_CHARS = 30000;
+const SPOKEN_GUIDE_CHARS = 8000;
+const SPOKEN_GUIDE_SECTIONS = ['What it is', 'How it is built', 'Where things live', 'How things are done here', 'Words to know'];
+const GUIDE_SECTION_RE = /^\*\*(What it is|How it is built|Where things live|Key flows|How things are done here|Words to know|Watch out for|Good questions for the team)(?::\*\*|\*\*:)/gm;
+function workGuideText(guide, mode) {
+  const text = String(guide || '').trim();
+  if (!text) return '';
+  if (mode === 'workAsk') return text.slice(0, WORK_PROJECT_CHARS);
+  const marks = [...text.matchAll(GUIDE_SECTION_RE)];
+  // A guide in another shape: its opening, cut.
+  if (!marks.length) return text.slice(0, SPOKEN_GUIDE_CHARS);
+  const parts = [];
+  let size = 0;
+  marks.forEach((m, i) => {
+    if (!SPOKEN_GUIDE_SECTIONS.includes(m[1])) return;
+    const body = text.slice(m.index, i + 1 < marks.length ? marks[i + 1].index : text.length).trim();
+    if (size + body.length > SPOKEN_GUIDE_CHARS) return;
+    parts.push(body);
+    size += body.length;
+  });
+  return parts.join('\n\n');
+}
 function workProjectNote(ctx) {
   const text = String((ctx && ctx.workProject) || '').trim();
   if (!text) return '';
@@ -875,6 +899,20 @@ const WORK_MODES = {
     }
   },
 
+  // A typed question about the codebase at the user's job, with a guide loaded
+  // (review.js projectMode): answered from its files on the Coding model.
+  onboardAsk: {
+    tier: 'coding',
+    codingFollowUp: true,
+    skipMemory: true,
+    notAnswer: true,
+    needsScreen: false,
+    userBubble: null,
+    small: false,
+    buildSystem(_contextBlock, aiRules) { return applyRules(ONBOARD_ASK_SYSTEM, aiRules, 'onboardAsk'); },
+    build(ctx) { return ctx.projectTurn || String(ctx.userText || ''); }
+  },
+
   workFollowup: {
     work: true,
     contextTurns: 20,
@@ -898,4 +936,4 @@ Object.assign(MODES, WORK_MODES);
 // The spoken modes a work profile answers with instead.
 const WORK_ROUTES = { answerThis: 'workAnswer', say: 'workSay', assist: 'workAssist', ask: 'workAsk', followup: 'workFollowup' };
 
-module.exports = { MODES, WORK_ROUTES, screensNote, formatTranscript, turnsSentByBuild, walkthroughNote, walkthroughSections, ARCHITECTURES, DEFAULT_ARCHITECTURE };
+module.exports = { MODES, WORK_ROUTES, workGuideText, screensNote, formatTranscript, turnsSentByBuild, walkthroughNote, walkthroughSections, ARCHITECTURES, DEFAULT_ARCHITECTURE };

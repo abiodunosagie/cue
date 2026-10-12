@@ -10,7 +10,8 @@
 // interview round with that company taught.
 // profileKind says whether the profile is for an interview or for a job the
 // user already has (src/work.js); the work fields belong to that job.
-const WORK_FIELDS = ['profileKind', 'workTitle', 'workLevel', 'colleagues', 'workDocs'];
+// workGuide is the guide cue wrote from the job's codebase (Project > Learn it).
+const WORK_FIELDS = ['profileKind', 'workTitle', 'workLevel', 'colleagues', 'workDocs', 'workGuide'];
 const PROFILE_FIELDS = ['resumeText', 'jobDescription', 'companyNotes', 'companyUrl', 'roundNotes', 'starStories', 'whyCompany', 'whyLeaving', 'workStyle', 'salaryTarget', 'questionsToAsk', 'aiRules', 'roleFocus', ...WORK_FIELDS];
 // The colleague list is the one field that is not text.
 const LIST_FIELDS = new Set(['colleagues']);

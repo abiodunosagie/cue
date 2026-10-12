@@ -32,6 +32,7 @@ const MAX_OWNS = 200;
 const MAX_NOTES = 400;
 const MAX_TITLE = 80;
 const MAX_DOCS = 20000;
+const MAX_GUIDE = 60000;
 
 const clip = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
 
@@ -92,6 +93,7 @@ const api = {
   MAX_COLLEAGUES,
   MAX_TITLE,
   MAX_DOCS,
+  MAX_GUIDE,
   normalizeKind,
   normalizeLevel,
   normalizeColleagues,

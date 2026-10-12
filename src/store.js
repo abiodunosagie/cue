@@ -94,6 +94,7 @@ const DEFAULTS = {
   workLevel: '',            // junior | mid | senior, the level they really work at
   colleagues: [],           // [{ id, name, role, owns, notes }], the people they meet
   workDocs: '',             // notes and docs about the project, pasted by the user
+  workGuide: '',            // the guide cue wrote from the job's codebase (Project > Learn it); main writes it
   roundNotes: '',           // what earlier interview rounds with this company taught (src/rounds.js), per profile
   codingQuickStart: true,  // Cmd+H: the Smart model writes the first part within seconds, then the Coding model continues
   // Cmd+H starts reading: the candidate scrolls and switches tabs, Cmd+H again
@@ -149,7 +150,8 @@ const DEFAULTS = {
 // stripRendererPatch; settings:get hands out redactForRenderer's view.
 // profiles: changed only through the profile:* IPC, so a stale renderer copy never overwrites them.
 // projects: changed only through the projects:* IPC for the same reason.
-const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile', 'projects', 'recordingFolder'];
+// workGuide: written only by main when a Learn it read finishes.
+const RENDERER_READ_ONLY = ['publik', 'profiles', 'activeProfile', 'projects', 'recordingFolder', 'workGuide'];
 
 let data = null;
 
@@ -161,7 +163,8 @@ function normalizeWork(s) {
     workTitle: Work.clip(s.workTitle, Work.MAX_TITLE),
     workLevel: Work.normalizeLevel(s.workLevel),
     colleagues: Work.normalizeColleagues(s.colleagues),
-    workDocs: String(s.workDocs || '').slice(0, Work.MAX_DOCS)
+    workDocs: String(s.workDocs || '').slice(0, Work.MAX_DOCS),
+    workGuide: String(s.workGuide || '').slice(0, Work.MAX_GUIDE)
   };
 }
 
@@ -270,6 +273,22 @@ module.exports = {
     Object.assign(data, normalizeWork(data));
     save();
     return data;
+  },
+  // Main-process only: the guide a Learn it read wrote, kept with the profile
+  // that was active when the read started (the user may have switched since).
+  // False when that profile is gone.
+  setWorkGuide(profileName, text) {
+    load();
+    const guide = String(text || '').slice(0, Work.MAX_GUIDE);
+    if (profileName === data.activeProfile) {
+      data = { ...data, workGuide: guide };
+    } else if (data.profiles && Object.prototype.hasOwnProperty.call(data.profiles, profileName)) {
+      data = { ...data, profiles: { ...data.profiles, [profileName]: { ...data.profiles[profileName], workGuide: guide } } };
+    } else {
+      return false;
+    }
+    save();
+    return true;
   },
   // Main-process only: the projects:* IPC replaces the whole list (a project
   // removed from the list must not survive a merge).

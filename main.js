@@ -22,7 +22,7 @@ const { buildVocabPrompt } = require('./src/vocab');
 const { parseDocumentFile } = require('./src/resume');
 const { createLLM, createFallbackLLM, imageLimit, setUsageRecorder } = require('./src/llm');
 const { createUsageLedger } = require('./src/usage-ledger');
-const { MODES, WORK_ROUTES, turnsSentByBuild, formatTranscript } = require('./src/prompts');
+const { MODES, WORK_ROUTES, turnsSentByBuild, formatTranscript, workGuideText } = require('./src/prompts');
 const { answeredQuestion } = require('./src/heard-question');
 const { LENGTH_MODES, nextLength, lengthRule } = require('./renderer/answer-length');
 const { createCodingLibrary, identifyTask, confirmSameTask, checkVerdict } = require('./src/coding-library');
@@ -291,7 +291,7 @@ function clearInterview() {
   // A walkthrough of the candidate's own project is prepared before the
   // interview, so Clear keeps it; a review belongs to this interview only.
   const loaded = projectMemory.get();
-  if (!loaded || loaded.purpose !== 'walkthrough') projectMemory.clear();
+  if (!loaded || (loaded.purpose !== 'walkthrough' && loaded.purpose !== 'onboarding')) projectMemory.clear();
   announceQuestion();
   return interviewMemory.clear();
 }
@@ -1001,7 +1001,9 @@ async function runFeature(mode, userText, options = {}) {
   if (mode === 'ask' && userText && interviewMemory.recentCodingSolve() && isFixRequest(userText)) mode = 'fixCode';
   // A loaded project (a review, or a walkthrough of the candidate's own) can
   // take typed questions about it and the Explain key (src/project-review/review.js projectMode).
-  const reviewed = projectMemory.get();
+  // A guide to the codebase at one job never answers for another profile.
+  const loadedProject = projectMemory.get();
+  const reviewed = loadedProject && loadedProject.purpose === 'onboarding' && loadedProject.profile !== store.getSettings().activeProfile ? null : loadedProject;
   const walkthrough = reviewed && reviewed.purpose === 'walkthrough' ? reviewed : null;
   // A coding round in progress: its code is what Explain and heard questions are about.
   // Once it is a few answers back, a walkthrough takes over again.
@@ -1042,7 +1044,7 @@ async function runFeature(mode, userText, options = {}) {
     modelInUse = llm.provider + '/' + llm.model;
     const userBubble = def.userBubble !== null
       ? def.userBubble
-      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' || mode === 'workAsk' ? userText
+      : (mode === 'ask' || mode === 'projectAsk' || mode === 'walkthroughAsk' || mode === 'workAsk' || mode === 'onboardAsk' ? userText
         : mode === 'answerThis' || mode === 'walkthroughAnswer' || mode === 'workAnswer' ? quotedQuestion(userText) : null);
     // A page of written questions mixes every kind, so no one category fits it.
     const category = mode !== 'leetcode' && mode !== 'screenQuestions' && !def.work ? detectCategory(transcript) : null;
@@ -1156,8 +1158,10 @@ async function runFeature(mode, userText, options = {}) {
       answers: mode === 'report' ? interviewMemory.answers() : [],
       architecture: settingsForPrompt.codeArchitecture,
       priorSolves: priorSolvesFor(def, mode),
-      projectReport: (mode === 'fixCode' || mode === 'checkProgress') && reviewed && !walkthrough ? reviewed.report : '',
-      projectTurn: mode === 'projectAsk' || mode === 'walkthroughAsk' ? askTurn({ memory: reviewed, question: userText || '' }) : '',
+      projectReport: (mode === 'fixCode' || mode === 'checkProgress') && reviewed && reviewed.purpose === 'review' ? reviewed.report : '',
+      projectTurn: mode === 'projectAsk' || mode === 'walkthroughAsk' || mode === 'onboardAsk' ? askTurn({ memory: reviewed, question: userText || '' }) : '',
+      // Work mode: the guide to the job's codebase, kept with the profile.
+      workProject: def.work ? workGuideText(settingsForPrompt.workGuide, mode) : '',
       walkthrough,
       pages: imageDataUrls ? imageDataUrls.length : 1,
       views
@@ -1425,6 +1429,7 @@ registerCodingLibraryIpc({ ipcMain, codingLibrary });
 const recording = registerRecordingIpc({ ipcMain, store, dialog, shell, screen, getWin: () => win });
 registerProjectReviewIpc({
   ipcMain, createLLM, getSettings: () => store.getSettings(), send, state, projectMemory,
+  saveWorkGuide: (profileName, text) => store.setWorkGuide(profileName, text),
   answerSystem: () => {
     const settings = store.getSettings();
     return MODES.answerThis.buildSystem(buildInterviewContext(settings, 'answerThis', [], { answerTexts: spokenAnswerTexts() }), rulesWithFocus(settings));

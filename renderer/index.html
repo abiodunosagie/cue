@@ -585,12 +585,13 @@
         <button id="project-close" class="s-close">Close</button>
       </div>
       <div class="sc-body">
+        <p class="rec-advice hidden" id="project-learn-advice"><strong>Learn it:</strong> for the codebase at your job. Tick or paste the folders you work on (up to three). cue reads them and writes you a guide: how it is built, where things live, the key flows, how things are done there, the words your team uses and what to watch out for. Every reply at this job uses it, and you can type questions about the code in the ask box.</p>
         <p class="rec-advice"><strong>Review it:</strong> for a codebase you were handed. You get how it is built, what to fix first and how.</p>
         <p class="rec-advice"><strong>Walk through it:</strong> for a project you built. Tick more than one app when they belong together, like a rider app and a driver app. You get a script in your voice: which app screens to show, which files to open, what to say at each, and answers to likely questions that show at once. In the interview, press Cmd+Shift+E on any file or app screen and cue tells you what to say about it.</p>
         <p class="rec-advice">cue reads the source files. Secrets in them are hidden before anything is sent to your AI provider.</p>
         <div class="sc-label" id="project-list-label">Recent in your editors</div>
         <div id="project-list" class="project-list" role="group" aria-labelledby="project-list-label"></div>
-        <label class="sc-label" for="project-path">Or a folder path or GitHub link (for a walkthrough of several apps, separate the folders with commas)</label>
+        <label class="sc-label" for="project-path">Or a folder path or GitHub link (to learn or walk through several folders together, separate them with commas)</label>
         <input id="project-path" type="text" autocomplete="off" spellcheck="false" placeholder="~/Downloads/their-app or https://github.com/owner/repo" />
         <div id="project-loaded" class="project-loaded hidden">
           <span id="project-loaded-text"></span>
@@ -599,6 +600,7 @@
         </div>
         <div class="sc-row sc-actions">
           <span id="project-status" class="sc-status" role="status"></span>
+          <button id="project-learn" class="ob-primary hidden">Learn it</button>
           <button id="project-walk" class="s-action">Walk through it</button>
           <button id="project-review" class="ob-primary">Review it</button>
         </div>

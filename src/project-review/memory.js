@@ -29,15 +29,18 @@ function clean(m) {
     tree: String(m.tree || '').slice(0, MAX_TREE_CHARS),
     index: (Array.isArray(m.index) ? m.index : []).filter((x) => typeof x === 'string').slice(0, MAX_INDEX),
     report,
-    // A review of a codebase the candidate was handed, or a walkthrough of their own.
-    purpose: m.purpose === 'walkthrough' ? 'walkthrough' : 'review',
+    // A review of a codebase the candidate was handed, a walkthrough of their own,
+    // or a guide to the codebase at the user's job (work mode).
+    purpose: m.purpose === 'walkthrough' || m.purpose === 'onboarding' ? m.purpose : 'review',
     // A walkthrough's likely questions with their answers (src/project-review/qa.js).
     qa: parseItems(JSON.stringify(Array.isArray(m.qa) ? m.qa : [])),
     // Each app's git commit when it was read, to tell when the code moved on.
     heads: (Array.isArray(m.heads) ? m.heads : [])
       .filter((h) => h && typeof h.path === 'string' && typeof h.head === 'string')
       .slice(0, 3).map((h) => ({ path: h.path, head: h.head.slice(0, 64) })), // one per app, up to MAX_WALK_APPS
-    reviewedAt: Number(m.reviewedAt) || 0
+    reviewedAt: Number(m.reviewedAt) || 0,
+    // A guide belongs to the job profile it was read for.
+    profile: typeof m.profile === 'string' ? m.profile.slice(0, 80) : ''
   };
 }
 
