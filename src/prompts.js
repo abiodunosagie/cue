@@ -8,7 +8,7 @@ const { appendAiRules } = require('./profile-context');
 
 function formatTranscript(turns, limit) {
   const recent = limit ? turns.slice(-limit) : turns;
-  return recent.map((t) => (t.channel === 'them' ? 'Them: ' : 'You: ') + t.text).join('\n');
+  return recent.map((t) => (t.channel === 'them' ? (t.who ? 'Them (' + t.who + '): ' : 'Them: ') : 'You: ') + t.text).join('\n');
 }
 
 // The heard question is also the newest interviewer turn(s); answerThis leaves

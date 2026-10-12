@@ -2205,6 +2205,7 @@
       if (!res || res.error || !res.settings) { showStatus((res && res.error) || 'The profile could not be changed.'); return false; }
       settings = res.settings;
       fillSettings();
+      ColleagueBar.render(settings);
       if (done) showToast(done, 1800);
       return true;
     } finally {
@@ -2678,6 +2679,7 @@
     settings.questionsToAsk = $('#questions-to-ask').value.trim();
     try {
       settings = await cue.settingsSet(settings);
+      ColleagueBar.render(settings);
       $('#s-status').textContent = statusText();
       updatePrepStatus();
       updateSmartTooltip();
@@ -2920,6 +2922,7 @@
   // ---- boot --------------------------------------------------------------
   (async function boot() {
     settings = await cue.settingsGet();
+    ColleagueBar.render(settings);
     applyPanelOpacity(settings.panelOpacity);
     const platformInfo = await cue.platformInfo();
     publikState = await cue.publikState();

@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('cue', {
   profileSwitch: (name) => ipcRenderer.invoke('profile:switch', name),
   profileCreate: (name) => ipcRenderer.invoke('profile:create', name),
   profileDeleteCurrent: () => ipcRenderer.invoke('profile:delete-current'),
+  workSpeaker: (id) => ipcRenderer.invoke('work:speaker', id),
   companyResearch: (url) => ipcRenderer.invoke('company:research', url),
   practiceNext: () => ipcRenderer.invoke('practice:next'),
   practiceEnd: () => ipcRenderer.invoke('practice:end'),
@@ -78,7 +79,7 @@ contextBridge.exposeInMainWorld('cue', {
   log: (msg) => ipcRenderer.send('log', msg),
   crash: (report) => ipcRenderer.send('crash:renderer', String(report).slice(0, 4000)),
   on: (channel, cb) => {
-    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'scrollReading:changed', 'follow:toggle', 'question:changed', 'rounds:saved', 'llm:busy', 'script:heard', 'answer:scroll', 'llm:thinking', 'llm:section', 'llm:restart', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state', 'projects:draft-progress'];
+    const allowed = ['capture:state', 'llm:start', 'llm:token', 'llm:done', 'llm:error', 'status', 'transcript', 'stt:interim', 'stt:final', 'stt:status', 'vad:state', 'applink:consent-request', 'hide:toggle', 'length:changed', 'scrollReading:changed', 'follow:toggle', 'question:changed', 'rounds:saved', 'llm:busy', 'script:heard', 'answer:scroll', 'llm:thinking', 'llm:section', 'llm:restart', 'code:copy', 'llm:tag', 'prepared:state', 'practice:state', 'practice:play', 'practice:cleared', 'setup:result', 'whisper:download-progress', 'whisper:models-changed', 'publik:state', 'projects:draft-progress', 'work:speaker'];
     if (!allowed.includes(channel)) return;
     ipcRenderer.on(channel, (_e, data) => cb(data));
   }

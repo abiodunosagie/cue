@@ -48,6 +48,7 @@ const { createCrashLog, redact } = require('./src/crash-log');
 const { AdaptiveVAD, AudioRingBuffer } = require('./src/vad');
 const { buildInterviewContext, detectCategory } = require('./src/interview-context');
 const { rulesWithFocus } = require('./src/role-focus');
+const { createWorkSession } = require('./src/work-session');
 const { startAppLink, stopAppLink, recordEvent, appLinkConsentState, revokeAppLinkCaller } = require('./src/applink');
 const publik = require('./src/publik');
 // The app token release.yml baked into src/publik-build.json (empty in a dev
@@ -237,6 +238,8 @@ const micHold = createMicHold({
 // history or auto-answer, and the other side (a recording tool playing the
 // speaker back) is dropped. True when the turn was taken.
 let scriptActive = false;
+// Work mode: the colleague the user clicked as the one talking (src/work-session.js).
+const workSession = createWorkSession();
 function scriptTakesTurn(turn) {
   if (!scriptActive) return false;
   if (turn.channel === 'you') send('script:heard', { text: turn.text });
@@ -320,7 +323,7 @@ function publishTranscript(channel, text, { fromPractice = false } = {}) {
     micEcho.noteThem(turn.text);
     // Held mic turns came first: judged now (this turn is their reference) and published before it.
     micHold.releaseAll();
-    publishTurn(turn);
+    publishTurn(workSession.tag(turn, store.getSettings()));
     return;
   }
   micHold.push(turn);
@@ -1391,6 +1394,9 @@ registerProfileIpc({
   createLLM,
   quickAsk,
   onProfileChanged: (saved) => {
+    // Another profile has other colleagues: nobody is selected in it yet.
+    workSession.reset();
+    send('work:speaker', { id: '' });
     if (!preparedStore.isCurrent(profileHash(saved))) schedulePrepare();
     send('prepared:state', preparedState());
   }
@@ -1481,6 +1487,11 @@ const rounds = registerRoundsIpc({
 // Boot: refill the history list from memory. Deliberately not replayed through
 // 'transcript' events, which would refill the input and could auto-answer an old question.
 ipcMain.handle('memory:state', () => ({ ...interviewMemory.summary(), turns: interviewMemory.turns() }));
+// Work mode: the user clicked who is talking ('' = everyone).
+ipcMain.handle('work:speaker', (_e, id) => {
+  const c = workSession.setSpeaker(store.getSettings(), id);
+  return { id: c ? c.id : '' };
+});
 ipcMain.on('ask', (_e, payload) => runFeature(payload.mode, payload.text, { fromPanel: true, heard: typeof payload.heard === 'string' ? payload.heard.slice(0, 8000) : '' }));
 ipcMain.on('question:next', () => nextQuestion());
 ipcMain.on('script:active', (_e, on) => { scriptActive = !!on; });

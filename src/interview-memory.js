@@ -83,7 +83,11 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
   // words, so its round goes to that profile even if another is active later.
   function addTurn(turn, { profile } = {}) {
     if (!record.profile && profile) record.profile = String(profile);
-    record.turns.push({ channel: turn.channel, text: String(turn.text || ''), ts: turn.ts || now() });
+    const kept = { channel: turn.channel, text: String(turn.text || ''), ts: turn.ts || now() };
+    // Work mode: which colleague said it ("Ada, Tech lead"), so a reopened
+    // meeting still knows who asked what.
+    if (turn.who && typeof turn.who === 'string') kept.who = turn.who.slice(0, 80);
+    record.turns.push(kept);
     if (record.turns.length > MAX_TURNS) record.turns.splice(0, record.turns.length - MAX_TURNS);
     touch();
   }
