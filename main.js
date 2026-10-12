@@ -70,7 +70,7 @@ const { WhisperModelManager } = require('./src/whisper-model-manager');
 const { requireWhisperModel } = require('./src/whisper-model-catalog');
 const { locateWhisperRuntime } = require('./src/whisper-runtime');
 const { LocalWhisperTranscriber } = require('./src/local-whisper-transcriber');
-const { createInterviewMemory, MAX_TURNS: MEMORY_MAX_TURNS } = require('./src/interview-memory');
+const { createInterviewMemory, CODE_EXPLAIN_MODES, MAX_TURNS: MEMORY_MAX_TURNS } = require('./src/interview-memory');
 
 let win = null;
 // Which global shortcuts cue actually holds. `globalShortcut.register` returns
@@ -825,7 +825,7 @@ function quickStartLlm(mode, settings, codingLlm) {
 function priorSolvesFor(def, mode) {
   // The whole solve: a progress check needs the plan's later steps, not its first few thousand characters.
   // Checked before the tier: a progress check runs on the Coding model too.
-  if (mode === 'explainCode' || mode === 'workExplainCode' || mode === 'checkProgress' || mode === 'fixCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
+  if (CODE_EXPLAIN_MODES.has(mode) || mode === 'checkProgress' || mode === 'fixCode') return [interviewMemory.recentCodingSolve() || interviewMemory.codingHistory({ count: 1, maxChars: Infinity })[0] || ''];
   if (def.tier === 'coding') return interviewMemory.codingHistory();
   return [];
 }

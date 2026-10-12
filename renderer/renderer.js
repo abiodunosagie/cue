@@ -1222,8 +1222,10 @@
       
       // Irreversible: the memory file is deleted, so no undo hint here. cue has
       // already forgotten it either way; only the disk copy can fail to go.
-      const what = atWork() ? 'This conversation' : 'Interview memory';
-      showToast(res && res.ok ? what + ' cleared' + (atWork() ? '; the company memory is kept' : '') : what + ' could not be deleted from this computer. Try again.', 3500);
+      const work = atWork();
+      const cleared = work ? 'This conversation cleared; the company memory is kept' : 'Interview memory cleared';
+      const failed = (work ? 'This conversation' : 'Interview memory') + ' could not be deleted from this computer. Try again.';
+      showToast(res && res.ok ? cleared : failed, 3500);
     });
   }
 
@@ -1860,19 +1862,24 @@
   panelOpacityInput.addEventListener('input', (e) => applyPanelOpacity(e.target.value));
   // History's buttons name what they act on: an interview, or at a job the
   // conversation on screen (the company memory has its own Forget it).
+  const HISTORY_LABELS = {
+    interview: { report: 'Interview report', reportTitle: 'Summary, answers to strengthen and a thank-you email', clear: 'Clear interview memory', clearTitle: 'Delete this interview\'s memory from this Mac' },
+    work: { report: 'Meeting notes', reportTitle: 'Summary, decisions, your actions and an update to post', clear: 'Clear this conversation', clearTitle: 'Clears this conversation from this Mac; the company memory is kept (Settings > Profile)' }
+  };
   function showWorkLabels() {
-    const work = atWork();
+    const labels = HISTORY_LABELS[atWork() ? 'work' : 'interview'];
     const report = document.getElementById('interview-report-btn');
+    if (report) { report.textContent = labels.report; report.title = labels.reportTitle; }
     const clear = document.getElementById('clear-transcript-btn');
-    if (report) {
-      report.textContent = work ? 'Meeting notes' : 'Interview report';
-      report.title = work ? 'Summary, decisions, your actions and an update to post' : 'Summary, answers to strengthen and a thank-you email';
-    }
-    if (clear) {
-      const label = Array.from(clear.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
-      if (label) label.textContent = work ? 'Clear this conversation' : 'Clear interview memory';
-      clear.title = work ? 'Clears this conversation from this Mac; the company memory is kept (Settings > Profile)' : 'Delete this interview\'s memory from this Mac';
-    }
+    const clearLabel = document.getElementById('clear-transcript-label');
+    if (clear) clear.title = labels.clearTitle;
+    if (clearLabel) clearLabel.textContent = labels.clear;
+  }
+
+  // Everything in the panel that depends on the active profile.
+  function showProfileChrome() {
+    ColleagueBar.render(settings);
+    showWorkLabels();
   }
 
   function updatePrepStatus() {
@@ -2240,7 +2247,7 @@
       if (!res || res.error || !res.settings) { showStatus((res && res.error) || 'The profile could not be changed.'); return false; }
       settings = res.settings;
       fillSettings();
-      ColleagueBar.render(settings); showWorkLabels();
+      showProfileChrome();
       updatePrepStatus();
       if (done) showToast(done, 1800);
       return true;
@@ -2715,7 +2722,7 @@
     settings.questionsToAsk = $('#questions-to-ask').value.trim();
     try {
       settings = await cue.settingsSet(settings);
-      ColleagueBar.render(settings); showWorkLabels();
+      showProfileChrome();
       $('#s-status').textContent = statusText();
       updatePrepStatus();
       updateSmartTooltip();
@@ -2958,7 +2965,7 @@
   // ---- boot --------------------------------------------------------------
   (async function boot() {
     settings = await cue.settingsGet();
-    ColleagueBar.render(settings); showWorkLabels();
+    showProfileChrome();
     applyPanelOpacity(settings.panelOpacity);
     const platformInfo = await cue.platformInfo();
     publikState = await cue.publikState();

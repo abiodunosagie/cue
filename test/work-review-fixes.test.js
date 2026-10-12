@@ -144,7 +144,7 @@ test('a job profile never saves its conversation as an interview round', async (
   const handlers = {};
   let summarized = 0;
   const settings = { activeProfile: 'Acme', profileKind: 'work', profiles: {} };
-  const turns = Array.from({ length: 12 }, (_, i) => ({ channel: i % 2 ? 'you' : 'them', text: 'a long enough line number ' + i, ts: i }));
+  const turns = Array.from({ length: 24 }, (_, i) => ({ channel: i % 2 ? 'you' : 'them', text: 'a long enough line number ' + i, ts: i }));
   const { saveStaleRound } = registerRoundsIpc({
     ipcMain: { handle: (n, fn) => { handlers[n] = fn; } },
     store: { getSettings: () => settings, setSettings() {}, setProfileState() {} },
@@ -156,4 +156,30 @@ test('a job profile never saves its conversation as an interview round', async (
   await handlers['transcript:clear']();
   assert.equal(saveStaleRound({ profile: 'Acme', turns, startedAt: 1 }), null);
   assert.equal(summarized, 0);
+});
+
+test('explaining code at work is still the coding round, not a new solve', () => {
+  const { createInterviewMemory } = require('../src/interview-memory');
+  const m = createInterviewMemory({ file: '' });
+  m.addAnswer({ mode: 'leetcode', text: 'THE SOLVE' });
+  for (let i = 0; i < 5; i++) m.addAnswer({ mode: 'workExplainCode', text: 'explained ' + i });
+  assert.equal(m.recentCodingSolve(), 'THE SOLVE');
+});
+
+test('an interview profile still saves its conversation as a round', async () => {
+  const { registerRoundsIpc } = require('../src/ipc/rounds');
+  const handlers = {};
+  let summarized = 0;
+  const settings = { activeProfile: 'Me', profileKind: 'work', profiles: { Acme: { profileKind: 'interview' } } };
+  const turns = Array.from({ length: 24 }, (_, i) => ({ channel: i % 2 ? 'you' : 'them', text: 'a long enough line number ' + i, ts: i }));
+  registerRoundsIpc({
+    ipcMain: { handle: (n, fn) => { handlers[n] = fn; } },
+    store: { getSettings: () => settings, setSettings() {}, setProfileState() {} },
+    createLLM: () => { summarized += 1; return { ready: true, stream: async () => '{}' }; },
+    // The interview was recorded under Acme, an interview profile that is not active now.
+    interviewMemory: { summary: () => ({ startedAt: 1, turnCount: turns.length, profile: 'Acme' }), turns: () => turns },
+    send() {}, schedulePrepare() {}, preparedState: () => ({}), clearInterview: () => ({ ok: true })
+  });
+  await handlers['rounds:save']();
+  assert.equal(summarized, 1);
 });

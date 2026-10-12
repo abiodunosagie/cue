@@ -20,6 +20,8 @@ const STALE_MS = 6 * 60 * 60 * 1000;
 const SAVE_DEBOUNCE_MS = 1000;
 // Only these answers are read aloud, so only these count as "what you said last".
 const SPOKEN_MODES = new Set(['say', 'answerThis', 'assist', 'workSay', 'workAnswer', 'workAssist']);
+// Explaining code already written: still the coding round, never a solve itself.
+const CODE_EXPLAIN_MODES = new Set(['explainCode', 'workExplainCode']);
 // Prompt budgets: enough to recall the interview without crowding the answer.
 const DIGEST_MAX_CHARS = 3000;
 const DIGEST_QUESTION_CHARS = 240;
@@ -156,7 +158,7 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
   // "your code" only makes sense while the coding round is still going.
   function recentCodingSolve({ withinAnswers = 4, maxChars = MAX_CODING_ANSWER_CHARS } = {}) {
     // Explaining the code is still the coding round, so it does not count toward the window.
-    const recent = record.answers.filter((a) => a.mode !== 'explainCode' && a.mode !== 'workExplainCode' && sinceQuestion(a)).slice(-withinAnswers);
+    const recent = record.answers.filter((a) => !CODE_EXPLAIN_MODES.has(a.mode) && sinceQuestion(a)).slice(-withinAnswers);
     for (let i = recent.length - 1; i >= 0; i--) {
       if (recent[i].mode === 'leetcode') return recent[i].text.slice(0, maxChars);
     }
@@ -190,4 +192,4 @@ function createInterviewMemory({ file, now = Date.now, debounceMs = SAVE_DEBOUNC
   };
 }
 
-module.exports = { createInterviewMemory, MAX_TURNS, STALE_MS };
+module.exports = { createInterviewMemory, CODE_EXPLAIN_MODES, MAX_TURNS, STALE_MS };
