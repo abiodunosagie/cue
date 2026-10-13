@@ -1,6 +1,6 @@
 # Question bank progress
 
-Done: 393 technical Q&A (src/bank/qa) and 201 coding problems (src/bank/coding), 594 in total.
+Done: 429 technical Q&A (src/bank/qa) and 201 coding problems (src/bank/coding), 630 in total.
 Every coding item passes `node scripts/verify-bank.js` (Dart and TypeScript). `npm test` checks shape and matching.
 
 Rules for every item:
@@ -42,6 +42,8 @@ Rules for every item:
 | 24-backend-production.js | 21 |
 | 25-fullstack.js | 17 |
 | 26-wordpress-cms.js | 27 |
+| 27-review-and-test-design.js | 21 |
+| 28-writing-and-fundamentals.js | 15 |
 
 ## Coding files
 | File | Items |
