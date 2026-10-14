@@ -106,6 +106,33 @@ test('the shipped CMS answers stay out of other interviews on generic words', ()
   assert.deepEqual(leaks, []);
 });
 
+test('AEM questions find their AEM answer whatever the role focus', () => {
+  const shipped = createQuestionBank();
+  const top = (heard, role) => (shipped.matches(heard, role)[0] || {}).item || {};
+  assert.equal(top('How do you write a Sling Model?', 'fullstack').id, 'aem-sling-models');
+  assert.equal(top('Have you worked with AEM?', 'backend').id, 'aem-experience');
+  assert.equal(top('Any A.E.M. in your background?', 'mobile').id, 'aem-experience', 'speech to text spelling');
+  // A shortlist the Fast model picks from: the dispatcher answer must be on it.
+  assert.ok(shipped.matches('How does the AEM dispatcher cache work?', 'frontend').some((m) => m.item.id === 'aem-dispatcher'));
+});
+
+test('AEM answers never come up on words that also mean something else', () => {
+  const shipped = createQuestionBank();
+  const aemIds = new Set(rawQa.filter((it) => it.id.startsWith('aem-')).map((it) => it.id));
+  const leaks = [];
+  const generic = ['How do you cache API responses?', 'How do you structure a Maven project?', 'How do you test a model class?',
+    'How do you deploy with a CI/CD pipeline?', 'How do you reuse a header across pages?', 'Tell me about your experience as a manager.',
+    'How do you run a background daemon?', 'How do you cache with a dispatcher in Node?', 'Which cloud service do you deploy to?',
+    'What are the core components of Flutter?', 'What is a proxy component pattern?', 'What is the run mode of your app, debug or release?',
+    'What is a live copy of a database?', 'How do you handle a cloud manager role?', 'How do you render a content fragment in a web page?',
+    'Does your team use an experience manager?', 'How do you generate a project from a Maven archetype?', 'How does the Flux dispatcher work?',
+    'How do you publish a client library to npm?'];
+  for (const role of ['fullstack', 'backend', 'frontend', 'cms', 'mobile']) {
+    for (const q of generic) for (const m of shipped.matches(q, role)) if (aemIds.has(m.item.id)) leaks.push(role + ': ' + q + ' -> ' + m.item.id);
+  }
+  assert.deepEqual(leaks, []);
+});
+
 // ---- prepared answer lookup ---------------------------------------------------
 
 function prepareWith({ personal = [], reply = 'NONE' } = {}) {

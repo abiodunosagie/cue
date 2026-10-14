@@ -1,6 +1,6 @@
 # Question bank progress
 
-Done: 429 technical Q&A (src/bank/qa) and 201 coding problems (src/bank/coding), 630 in total.
+Done: 448 technical Q&A (src/bank/qa) and 201 coding problems (src/bank/coding), 649 in total.
 Every coding item passes `node scripts/verify-bank.js` (Dart and TypeScript). `npm test` checks shape and matching.
 
 Rules for every item:
@@ -9,7 +9,7 @@ Rules for every item:
   product names unless the question is about them, 4 to 6 natural phrasings (casual ones too).
   Anchors are technology names only. Supabase answers are role "named": only when asked by name.
   WordPress and CMS answers are role "cms" (CMS focus only); Multisite and the hosted headless CMSs
-  are "named".
+  are "named". AEM answers are "named" too and explain how AEM works without claiming a client project.
 - Coding: statement in our own words (never copied), LeetCode-style signatures, Dart and
   TypeScript unless the task belongs to one language, 3 to 6 //@step marks matching the steps.
 
@@ -44,6 +44,7 @@ Rules for every item:
 | 26-wordpress-cms.js | 27 |
 | 27-review-and-test-design.js | 21 |
 | 28-writing-and-fundamentals.js | 15 |
+| 29-aem.js | 19 |
 
 ## Coding files
 | File | Items |
